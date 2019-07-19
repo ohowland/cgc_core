@@ -1,4 +1,4 @@
-package cgc
+package modbus
 
 import (
 	"encoding/binary"
@@ -23,14 +23,16 @@ type DataType string
 const (
 	u16 DataType = "u16"
 	u32 DataType = "u32"
+	u64 DataType = "u64"
 	i16 DataType = "i16"
 	i32 DataType = "i32"
+	i64 DataType = "i64"
 	f32 DataType = "f32"
 	f64 DataType = "f64"
 )
 
-// ModbusRegister contains the data required to read and write a Modbus register
-type ModbusRegister struct {
+// Register contains the data required to read and write a Modbus register
+type Register struct {
 	name         string
 	address      uint16
 	datatype     DataType
@@ -38,8 +40,8 @@ type ModbusRegister struct {
 	endianness   Endian
 }
 
-// ModbusPollerConfig is the configuration format for ModbusPoller
-type ModbusPollerConfig struct {
+// PollerConfig is the configuration format for ModbusPoller
+type PollerConfig struct {
 	ipAddr   string
 	port     string
 	timeout  int
@@ -47,24 +49,24 @@ type ModbusPollerConfig struct {
 	offset   int
 }
 
-// ModbusPoller continiously polls a target
-type ModbusPoller struct {
+// Poller continiously polls a target
+type Poller struct {
 	handler  *modbus.TCPClientHandler
 	pollRate int
 	offset   int
 }
 
-// NewModbusPoller is a factory for the ModbusPoller struct
-func NewModbusPoller(cfg ModbusPollerConfig) ModbusPoller {
+// NewPoller is a factory for the Poller struct
+func NewPoller(cfg PollerConfig) Poller {
 	handler := modbus.NewTCPClientHandler(cfg.ipAddr + ":" + cfg.port)
 	handler.Timeout = time.Millisecond * time.Duration(cfg.timeout)
-	return ModbusPoller{
+	return Poller{
 		handler:  handler,
 		pollRate: cfg.pollRate,
 	}
 }
 
-func (m ModbusPoller) Read(registers []ModbusRegister) (map[string]float64, error) {
+func (m Poller) Read(registers []Register) (map[string]float64, error) {
 	err := m.handler.Connect()
 	if err != nil {
 		return nil, err
@@ -85,7 +87,7 @@ func (m ModbusPoller) Read(registers []ModbusRegister) (map[string]float64, erro
 	return readValues, err
 }
 
-func (m ModbusPoller) Write(registers []ModbusRegister, writeValues map[string]float64) error {
+func (m Poller) Write(registers []Register, writeValues map[string]float64) error {
 	err := m.handler.Connect()
 	if err != nil {
 		return err
@@ -108,7 +110,7 @@ func (m ModbusPoller) Write(registers []ModbusRegister, writeValues map[string]f
 	return err
 }
 
-func findRegisterByName(registers []ModbusRegister, name string) (int, error) {
+func findRegisterByName(registers []Register, name string) (int, error) {
 	for index, register := range registers {
 		if register.name == name {
 			return index, nil
@@ -118,39 +120,55 @@ func findRegisterByName(registers []ModbusRegister, name string) (int, error) {
 }
 
 // encode convert a float64 into a byte array
-func encode(val float64, register ModbusRegister) []byte {
+func encode(val float64, register Register) []byte {
 	var bytes []byte
 	endian := getByteOrder(register.endianness)
 	switch register.datatype {
 	case u16, i16:
-		coercedVal := uint16(val)
 		bytes = make([]byte, 2*sizeOf(u16))
-		endian.PutUint16(bytes, coercedVal)
-	case u32, i32, f32:
-		coercedVal := uint32(val)
+		endian.PutUint16(bytes, uint16(val))
+	case u32, i32:
 		bytes = make([]byte, 2*sizeOf(u32))
-		endian.PutUint32(bytes, coercedVal)
+		endian.PutUint32(bytes, uint32(val))
+	case f32:
+		bytes = make([]byte, 2*sizeOf(f32))
+		endian.PutUint32(bytes, math.Float32bits(float32(val)))
+	case u64, i64:
+		bytes = make([]byte, 2*sizeOf(u64))
+		endian.PutUint64(bytes, uint64(val))
 	case f64:
-		coercedVal := uint64(val)
 		bytes = make([]byte, 2*sizeOf(f64))
-		endian.PutUint64(bytes, coercedVal)
+		endian.PutUint64(bytes, math.Float64bits(val))
 	}
 	return bytes
 }
 
 // decode coverts byte arrays into float64s
-func decode(bytes []byte, register ModbusRegister) float64 {
-	var bits uint64
+func decode(bytes []byte, register Register) float64 {
+	var n float64
 	endian := getByteOrder(register.endianness)
 	switch register.datatype {
-	case u16, i16:
-		bits = uint64(endian.Uint16(bytes))
-	case u32, i32, f32:
-		bits = uint64(endian.Uint32(bytes))
+	case u16:
+		n = float64(endian.Uint16(bytes))
+	case i16:
+		n = float64(int16(endian.Uint16(bytes)))
+	case u32:
+		n = float64(endian.Uint32(bytes))
+	case i32:
+		n = float64(int32(endian.Uint32(bytes)))
+	case f32:
+		bits := endian.Uint32(bytes)
+		n = float64(math.Float32frombits(bits))
+	case u64:
+		n = float64(endian.Uint64(bytes))
+	case i64:
+		n = float64(int64(endian.Uint64(bytes)))
 	case f64:
-		bits = endian.Uint64(bytes)
+		bits := endian.Uint64(bytes)
+		n = math.Float64frombits(bits)
+
 	}
-	return math.Float64frombits(bits)
+	return n
 }
 
 // getByteOrder returns the correct binary.endian object for the register type
@@ -177,8 +195,12 @@ func sizeOf(t DataType) uint16 {
 		return 2
 	case f32:
 		return 2
+	case u64:
+		return 4
+	case i64:
+		return 4
 	case f64:
-		return 2
+		return 4
 	}
 	return 0
 }
