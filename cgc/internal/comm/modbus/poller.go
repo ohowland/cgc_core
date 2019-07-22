@@ -1,72 +1,50 @@
-package modbus
+package comm
 
 import (
 	"encoding/binary"
 	"errors"
+	"log"
 	"math"
+	"os"
 	"time"
 
 	"github.com/goburrow/modbus"
+	"github.com/ohowland/cgc/internal/comm"
 )
-
-// Endian byte order of register
-type Endian string
-
-const (
-	littleEndian Endian = "little"
-	bigEndian    Endian = "big"
-)
-
-// DataType is the datatypes supported by the Modbus protocl
-type DataType string
-
-const (
-	u16 DataType = "u16"
-	u32 DataType = "u32"
-	u64 DataType = "u64"
-	i16 DataType = "i16"
-	i32 DataType = "i32"
-	i64 DataType = "i64"
-	f32 DataType = "f32"
-	f64 DataType = "f64"
-)
-
-// Register contains the data required to read and write a Modbus register
-type Register struct {
-	name         string
-	address      uint16
-	datatype     DataType
-	functionCode int
-	endianness   Endian
-}
-
-// PollerConfig is the configuration format for ModbusPoller
-type PollerConfig struct {
-	ipAddr   string
-	port     string
-	timeout  int
-	pollRate int
-	offset   int
-}
 
 // Poller continiously polls a target
 type Poller struct {
 	handler  *modbus.TCPClientHandler
 	pollRate int
-	offset   int
+}
+
+// PollerConfig is the configuration format for ModbusPoller
+type PollerConfig struct {
+	ipAddr       string
+	port         string
+	slaveID      byte
+	timeout      int
+	pollRate     int
+	enableLogger bool
 }
 
 // NewPoller is a factory for the Poller struct
-func NewPoller(cfg PollerConfig) Poller {
+func newPoller(cfg PollerConfig) Poller {
 	handler := modbus.NewTCPClientHandler(cfg.ipAddr + ":" + cfg.port)
 	handler.Timeout = time.Millisecond * time.Duration(cfg.timeout)
+	handler.SlaveId = cfg.slaveID
+
+	if cfg.enableLogger {
+		handler.Logger = log.New(os.Stdout, "modbus: ", log.LstdFlags)
+	}
+
 	return Poller{
 		handler:  handler,
 		pollRate: cfg.pollRate,
 	}
 }
 
-func (m Poller) Read(registers []Register) (map[string]float64, error) {
+func (m Poller) Read(registers []comm.Register) (map[string]float64, error) {
 	err := m.handler.Connect()
 	if err != nil {
 		return nil, err
@@ -77,7 +55,7 @@ func (m Poller) Read(registers []Register) (map[string]float64, error) {
 	readValues := make(map[string]float64)
 	for _, register := range registers {
 		resp, readErr := client.ReadHoldingRegisters(register.address, sizeOf(register.datatype))
-		if readErr == nil {
+		if readErr != nil {
 			readValues[register.name] = 0xBEEF
 			err = readErr
 		} else {
@@ -87,7 +65,7 @@ func (m Poller) Read(registers []Register) (map[string]float64, error) {
 	return readValues, err
 }
 
-func (m Poller) Write(registers []Register, writeValues map[string]float64) error {
+func (m Poller) Write(registers []comm.Register, writeValues map[string]float64) error {
 	err := m.handler.Connect()
 	if err != nil {
 		return err
@@ -96,7 +74,7 @@ func (m Poller) Write(registers []Register, writeValues map[string]float64) erro
 
 	client := modbus.NewClient(m.handler)
 	for name, val := range writeValues {
-		i, writeErr := findRegisterByName(registers, name)
+		i, writeErr := findIndexByName(registers, name)
 		if writeErr != nil {
 			err = writeErr
 		} else {
@@ -110,17 +88,18 @@ func (m Poller) Write(registers []Register, writeValues map[string]float64) erro
 	return err
 }
 
-func findRegisterByName(registers []Register, name string) (int, error) {
+// findIndexByName returns the index in the array of the register, if found. Returns -1 and error if not found.
+func findIndexByName(registers []comm.Register, name string) (int, error) {
 	for index, register := range registers {
 		if register.name == name {
 			return index, nil
 		}
 	}
-	return 0, errors.New("register name not found in register array")
+	return -1, errors.New("register name not found in register array")
 }
 
 // encode convert a float64 into a byte array
-func encode(val float64, register Register) []byte {
+func encode(val float64, register comm.Register) []byte {
 	var bytes []byte
 	endian := getByteOrder(register.endianness)
 	switch register.datatype {
@@ -144,7 +123,7 @@ func encode(val float64, register Register) []byte {
 }
 
 // decode coverts byte arrays into float64s
-func decode(bytes []byte, register Register) float64 {
+func decode(bytes []byte, register comm.Register) float64 {
 	var n float64
 	endian := getByteOrder(register.endianness)
 	switch register.datatype {
@@ -166,7 +145,6 @@ func decode(bytes []byte, register Register) float64 {
 	case f64:
 		bits := endian.Uint64(bytes)
 		n = math.Float64frombits(bits)
-
 	}
 	return n
 }

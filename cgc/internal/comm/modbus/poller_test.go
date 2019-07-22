@@ -1,19 +1,17 @@
-package modbus
+package comm
 
 import (
-	"log"
+	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"testing"
-	"time"
 
-	"github.com/goburrow/modbus"
 	"gotest.tools/assert"
 )
 
 // Encode-Decode U64
 func TestEncodeU64Big(t *testing.T) {
+	rand.Seed(10)
 	testReg := Register{"test", 0, u64, 3, bigEndian}
 	var testVal float64 = 1234
 	bytes := encode(testVal, testReg)
@@ -296,6 +294,56 @@ func TestEncodeI16Little(t *testing.T) {
 	}
 }
 
+// encode-decode Float32
+func TestEncodeF32Big(t *testing.T) {
+	testReg := Register{"test", 0, f32, 3, bigEndian}
+	var testVal float64 = -1234
+	bytes := encode(testVal, testReg)
+	t.Logf("float64: [%v] to F32 to big-endian []bytes: %v", testVal, bytes)
+
+	assertBytes := [4]byte{196, 154, 64, 0}
+	assert.Assert(t, bytes != nil)
+	assert.Assert(t, len(bytes) == len(assertBytes[:]))
+	for i := range bytes {
+		assert.Assert(t, bytes[i] == assertBytes[i])
+	}
+}
+
+func TestDecodeF32Big(t *testing.T) {
+	testReg := Register{"test", 0, f32, 3, bigEndian}
+	assertVal := rand.Float64() * -32767
+	testBytes := encode(assertVal, testReg)
+	testVal := decode(testBytes[:], testReg)
+	t.Logf("[]bytes: %v F32 big-endian to float64: [%v]", testBytes, testVal)
+
+	assert.Assert(t, math.Floor(testVal) == math.Floor(assertVal))
+}
+
+// encode-decode Float64
+func TestEncodeF64Big(t *testing.T) {
+	testReg := Register{"test", 0, f64, 3, bigEndian}
+	var testVal float64 = -1234
+	bytes := encode(testVal, testReg)
+	t.Logf("float64: [%v] to F64 to big-endian []bytes: %v", testVal, bytes)
+
+	assertBytes := [8]byte{192, 147, 72, 0, 0, 0, 0, 0}
+	assert.Assert(t, bytes != nil)
+	assert.Assert(t, len(bytes) == len(assertBytes[:]))
+	for i := range bytes {
+		assert.Assert(t, bytes[i] == assertBytes[i])
+	}
+}
+
+func TestDecodeF64Big(t *testing.T) {
+	testReg := Register{"test", 0, f64, 3, bigEndian}
+	assertVal := rand.Float64() * -32767
+	testBytes := encode(assertVal, testReg)
+	testVal := decode(testBytes[:], testReg)
+	t.Logf("[]bytes: [%v] F64 big-endian to float64: [%v]", testBytes, testVal)
+
+	assert.Assert(t, testVal == assertVal)
+}
+
 func TestDecodeI16Little(t *testing.T) {
 	testReg := Register{"test", 0, i16, 3, littleEndian}
 	assertVal := rand.Float64() * -32767
@@ -306,27 +354,69 @@ func TestDecodeI16Little(t *testing.T) {
 	assert.Assert(t, testVal == math.Ceil(assertVal))
 }
 
-func TestModbusPoller(t *testing.T) {
+func TestFindRegisterByName(t *testing.T) {
+	testReg1 := Register{"test1", 0, u16, 3, bigEndian}
+	testReg2 := Register{"test2", 1, u32, 3, bigEndian}
+	testReg3 := Register{"test3", 3, u64, 3, bigEndian}
+	testRegs := []Register{testReg1, testReg2, testReg3}
+
+	i, err := findIndexByName(testRegs, "test2")
+
+	assert.Assert(t, err == nil)
+	assert.Assert(t, testRegs[i].name == "test2")
+	assert.Assert(t, testRegs[i].address == 1)
+	assert.Assert(t, testRegs[i].datatype == u32)
+	assert.Assert(t, testRegs[i].functionCode == 3)
+	assert.Assert(t, testRegs[i].endianness == bigEndian)
+}
+
+func TestFindRegisterByNameFail(t *testing.T) {
+	testReg1 := Register{"test1", 0, u16, 3, bigEndian}
+	testReg2 := Register{"test2", 1, u32, 3, bigEndian}
+	testReg3 := Register{"test3", 3, u64, 3, bigEndian}
+	testRegs := []Register{testReg1, testReg2, testReg3}
+
+	i, err := findIndexByName(testRegs, "test42")
+	assert.Assert(t, err.Error() == "register name not found in register array")
+	assert.Assert(t, i == -1)
+}
+
+func TestPoller(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping TestModbusPoller in short mode")
 	}
-	handler := modbus.NewTCPClientHandler("192.168.0.100:5020")
-	handler.Timeout = 100 * time.Millisecond
-	handler.Logger = log.New(os.Stdout, "test: ", log.LstdFlags)
 
-	err := handler.Connect()
-	defer handler.Close()
+	pollerConfig := PollerConfig{"192.168.0.100", "5020", 0x01, 100, 500, true}
 
-	if err != nil {
-		t.Errorf("failed to connect to target")
-		t.FailNow()
+	reg1 := Register{"test1", 0, u16, 3, bigEndian}
+	reg2 := Register{"test2", 1, u16, 3, bigEndian}
+	reg3 := Register{"test3", 2, u16, 3, bigEndian}
+	regs := []Register{reg1, reg2, reg3}
+
+	poller := newPoller(pollerConfig)
+
+	resp, err := poller.Read(regs)
+	t.Logf("\nresponse: %v\n error: %v", resp, err)
+	assert.Assert(t, err == nil)
+}
+
+func TestPollerFailOnTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping TestModbusPollerBadAddress in short mode")
 	}
 
-	client := modbus.NewClient(handler)
-	_, err = client.ReadHoldingRegisters(1, 4)
+	testIP := "1.1.1.1"
+	testPort := "123"
 
-	if err != nil {
-		t.Errorf("failed to read target registers")
-		t.FailNow()
-	}
+	pollerConfig := PollerConfig{testIP, testPort, 0x01, 100, 500, true}
+
+	reg1 := Register{"test1", 0, u16, 3, bigEndian}
+	reg2 := Register{"test2", 1, u16, 3, bigEndian}
+	reg3 := Register{"test3", 2, u16, 3, bigEndian}
+	regs := []Register{reg1, reg2, reg3}
+
+	poller := newPoller(pollerConfig)
+
+	_, err := poller.Read(regs)
+	assert.Assert(t, err.Error() == fmt.Sprintf("dial tcp %v:%v: i/o timeout", testIP, testPort))
 }
