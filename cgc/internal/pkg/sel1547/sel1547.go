@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	comm "github.com/ohowland/cgc/internal/pkg/modbuscomm"
+	"github.com/ohowland/cgc/internal/pkg/comm"
 )
 
 // SEL1547 target
@@ -16,38 +16,12 @@ type SEL1547 struct {
 	deviceComm         sel1547Comm
 }
 
-type sel1547Status struct {
-	Kw           int  `json:"Kw"`
-	Kvar         int  `json:"Kvar"`
-	Synchronized bool `json:"Synchronized"`
-}
-
-type sel1547Control struct {
-	closeIntertie int
-}
-
-type sel1547StaticConfig struct {
-	Name      string `json:"Name"`
-	KwRated   int    `json:"KwRated"`
-	KvarRated int    `json:"KvarRated"`
-}
-
-type sel1547DynamicCondig struct {
-	pid uint16
-}
-
-type sel1547Comm struct {
-	TargetConfig comm.PollerConfig `json:"Config"`
-	handler      comm.ModbusComm
-	Registers    []comm.Register `json:"Registers"`
-}
-
 // Status fulfills the Grid Status Interface
 func (a SEL1547) Status() (asset.GridStatus, error) {
 	// map deviceStatus to GridStatus
 	return asset.GridStatus{
-		Kw:   float64(a.deviceStatus.kw),
-		Kvar: float64(a.deviceStatus.kvar),
+		Kw:   float64(a.deviceStatus.Kw),
+		Kvar: float64(a.deviceStatus.Kvar),
 	}, nil
 }
 
@@ -80,21 +54,69 @@ func (a SEL1547) Config() (asset.GridStaticConfig, error) {
 
 // ReadDeviceStatus provides the API to read status from a device through the Asset's comm interface
 func (a SEL1547) ReadDeviceStatus() error {
-	registers := comm.FilterRegisters(a.deviceComm.Registers, "read-only")
-	respJson, err := a.deviceComm.handler.Read(registers)
-
-	newStatus := sel1547Status{}
-	err = json.Unmarshal(respJson, &newStatus)
-
-	a.deviceStatus = newStatus
-
+	response, err := a.deviceComm.read()
+	err = a.deviceStatus.update(response)
 	return err
 }
 
 // WriteDeviceControl provies the API to write control to a device through the Asset's comm interface
 func (a SEL1547) WriteDeviceControl() error {
+	payload, err := a.deviceControl.payload()
+	if err != nil {
+		return err
+	}
+	err = a.deviceComm.write(payload)
+	return err
+}
 
-	return nil
+type sel1547Status struct {
+	Kw           int  `json:"Kw"`
+	Kvar         int  `json:"Kvar"`
+	Synchronized bool `json:"Synchronized"`
+}
+
+// update unmarshals a JSON response into the sel1547 status
+func (a sel1547Status) update(response []byte) error {
+	err := json.Unmarshal(response, &a)
+	return err
+}
+
+type sel1547Control struct {
+	closeIntertie int
+}
+
+// payload marshals a JSON string from sel1547control
+func (c sel1547Control) payload() ([]byte, error) {
+	payload, err := json.Marshal(c)
+	return payload, err
+}
+
+type sel1547StaticConfig struct {
+	Name      string `json:"Name"`
+	KwRated   int    `json:"KwRated"`
+	KvarRated int    `json:"KvarRated"`
+}
+
+type sel1547DynamicCondig struct {
+	pid uint16
+}
+
+type sel1547Comm struct {
+	TargetConfig comm.PollerConfig `json:"Config"`
+	handler      comm.ModbusComm
+	Registers    []comm.Register `json:"Registers"`
+}
+
+func (c sel1547Comm) read() ([]byte, error) {
+	registers := comm.FilterRegisters(c.Registers, "read-only")
+	response, err := c.handler.Read(registers)
+	return response, err
+}
+
+func (c sel1547Comm) write(payload []byte) error {
+	registers := comm.FilterRegisters(c.Registers, "write-only")
+	err := c.handler.Write(registers, payload)
+	return err
 }
 
 // NewAsset returns an initalized SEL1547 Asset
@@ -111,9 +133,9 @@ func NewAsset(configPath string) asset.GridAsset {
 
 	return SEL1547{
 		deviceStatus: sel1547Status{
-			kw:           0,
-			kvar:         0,
-			synchronized: false,
+			Kw:           0,
+			Kvar:         0,
+			Synchronized: false,
 		},
 		deviceControl: sel1547Control{
 			closeIntertie: 0,

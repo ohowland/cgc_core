@@ -25,38 +25,82 @@ type GridStaticConfig struct {
 	KvarRated float64
 }
 
-// State of the GridActor
+// GridActor is a wrapper around the device object.
 type GridActor struct {
-	asset GridAsset
-	inbox chan string
-	state ProcessState
+	device    Device
+	scheduler Scheduler
+	inbox     chan interface{}
+	state     ActorProcessState
 }
 
-func NewGridActor(asset GridAsset) GridActor {
-	return GridActor{asset: asset, inbox: nil, state: uninitialized}
+// UpdateStatus requests actor to perform a device status read
+type UpdateStatus struct{}
+
+// WriteControl requests actor to perform a device control write
+type WriteControl struct{}
+
+// Start the actor
+type Start struct{}
+
+// Stop the actor
+type Stop struct{}
+
+// Kill the actor
+type Kill struct{}
+
+// NewGridActor is a factory function for GridActors
+func NewGridActor(d Device) GridActor {
+	return GridActor{device: d, inbox: nil, state: uninitialized}
 }
 
-// Initialize fulfills Initialize() in the AssetProcess Interface
+// Initialize fulfills Initialize() in the AssetProcess Interface. The Actor is initilized and put in the Run state.
 func (p *GridActor) Initialize() error {
 
-	p.inbox = make(chan string)
+	p.inbox = make(chan interface{})
 	p.state = initialized
+
+	p.scheduler = NewScheduler()
+	read := NewTarget(p.inbox, UpdateStatus{}, 1000)
+	write := NewTarget(p.inbox, WriteControl{}, 1000)
+	p.scheduler.AddTarget(read)
+	p.scheduler.AddTarget(write)
+
+	go p.Run()
 	return nil
 }
 
-type UpdateStatus struct{}
-
-type WriteControl struct{}
-
-type Quit struct{}
-
-func (p *GridActor) Run() {
-	var msg string
+// Run fulfills the AssetProcess Interface. In this state the Actor starts the scheduler and recieves messages.
+func (p *GridActor) Run() error {
+	p.scheduler.Run()
+	p.state = running
 	for {
-		msg = <-p.inbox
+		msg := <-p.inbox
 		switch msg {
-		case "quit":
-			return
+		case UpdateStatus{}:
+			p.device.ReadDeviceStatus()
+		case WriteControl{}:
+			p.device.WriteDeviceControl()
+		case Stop{}:
+			go p.Stop()
+			return nil
+		case Kill{}:
+			return nil
+		}
+	}
+}
+
+// Stop fulfills the AssetProcess Interface. In this state the Actor pauses the scheduler.
+func (p *GridActor) Stop() error {
+	p.scheduler.Stop()
+	p.state = stopped
+	for {
+		msg := <-p.inbox
+		switch msg {
+		case Start{}:
+			go p.Run()
+			return nil
+		case Kill{}:
+			return nil
 		}
 	}
 }

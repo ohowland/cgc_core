@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"encoding/json"
 	"testing"
 
 	comm "github.com/ohowland/cgc/internal/pkg/modbuscomm"
@@ -32,15 +33,56 @@ func TestReadCommConfig(t *testing.T) {
 	assert.Assert(t, testComm.TargetConfig == assertPoller)
 
 	assertRegister := []comm.Register{
-		{Name: "test1", Address: 0, DataType: comm.DataType("u16"), FunctionCode: 3, Endianness: comm.Endian("big")},
-		{Name: "test2", Address: 1, DataType: comm.DataType("u16"), FunctionCode: 3, Endianness: comm.Endian("big")},
-		{Name: "test3", Address: 2, DataType: comm.DataType("f32"), FunctionCode: 3, Endianness: comm.Endian("little")},
+		{
+			Name:         "test1",
+			Address:      0,
+			DataType:     comm.DataType("u16"),
+			FunctionCode: 3,
+			AccessType:   comm.Access("read-write"),
+			Endianness:   comm.Endian("big")},
+		{
+			Name:         "test2",
+			Address:      1,
+			DataType:     comm.DataType("u16"),
+			FunctionCode: 3,
+			AccessType:   comm.Access("read-write"),
+			Endianness:   comm.Endian("big")},
+		{
+			Name:         "test3",
+			Address:      2,
+			DataType:     comm.DataType("f32"),
+			FunctionCode: 3,
+			AccessType:   comm.Access("read-write"),
+			Endianness:   comm.Endian("little")},
 	}
 
 	assert.Assert(t, len(testComm.Registers) == len(assertRegister[:]))
 	for i := range testComm.Registers {
 		assert.Assert(t, testComm.Registers[i] == assertRegister[i])
 	}
+}
+
+func TestMarshal(t *testing.T) {
+
+	response := make(map[string]interface{})
+	response["Kw"] = 10
+	response["Kvar"] = 20
+	response["Synchronized"] = false
+
+	testJSON, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testStatus := sel1547Status{}
+	err = json.Unmarshal(testJSON, &testStatus)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertStatus := sel1547Status{Kw: 10, Kvar: 20, Synchronized: false}
+	assert.Assert(t, testStatus == assertStatus)
+
 }
 
 /*
