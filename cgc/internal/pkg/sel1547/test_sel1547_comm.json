@@ -11,18 +11,21 @@
         "Address": 0,
         "DataType": "u16",
         "FunctionCode": 3,
+        "AccessType": "read-write",
         "Endianness": "big"
     }, {
         "Name": "test2",
         "Address": 1,
         "DataType": "u16",
         "FunctionCode": 3,
+        "AccessType": "read-write",
         "Endianness": "big"
     }, {
         "Name": "test3",
         "Address": 2,
         "DataType": "f32",
         "FunctionCode": 3,
+        "AccessType": "read-write",
         "Endianness": "little"
     }]
 }
