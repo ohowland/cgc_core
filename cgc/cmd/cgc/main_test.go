@@ -10,10 +10,16 @@ import (
 	"gotest.tools/assert"
 )
 
-type DummyAsset struct{}
+type DummyAsset struct {
+	pid uuid.UUID
+}
 type DummyAssetStatus struct{}
 type DummyAssetControl struct{}
 type DummyAssetConfig struct{}
+
+func (d DummyAsset) PID() uuid.UUID {
+	return d.pid
+}
 
 func (d DummyAsset) Status() interface{} {
 	return DummyAssetStatus{}
@@ -41,9 +47,9 @@ func (d DummyAsset) WriteControl() error {
 
 func TestLaunch(t *testing.T) {
 	asts := make(map[uuid.UUID]asset.Asset)
-	d := &DummyAsset{}
-	asts[d.PID()] = d
-
+	pid, err := uuid.NewUUID()
+	d := DummyAsset{pid}
+	asts[d.pid] = d
 	inboxes, err := launchAssets(asts)
 
 	if err != nil {

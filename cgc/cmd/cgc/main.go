@@ -5,10 +5,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/ohowland/cgc/internal/pkg/sel1547"
-
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid/sel1547"
 )
 
 func main() {
@@ -40,11 +39,11 @@ func loadAssets(paths []string) (map[uuid.UUID]asset.Asset, error) {
 	for _, path := range paths {
 		// TODO: How to dynamically load in types
 		// What if we don't know the type at compile time?
-		a, err := sel1547.ConfigureAsset(path)
+		a, err := sel1547.New(path)
 		if err != nil {
 			return assets, err
 		}
-		assets[a.PID()] = a
+		assets[a.PID()] = &a
 	}
 	return assets, nil
 }
@@ -52,7 +51,7 @@ func loadAssets(paths []string) (map[uuid.UUID]asset.Asset, error) {
 func launchAssets(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]chan interface{}, error) {
 	inboxes := make(map[uuid.UUID]chan interface{})
 	for _, a := range assets {
-		inboxes[a.PID()] = asset.InitializeProcess(a.(asset.Device))
+		inboxes[a.PID()] = asset.InitializeProcess(a)
 	}
 
 	return inboxes, nil
