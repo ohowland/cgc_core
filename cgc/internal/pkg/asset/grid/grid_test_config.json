@@ -1,0 +1,11 @@
+{
+  "StaticConfig": {
+    "Name": "Grid Intertie",
+    "Target": "sel1547",
+    "KwRated": 20,
+    "KvarRated": 10
+  },
+  "DynamicConfig": {
+    "DemandLimit": 20
+  }
+}

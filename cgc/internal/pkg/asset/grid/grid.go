@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid/sel1547"
 )
 
 // Asset is a datastructure for an Energy Storage System Asset
@@ -30,20 +31,21 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	static  StaticConfig
-	dynamic DynamicConfig
+	Static  StaticConfig  `json:"StaticConfig"`
+	Dynamic DynamicConfig `json:"DynamicConfig"`
 }
 
 // StaticConfig is a data structure representing an architypical fixed Grid Intertie configuration
 type StaticConfig struct {
-	Name      string
-	KwRated   float64
-	KvarRated float64
+	Name      string  `json:"Name"`
+	Target    string  `json:"Target"`
+	KwRated   float64 `json:"KwRated"`
+	KvarRated float64 `json:"KvarRated"`
 }
 
 // DynamicConfig is a data structure representing an architypical adjustable Grid Intertie configuration
 type DynamicConfig struct {
-	DemandLimit float64
+	DemandLimit float64 `json:"DemandLimit"`
 }
 
 // Status is a getter for the GridAsset status field
@@ -78,15 +80,51 @@ func (a Asset) WriteControl() error {
 	return err
 }
 
-func readConfig(path string) (Config, error) {
-	c := Config{}
-	jsonFile, err := ioutil.ReadFile(path + ".json")
+func New(configPath string) (Asset, error) {
+	configFileData := readConfig(configPath)
+
+	config := Config{}
+	err = json.Unmarshal(jsonFile, &config)
 	if err != nil {
-		return c, err
+		return Asset{}, err
 	}
-	err = json.Unmarshal(jsonFile, &c)
+
+	device, err := target(config)
 	if err != nil {
-		return c, err
+		return Asset{}, err
 	}
-	return c, nil
+
+	PID, err := uuid.NewUUID()
+	if err != nil {
+		return Asset{}, err
+	}
+
+	status := Status{}
+	control := Control{}
+
+	return Asset{PID, device, status, control, config}
+
+}
+
+func target(config map[string]interface{}) (asset.Device, error) {
+	switch config {
+	case "sel1547":
+		return sel1547.New(map[string]interface{})
+	}
+	return nil, error.New("unrecongized target grid device: %v", config)
+}
+
+func readConfig(contfigPath string) (map[string]interface{}, error) {
+	var config map[string]interface{}
+	jsonFile, err := ioutil.ReadFile(contfigPath + ".json")
+	if err != nil {
+		return config, err
+	}
+
+	err = json.Unmarshal(jsonFile, &config)
+	if err != nil {
+		return config, err
+	}
+
+	return config, nil
 }
