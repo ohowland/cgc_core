@@ -1,15 +1,15 @@
-package asset
+package sel1547
 
 import (
 	"encoding/json"
 	"testing"
 
-	comm "github.com/ohowland/cgc/internal/pkg/modbuscomm"
+	"github.com/ohowland/cgc/internal/pkg/comm"
 	"gotest.tools/assert"
 )
 
 func TestReadStaticConfig(t *testing.T) {
-	testConfig, err := readStaticConfig("test_sel1547_static.json")
+	testConfig, err := readStaticConfig("test_sel1547_static")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +18,7 @@ func TestReadStaticConfig(t *testing.T) {
 }
 
 func TestReadCommConfig(t *testing.T) {
-	testComm, err := readCommConfig("test_sel1547_comm.json")
+	testComm, err := readCommConfig("test_sel1547_comm")
 	if err != nil {
 		t.Fatal(err)
 	}

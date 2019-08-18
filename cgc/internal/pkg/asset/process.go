@@ -6,7 +6,7 @@ import (
 
 // Process is a wrapper around the device object.
 type Process struct {
-	device    Device
+	asset     *Asset
 	scheduler Scheduler
 	inbox     chan interface{}
 	state     ProcessState
@@ -34,9 +34,9 @@ type Start struct{}
 // Stop the actor
 type Stop struct{}
 
-// StartProcess spins up a Process
-func StartProcess(d Device) chan interface{} {
-	proc := Process{device: d, inbox: nil, state: uninitialized}
+// InitializeProcess spins up a Process
+func InitializeProcess(a Asset) chan interface{} {
+	proc := Process{asset: &a, inbox: nil, state: uninitialized}
 	inbox := proc.initialize()
 	go proc.run()
 	return inbox
@@ -65,10 +65,14 @@ func (p *Process) run() error {
 		switch msg.(type) {
 
 		case UpdateStatus:
-			p.device.ReadDeviceStatus()
+			// mutex?
+			asset := *p.asset
+			asset.UpdateStatus()
 
 		case WriteControl:
-			p.device.WriteDeviceControl()
+			// mutex?
+			asset := *p.asset
+			asset.WriteControl()
 
 		case Stop:
 			go p.stop()

@@ -8,6 +8,55 @@ import (
 	"gotest.tools/assert"
 )
 
+type DummyAsset struct {
+	status  DummyStatus
+	control DummyControl
+	device  DummyDevice
+}
+
+type DummyStatus struct {
+	state string
+}
+type DummyControl struct {
+	cmd string
+}
+
+type DummyConfig struct{}
+
+func (d DummyAsset) Status() interface{} {
+	return DummyStatus{}
+}
+
+func (d DummyAsset) Control(interface{}) {}
+
+func (d DummyAsset) Config(interface{}) {}
+
+func (d *DummyAsset) UpdateStatus() error {
+	response, err := d.device.ReadDeviceStatus()
+	d.status = response.(DummyStatus)
+	return err
+}
+
+func (d DummyAsset) WriteControl() error {
+	err := d.device.WriteDeviceControl(d.control)
+	return err
+}
+
+type DummyDevice struct{}
+
+func (d DummyDevice) ReadDeviceStatus() (interface{}, error) {
+	log.Print("reading dummy device...")
+	time.Sleep(time.Duration(100) * time.Millisecond)
+	response := DummyStatus{state: "online"}
+	return response, nil
+}
+
+func (d DummyDevice) WriteDeviceControl(interface{}) error {
+	log.Print("writing dummy device...")
+	time.Sleep(time.Duration(100) * time.Millisecond)
+	return nil
+}
+
 func TestTarget(t *testing.T) {
 	ch := make(chan interface{})
 	msg := "testing..."
@@ -81,25 +130,41 @@ func TestSchedulerMsgTargetRepeat(t *testing.T) {
 	assert.Assert(t, incoming[max-1] == "testing...")
 }
 
-type DummyDevice struct{}
-
-func (d DummyDevice) ReadDeviceStatus() error {
-	log.Print("reading dummy device...")
-	time.Sleep(time.Duration(100) * time.Millisecond)
-	return nil
-}
-
-func (d DummyDevice) WriteDeviceControl() error {
-	log.Print("writing dummy device...")
-	time.Sleep(time.Duration(100) * time.Millisecond)
-	return nil
-}
-
 func TestProcess(t *testing.T) {
-	device := DummyDevice{}
-	inbox := StartProcess(device)
+	asset := DummyAsset{}
+	inbox := InitializeProcess(&asset)
 
 	inbox <- UpdateStatus{}
 	inbox <- WriteControl{}
 	inbox <- Stop{}
+	close(inbox)
+}
+
+func TestProcessScheduled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping TestProcessScheduled in short mode")
+	}
+
+	asset := DummyAsset{}
+	inbox := InitializeProcess(&asset)
+
+	time.Sleep(time.Duration(3) * time.Second)
+	inbox <- Stop{}
+	close(inbox)
+}
+func TestProcessStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping TestProcessScheduled in short mode")
+	}
+
+	asset := DummyAsset{}
+	inbox := InitializeProcess(&asset)
+
+	time.Sleep(time.Duration(2) * time.Second)
+	inbox <- Stop{}
+	time.Sleep(time.Duration(2) * time.Second)
+	inbox <- Start{}
+	time.Sleep(time.Duration(2) * time.Second)
+	inbox <- Stop{}
+	close(inbox)
 }
