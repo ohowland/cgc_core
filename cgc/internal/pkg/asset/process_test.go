@@ -5,10 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"gotest.tools/assert"
 )
 
 type DummyAsset struct {
+	pid     uuid.UUID
 	status  DummyStatus
 	control DummyControl
 	device  DummyDevice
@@ -23,7 +26,11 @@ type DummyControl struct {
 
 type DummyConfig struct{}
 
-func (d DummyAsset) Status() interface{} {
+func (d DummyAsset) PID() uuid.UUID {
+	return d.pid
+}
+
+func (d *DummyAsset) Status() interface{} {
 	return DummyStatus{}
 }
 

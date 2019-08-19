@@ -1,8 +1,8 @@
 {
   "StaticConfig": {
     "Name": "Grid Intertie",
-    "KWRated": 20,
-    "KVARRated": 10
+    "KwRated": 20,
+    "KvarRated": 10
   },
   "DynamicConfig": {
     "DemandLimit": 20

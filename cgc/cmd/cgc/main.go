@@ -1,57 +1,69 @@
-package cgc
+package main
 
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid/sel1547"
+	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/asset/pv/virtualpv"
 )
 
 func main() {
-
-	// create assets and wrap in process.
-	config, err := readSystemConfig("./settings.json")
+	log.Println("[starting]")
+	log.Println("[loading assets]")
+	assets, err := loadAssets()
 	if err != nil {
 		panic(err)
 	}
 
-	assets, err := loadAssets(config.AssetPaths)
-	if err != nil {
-		panic(err)
-	}
-
+	log.Println("[launching processes]")
 	processes, err := launchAssets(assets)
 	if err != nil {
 		panic(err)
 	}
 
-	time.Sleep(time.Duration(1) * time.Second)
-	stopAssets(processes)
+	log.Println("[running]")
+	time.Sleep(time.Duration(2) * time.Second)
 
+	log.Println("[stopping]")
+	stopAssets(processes)
+	os.Exit(0)
 }
 
-func loadAssets(paths []string) (map[uuid.UUID]asset.Asset, error) {
+func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 
-	for _, path := range paths {
-		// TODO: How to dynamically load in types
-		// What if we don't know the type at compile time?
-		a, err := sel1547.New(path)
-		if err != nil {
-			return assets, err
-		}
-		assets[a.PID()] = &a
+	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json")
+	if err != nil {
+		return assets, err
 	}
+	assets[grid.PID()] = &grid
+
+	ess, err := virtualess.New("../../config/asset/virtualESS.json")
+	if err != nil {
+		return assets, err
+	}
+	assets[ess.PID()] = &ess
+
+	pv, err := virtualpv.New("../../config/asset/virtualPV.json")
+	if err != nil {
+		return assets, err
+	}
+	assets[pv.PID()] = &pv
+
 	return assets, nil
 }
 
 func launchAssets(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]chan interface{}, error) {
 	inboxes := make(map[uuid.UUID]chan interface{})
 	for _, a := range assets {
-		inboxes[a.PID()] = asset.InitializeProcess(a)
+		inboxes[a.PID()] = asset.StartProcess(a)
 	}
 
 	return inboxes, nil

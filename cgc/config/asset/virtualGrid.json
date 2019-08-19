@@ -1,6 +1,6 @@
 {
   "StaticConfig": {
-    "Name": "Grid Intertie",
+    "Name": "Virtual Grid Intertie",
     "KWRated": 20,
     "KVARRated": 10
   },

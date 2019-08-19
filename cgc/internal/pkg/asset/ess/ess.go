@@ -1,4 +1,4 @@
-package grid
+package ess
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
-// Asset is a datastructure for an Energy Storage System Asset
+// Asset is a data structure for an ESS Asset
 type Asset struct {
 	pid     uuid.UUID
 	device  asset.Device
@@ -16,19 +16,19 @@ type Asset struct {
 	config  Config
 }
 
-// Status is a data structure representing an architypical Grid Intertie status
+// Status is a data structure representing an architypical ESS status
 type Status struct {
 	KW                   float64
 	KVAR                 float64
-	PostiveRealCapacity  float64
+	PositiveRealCapacity float64
 	NegativeRealCapacity float64
-	Synchronized         bool
+	SOC                  float64
 }
 
-// Control is a data structure representing an architypical Grid Intertie control
+// Control is a data structure representing an architypical ESS control
 type Control struct {
-	CloseIntertie bool
-	Enable        bool
+	RunRequest bool
+	Enable     bool
 }
 
 // Config differentiates between two types of configurations, static and dynamic
@@ -37,39 +37,52 @@ type Config struct {
 	Dynamic DynamicConfig `json:"DynamicConfig"`
 }
 
-// StaticConfig is a data structure representing an architypical fixed Grid Intertie configuration
+// StaticConfig is a data structure representing an architypical fixed ESS configuration
 type StaticConfig struct {
 	Name      string  `json:"Name"`
-	KWRated   float64 `json:"KwRated"`
-	KVARRated float64 `json:"KvarRated"`
+	KWRated   float64 `json:"KWRated"`
+	KVARRated float64 `json:"KVARRated"`
+	KWHRated  float64 `json:"KWHRated"`
 }
 
-// DynamicConfig is a data structure representing an architypical adjustable Grid Intertie configuration
+// DynamicConfig is a data structure representing an architypical adjustable ESS configuration
 type DynamicConfig struct {
-	DemandLimit float64 `json:"DemandLimit"`
+	LowSOC    float64 `json:"LowSOC"`
+	HighSOC   float64 `json:"HighSOC"`
+	TargetSOC float64 `json:"TargetSOC"`
 }
 
-// PID is a getter for the GridAsset status field
+// PID is a getter for the ess.Asset status field
 func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
-// Status is a getter for the GridAsset status field
+// Status is a getter for the ess.Asset status field
 func (a Asset) Status() Status {
 	return a.status
 }
 
-// Control is a setter for the GridAsset control field
-func (a *Asset) Control(c Control) {
+// SetControl is a setter for the ess.Asset control field
+func (a *Asset) SetControl(c Control) {
 	a.control = c
 }
 
-// Config is a setter for the GridAsset config field
-func (a *Asset) Config(c Config) {
-	a.config = c
+// Control is a getter for the ess.Asset control field
+func (a Asset) Control() Control {
+	return a.control
 }
 
-// UpdateStatus requests a physical device read and updates the GridAsset status field
+// SetDynamicConfig is a setter for the ess.Asset dynamic config field
+func (a *Asset) SetDynamicConfig(c DynamicConfig) {
+	a.config.Dynamic = c
+}
+
+// Config is a getter for the ess.Asset config field
+func (a Asset) Config() Config {
+	return a.config
+}
+
+// UpdateStatus requests a physical device read and updates the ess.Asset status field
 func (a *Asset) UpdateStatus() error {
 	status, err := a.device.ReadDeviceStatus()
 	if err != nil {

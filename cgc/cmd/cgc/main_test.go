@@ -1,4 +1,4 @@
-package cgc
+package main
 
 import (
 	"log"

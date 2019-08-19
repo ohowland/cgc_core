@@ -34,8 +34,8 @@ type Start struct{}
 // Stop the actor
 type Stop struct{}
 
-// InitializeProcess spins up a Process
-func InitializeProcess(a Asset) chan interface{} {
+// StartProcess spins up a Process
+func StartProcess(a Asset) chan interface{} {
 	proc := Process{asset: &a, inbox: nil, state: uninitialized}
 	inbox := proc.initialize()
 	go proc.run()

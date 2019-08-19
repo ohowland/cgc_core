@@ -7,21 +7,21 @@
         "PollRate": 1000
     },
     "Registers": [{
-        "Name": "test1",
+        "Name": "KW",
         "Address": 0,
         "DataType": "u16",
         "FunctionCode": 3,
         "AccessType": "read-write",
         "Endianness": "big"
     }, {
-        "Name": "test2",
+        "Name": "KVAR",
         "Address": 1,
         "DataType": "u16",
         "FunctionCode": 3,
         "AccessType": "read-write",
         "Endianness": "big"
     }, {
-        "Name": "test3",
+        "Name": "SOC",
         "Address": 2,
         "DataType": "f32",
         "FunctionCode": 3,

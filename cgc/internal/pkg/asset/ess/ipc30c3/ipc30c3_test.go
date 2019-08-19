@@ -1,4 +1,4 @@
-package sel1547
+package ipc30c3
 
 import (
 	"encoding/json"
@@ -60,7 +60,7 @@ func TestMarshal(t *testing.T) {
 	response := make(map[string]interface{})
 	response["KW"] = 10
 	response["KVAR"] = 20
-	response["Synchronized"] = false
+	response["SOC"] = 50
 
 	testJSON, err := json.Marshal(response)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestMarshal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertStatus := Status{KW: 10, KVAR: 20, Synchronized: false}
+	assertStatus := Status{KW: 10, KVAR: 20, SOC: 30}
 	assert.Assert(t, testStatus == assertStatus)
 
 }

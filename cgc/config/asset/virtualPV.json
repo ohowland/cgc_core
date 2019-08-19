@@ -1,10 +1,9 @@
 {
   "StaticConfig": {
-    "Name": "Grid Intertie",
+    "Name": "Virtual PV",
     "KWRated": 20,
     "KVARRated": 10
   },
   "DynamicConfig": {
-    "DemandLimit": 20
   }
 }

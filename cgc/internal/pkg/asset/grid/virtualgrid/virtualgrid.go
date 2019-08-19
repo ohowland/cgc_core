@@ -1,4 +1,4 @@
-package sel1547
+package virtualgrid
 
 import (
 	"encoding/json"
@@ -8,14 +8,14 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/comm/modbuscomm"
 )
 
-// SEL1547 target
-type SEL1547 struct {
+// VirtualGrid target
+type VirtualGrid struct {
 	status  Status
 	control Control
 	comm    Comm
 }
 
-// Status data structure for the SEL1547
+// Status data structure for the VirtualGrid
 type Status struct {
 	KW                   int  `json:"KW"`
 	KVAR                 int  `json:"KVAR"`
@@ -24,12 +24,12 @@ type Status struct {
 	Synchronized         bool `json:"Synchronized"`
 }
 
-// Control data structure for the SEL1547
+// Control data structure for the VirtualGrid
 type Control struct {
 	closeIntertie int
 }
 
-// Comm data structure for the SEL1547
+// Comm data structure for the VirtualGrid
 type Comm struct {
 	TargetConfig modbuscomm.PollerConfig `json:"TargetConfig"`
 	handler      modbuscomm.ModbusComm
@@ -37,14 +37,14 @@ type Comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a SEL1547) ReadDeviceStatus() (interface{}, error) {
+func (a VirtualGrid) ReadDeviceStatus() (interface{}, error) {
 	response, err := a.comm.read()
 	err = a.status.update(response)
 	return a.Status(), err
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a SEL1547) WriteDeviceControl(c interface{}) error {
+func (a VirtualGrid) WriteDeviceControl(c interface{}) error {
 	a.Control(c.(grid.Control))
 	payload, err := a.control.payload()
 	if err != nil {
@@ -56,7 +56,7 @@ func (a SEL1547) WriteDeviceControl(c interface{}) error {
 }
 
 // Status maps grid.DeviceStatus to grid.Status
-func (a SEL1547) Status() grid.Status {
+func (a VirtualGrid) Status() grid.Status {
 	// map deviceStatus to GridStatus
 	return grid.Status{
 		KW:           float64(a.status.KW),
@@ -66,7 +66,7 @@ func (a SEL1547) Status() grid.Status {
 }
 
 // Control maps grid.Control to grid.DeviceControl
-func (a SEL1547) Control(c grid.Control) {
+func (a VirtualGrid) Control(c grid.Control) {
 	// map GridControl params to deviceControl
 
 	updatedControl := Control{
@@ -76,7 +76,7 @@ func (a SEL1547) Control(c grid.Control) {
 	a.control = updatedControl
 }
 
-// update unmarshals a JSON response into the sel1547 status
+// update unmarshals a JSON response into the VirtualGrid status
 func (a *Status) update(response []byte) error {
 	updatedStatus := &Status{}
 	err := json.Unmarshal(response, updatedStatus)
@@ -88,7 +88,7 @@ func (a *Status) update(response []byte) error {
 	return err
 }
 
-// payload marshals a JSON string from sel1547 control
+// payload marshals a JSON string from VirtualGrid control
 func (c Control) payload() ([]byte, error) {
 	payload, err := json.Marshal(c)
 	return payload, err
@@ -118,7 +118,7 @@ func New(configPath string) (grid.Asset, error) {
 		return grid.Asset{}, err
 	}
 
-	device := SEL1547{
+	device := VirtualGrid{
 		status: Status{
 			KW:                   0,
 			KVAR:                 0,

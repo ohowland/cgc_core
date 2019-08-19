@@ -1,4 +1,4 @@
-package comm
+package modbuscomm
 
 // ModbusComm interface
 type ModbusComm interface {
