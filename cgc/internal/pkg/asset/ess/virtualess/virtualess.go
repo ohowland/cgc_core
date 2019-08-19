@@ -69,13 +69,19 @@ func (a VirtualESS) Control(c ess.Control) {
 }
 
 func (a *VirtualESS) read() error {
-	in := <-a.comm.incoming
-	a.status = in
+	select {
+	case in := <-a.comm.incoming:
+		a.status = in
+	default:
+	}
 	return nil
 }
 
 func (a *VirtualESS) write() error {
-	a.comm.outgoing <- a.control
+	select {
+	case a.comm.outgoing <- a.control:
+	default:
+	}
 	return nil
 }
 
@@ -104,24 +110,57 @@ func New(configPath string) (ess.Asset, error) {
 	}
 
 	ess, err := ess.New(jsonConfig, device)
-
-	go launchVirtualDevice(device, ess.Config())
+	go launchVirtualDevice(out, in)
 	return ess, err
 }
 
-func launchVirtualDevice(d VirtualESS, cfg ess.Config) {
-
+func launchVirtualDevice(in chan Control, out chan Status) {
+	dev := &VirtualESS{}
+	sm := &stateMachine{offState{}}
 	for {
 		select {
-		case in := <-d.comm.outgoing:
-			d.control = in
-			d.status = statemachine(d)
-			d.comm.incoming <- d.status
+		case dev.control = <-in:
+		case out <- dev.status:
 		default:
+			dev.status = sm.run(*dev)
 		}
 	}
 }
 
-func statemachine(d VirtaulESS, cfg ess.Config) {
+type state interface {
+	action(VirtualESS) Status
+	transition(VirtualESS) state
+}
 
+type offState struct{}
+
+func (s offState) action(dev VirtualESS) Status {
+	return Status{}
+}
+func (s offState) transition(dev VirtualESS) state {
+	if dev.control.runRequest == true {
+		return onState{}
+	}
+	return offState{}
+}
+
+type onState struct{}
+
+func (s onState) action(dev VirtualESS) Status {
+	return Status{}
+}
+func (s onState) transition(dev VirtualESS) state {
+	if dev.control.runRequest == false {
+		return offState{}
+	}
+	return onState{}
+}
+
+type stateMachine struct {
+	currentState state
+}
+
+func (s *stateMachine) run(dev VirtualESS) Status {
+	s.currentState = s.currentState.transition(dev)
+	return s.currentState.action(dev)
 }

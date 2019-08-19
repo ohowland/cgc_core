@@ -77,9 +77,9 @@ func (a *Asset) SetDynamicConfig(c DynamicConfig) {
 	a.config.Dynamic = c
 }
 
-// Config is a getter for the ess.Asset config field
-func (a Asset) Config() Config {
-	return a.config
+// StaticConfig is a getter for the ess.Asset static config field
+func (a Asset) StaticConfig() StaticConfig {
+	return a.config.Static
 }
 
 // UpdateStatus requests a physical device read and updates the ess.Asset status field
