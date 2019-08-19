@@ -2,6 +2,8 @@ package virtualess
 
 import (
 	"io/ioutil"
+	"log"
+	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 )
@@ -109,9 +111,8 @@ func New(configPath string) (ess.Asset, error) {
 		comm: Comm{in, out},
 	}
 
-	ess, err := ess.New(jsonConfig, device)
 	go launchVirtualDevice(out, in)
-	return ess, err
+	return ess.New(jsonConfig, device)
 }
 
 func launchVirtualDevice(in chan Control, out chan Status) {
@@ -120,9 +121,13 @@ func launchVirtualDevice(in chan Control, out chan Status) {
 	for {
 		select {
 		case dev.control = <-in:
+			log.Println("[VirtualESS: control msg recieved]")
 		case out <- dev.status:
+			log.Println("[VirtualESS: status msg sent]")
 		default:
 			dev.status = sm.run(*dev)
+			log.Printf("[VirtualESS: state %v]", sm.currentState)
+			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
 }
@@ -135,7 +140,13 @@ type state interface {
 type offState struct{}
 
 func (s offState) action(dev VirtualESS) Status {
-	return Status{}
+	return Status{
+		KW:                   0,
+		KVAR:                 0,
+		SOC:                  0,
+		PositiveRealCapacity: 0,
+		NegativeRealCapacity: 0,
+	}
 }
 func (s offState) transition(dev VirtualESS) state {
 	if dev.control.runRequest == true {
@@ -147,7 +158,13 @@ func (s offState) transition(dev VirtualESS) state {
 type onState struct{}
 
 func (s onState) action(dev VirtualESS) Status {
-	return Status{}
+	return Status{
+		KW:                   10,
+		KVAR:                 0,
+		SOC:                  60,
+		PositiveRealCapacity: 10,
+		NegativeRealCapacity: 10,
+	}
 }
 func (s onState) transition(dev VirtualESS) state {
 	if dev.control.runRequest == false {
