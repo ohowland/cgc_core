@@ -1,0 +1,31 @@
+{
+    "TargetConfig": {
+        "IPAddr": "192.168.0.100",
+        "Port": "5020",
+        "SlaveID": 0,
+        "Timeout": 100,
+        "PollRate": 1000
+    },
+    "Registers": [{
+        "Name": "KW",
+        "Address": 0,
+        "DataType": "u16",
+        "FunctionCode": 3,
+        "AccessType": "read-write",
+        "Endianness": "big"
+    }, {
+        "Name": "KVAR",
+        "Address": 1,
+        "DataType": "u16",
+        "FunctionCode": 3,
+        "AccessType": "read-write",
+        "Endianness": "big"
+    }, {
+        "Name": "SOC",
+        "Address": 2,
+        "DataType": "f32",
+        "FunctionCode": 3,
+        "AccessType": "read-write",
+        "Endianness": "little"
+    }]
+}

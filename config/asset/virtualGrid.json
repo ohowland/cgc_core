@@ -1,0 +1,10 @@
+{
+  "StaticConfig": {
+    "Name": "Virtual Grid Intertie",
+    "KWRated": 20,
+    "KVARRated": 10
+  },
+  "DynamicConfig": {
+    "DemandLimit": 20
+  }
+}
