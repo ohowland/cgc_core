@@ -33,8 +33,14 @@ type Control struct {
 	GridForm bool
 }
 
+type VirtualSystemModel struct {
+	RealSwingLoad     float64
+	ReactiveSwingLoad float64
+}
+
 // Comm data structure for the VirtualESS
 type Comm struct {
+	vsm      chan VirtualSystemModel
 	incoming chan Status
 	outgoing chan Control
 }
@@ -94,8 +100,8 @@ func (a *VirtualESS) write() error {
 	return nil
 }
 
-// New returns an initalized IPC30C3 Asset; this is part of the Asset interface.
-func New(configPath string) (ess.Asset, error) {
+// New returns an initalized VirtualESS Asset; this is part of the Asset interface.
+func New(configPath string, vsm chan VirtualSystemModel) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
@@ -119,33 +125,42 @@ func New(configPath string) (ess.Asset, error) {
 			KVAR:     0,
 			GridForm: false,
 		},
-		comm: Comm{in, out},
+		comm: Comm{
+			vsm,
+			in,
+			out,
+		},
 	}
 
-	go launchVirtualDevice(out, in)
+	go launchVirtualDevice(device.comm)
 	return ess.New(jsonConfig, device)
 }
 
-func launchVirtualDevice(in chan Control, out chan Status) {
+func launchVirtualDevice(comm Comm) {
 	dev := &VirtualESS{}
 	sm := &stateMachine{offState{}}
 	for {
 		select {
-		case dev.control = <-in:
+		case dev.control = <-comm.outgoing:
 			log.Println("[VirtualESS: control msg recieved]")
-		case out <- dev.status:
-			log.Println("[VirtualESS: status msg sent]")
-		default:
-			dev = updateVirtualDevice(dev)
+		case comm.incoming <- dev.status:
+			dev = updateVirtualDevice(dev, comm.vsm)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualESS: state %v]", sm.currentState)
+		default:
 			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
 }
 
-func updateVirtualDevice(dev *VirtualESS) *VirtualESS {
-
+func updateVirtualDevice(dev *VirtualESS, vsm chan VirtualSystemModel) *VirtualESS {
+	select {
+	case model := <-vsm:
+		dev.status.KW = model.RealSwingLoad
+		dev.status.KVAR = model.ReactiveSwingLoad
+	default:
+	}
+	return dev
 }
 
 type stateMachine struct {
@@ -187,8 +202,8 @@ type PQState struct{}
 
 func (s PQState) action(dev VirtualESS) Status {
 	return Status{
-		KW:                   dev.control.KW,
-		KVAR:                 dev.control.KVAR,
+		KW:                   dev.status.KW,
+		KVAR:                 dev.status.KVAR,
 		SOC:                  dev.status.SOC,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
@@ -209,8 +224,8 @@ type HzVState struct{}
 
 func (s HzVState) action(dev VirtualESS) Status {
 	return Status{
-		KW:                   0, // TODO: Link to virtual system model
-		KVAR:                 0, // TODO: Link to virtual system model
+		KW:                   dev.status.KW,   // TODO: Link to virtual system model
+		KVAR:                 dev.status.KVAR, // TODO: Link to virtual system model
 		SOC:                  dev.status.SOC,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
