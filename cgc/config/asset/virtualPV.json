@@ -1,9 +1,0 @@
-{
-  "StaticConfig": {
-    "Name": "Virtual PV",
-    "KWRated": 20,
-    "KVARRated": 10
-  },
-  "DynamicConfig": {
-  }
-}

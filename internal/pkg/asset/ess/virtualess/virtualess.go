@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc/internal/pkg/virtual"
 )
 
 // VirtualESS target
@@ -33,14 +34,13 @@ type Control struct {
 	GridForm bool
 }
 
-type VirtualSystemModel struct {
-	RealSwingLoad     float64
-	ReactiveSwingLoad float64
+type Config struct {
+
 }
 
 // Comm data structure for the VirtualESS
 type Comm struct {
-	vsm      chan VirtualSystemModel
+	vsm      chan virtual.SwingLoads
 	incoming chan Status
 	outgoing chan Control
 }
@@ -84,6 +84,7 @@ func (a VirtualESS) Control(c ess.Control) {
 }
 
 func (a *VirtualESS) read() error {
+	log.Printf("[reading status: %v]", a)
 	select {
 	case in := <-a.comm.incoming:
 		a.status = in
@@ -93,6 +94,7 @@ func (a *VirtualESS) read() error {
 }
 
 func (a *VirtualESS) write() error {
+	log.Printf("[writing control: %v]", a)
 	select {
 	case a.comm.outgoing <- a.control:
 	default:
@@ -101,7 +103,7 @@ func (a *VirtualESS) write() error {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, vsm chan VirtualSystemModel) (ess.Asset, error) {
+func New(configPath string, vsm chan virtual.SwingLoads) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
@@ -153,11 +155,11 @@ func launchVirtualDevice(comm Comm) {
 	}
 }
 
-func updateVirtualDevice(dev *VirtualESS, vsm chan VirtualSystemModel) *VirtualESS {
+func updateVirtualDevice(dev *VirtualESS, vsm chan virtual.SwingLoads) *VirtualESS {
 	select {
-	case model := <-vsm:
-		dev.status.KW = model.RealSwingLoad
-		dev.status.KVAR = model.ReactiveSwingLoad
+	case v := <-vsm:
+		dev.status.KW = v.RealSwingLoad
+		dev.status.KVAR = v.ReactiveSwingLoad
 	default:
 	}
 	return dev

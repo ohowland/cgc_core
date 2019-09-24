@@ -42,7 +42,7 @@ type Config struct {
 }
 
 // StaticConfig is a data structure representing an architypical fixed ESS configuration
-type StaticConfig struct {
+type StaticConfig struct { // Should this get transfered over to the specific class?
 	Name      string  `json:"Name"`
 	KWRated   float64 `json:"KWRated"`
 	KVARRated float64 `json:"KVARRated"`
@@ -50,7 +50,7 @@ type StaticConfig struct {
 }
 
 // DynamicConfig is a data structure representing an architypical adjustable ESS configuration
-type DynamicConfig struct {
+type DynamicConfig struct { // TODO: Is this more of a DISPATCH config? Does this belong as an ESS dispatch module?
 	LowSOC    float64 `json:"LowSOC"`
 	HighSOC   float64 `json:"HighSOC"`
 	TargetSOC float64 `json:"TargetSOC"`

@@ -7,11 +7,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/ohowland/cgc/internal/pkg/virtual"
+
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
-	"github.com/ohowland/cgc/internal/pkg/asset/pv/virtualpv"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	}
 
 	log.Println("[running]")
-	time.Sleep(time.Duration(2) * time.Second)
+	time.Sleep(time.Duration(10) * time.Second)
 
 	log.Println("[stopping]")
 	stopAssets(processes)
@@ -39,23 +39,30 @@ func main() {
 func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 
-	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json")
-	if err != nil {
-		return assets, err
-	}
-	assets[grid.PID()] = &grid
+	vsm := virtual.SystemModel{}
 
-	ess, err := virtualess.New("../../config/asset/virtualESS.json")
+	/*
+		grid, err := virtualgrid.New("../../config/asset/virtualGrid.json")
+		if err != nil {
+			return assets, err
+		}
+		assets[grid.PID()] = &grid
+	*/
+
+	ess_vsm := vsm.Subscribe()
+	ess, err := virtualess.New("../../config/asset/virtualESS.json", ess_vsm)
 	if err != nil {
 		return assets, err
 	}
 	assets[ess.PID()] = &ess
 
-	pv, err := virtualpv.New("../../config/asset/virtualPV.json")
-	if err != nil {
-		return assets, err
-	}
-	assets[pv.PID()] = &pv
+	/*
+		pv, err := virtualpv.New("../../config/asset/virtualPV.json")
+		if err != nil {
+			return assets, err
+		}
+		assets[pv.PID()] = &pv
+	*/
 
 	return assets, nil
 }

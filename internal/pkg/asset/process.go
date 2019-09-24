@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"log"
 	"time"
 )
 
@@ -36,6 +37,7 @@ type Stop struct{}
 
 // StartProcess spins up a Process
 func StartProcess(a Asset) chan interface{} {
+	log.Printf("starting processs %v\n", a)
 	proc := Process{asset: &a, inbox: nil, state: uninitialized}
 	inbox := proc.initialize()
 	go proc.run()
