@@ -1,0 +1,7 @@
+{
+  "StaticConfig": {
+    "Name": "Virtual Feeder",
+    "KWRated": 20,
+    "KVARRated": 10
+  }
+}

@@ -22,20 +22,21 @@ type VirtualESS struct {
 
 // Status data structure for the VirtualESS
 type Status struct {
-	KW                   float64
-	KVAR                 float64
-	SOC                  float64
-	PositiveRealCapacity float64
-	NegativeRealCapacity float64
-	GridForming          bool
+	KW                   float64 `json:"KW"`
+	KVAR                 float64 `json:"KVAR"`
+	SOC                  float64 `json:"SOC"`
+	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
+	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
+	Gridforming          bool    `json:"Gridforming"`
+	Online               bool    `json:"Online"`
 }
 
 // Control data structure for the VirtualESS
 type Control struct {
-	Run      bool
-	KW       float64
-	KVAR     float64
-	GridForm bool
+	run      bool
+	kW       float64
+	kVAR     float64
+	gridForm bool
 }
 
 type Config struct {
@@ -61,7 +62,7 @@ func (a VirtualESS) WriteDeviceControl(c interface{}) error {
 	return err
 }
 
-// Status maps grid.DeviceStatus to grid.Status
+// Status maps ess.DeviceStatus to ess.Status
 func (a VirtualESS) Status() ess.Status {
 	// map deviceStatus to GridStatus
 	return ess.Status{
@@ -70,29 +71,29 @@ func (a VirtualESS) Status() ess.Status {
 		SOC:                  float64(a.status.SOC),
 		PositiveRealCapacity: float64(a.status.PositiveRealCapacity),
 		NegativeRealCapacity: float64(a.status.NegativeRealCapacity),
+		Gridforming:          a.status.Gridforming,
+		Online:               a.status.Online,
 	}
 }
 
-// Control maps grid.Control to grid.DeviceControl
+// Control maps ess.Control to ess.DeviceControl
 func (a VirtualESS) Control(c ess.Control) {
-	// map GridControl params to deviceControl
 
 	updatedControl := Control{
-		Run:      c.Run,
-		KW:       c.KW,
-		KVAR:     c.KVAR,
-		GridForm: c.GridForm,
+		run:      c.Run,
+		kW:       c.KW,
+		kVAR:     c.KVAR,
+		gridForm: c.GridForm,
 	}
 
 	a.control = updatedControl
 }
 
 func (a *VirtualESS) read() error {
-	log.Println("[VirtualESS: read requested]")
 	select {
 	case in := <-a.comm.incoming:
 		a.status = in
-		log.Printf("[VirtualESS: read status: %v]", in)
+		//log.Printf("[VirtualESS: read status: %v]", in)
 	default:
 		log.Println("[VirtualESS: read failed]")
 	}
@@ -100,10 +101,9 @@ func (a *VirtualESS) read() error {
 }
 
 func (a *VirtualESS) write() error {
-	log.Println("[VirtualESS: write requested]")
 	select {
 	case a.comm.outgoing <- a.control:
-		log.Printf("[VirtualESS: wrote control: %v]", a.control)
+		//log.Printf("[VirtualESS: write control: %v]", a.control)
 	default:
 		log.Println("[VirtualESS: write failed]")
 
@@ -132,13 +132,14 @@ func New(configPath string, vsm *virtual.SystemModel) (ess.Asset, error) {
 			SOC:                  0.6,
 			PositiveRealCapacity: 0,
 			NegativeRealCapacity: 0,
-			GridForming:          false,
+			Gridforming:          false,
+			Online:               false,
 		},
 		control: Control{
-			Run:      false,
-			KW:       0,
-			KVAR:     0,
-			GridForm: false,
+			run:      false,
+			kW:       0,
+			kVAR:     0,
+			gridForm: false,
 		},
 		comm: Comm{
 			incoming:      in,
@@ -158,7 +159,6 @@ func launchVirtualDevice(comm Comm) {
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
-			log.Println("[VirtualESS-Device: control msg recieved]")
 		case comm.incoming <- dev.status:
 			dev = updateVirtualSystem(dev, comm)
 			dev.status = sm.run(*dev)
@@ -171,7 +171,7 @@ func launchVirtualDevice(comm Comm) {
 }
 
 func updateVirtualSystem(dev *VirtualESS, comm Comm) *VirtualESS {
-	if dev.status.GridForming {
+	if dev.status.Gridforming {
 		assetLoad := virtual.SourceLoad{
 			ID: dev.id,
 			Load: virtual.Load{
@@ -225,11 +225,13 @@ func (s offState) action(dev VirtualESS) Status {
 		SOC:                  dev.status.SOC,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
+		Gridforming:          false,
+		Online:               false,
 	}
 }
 func (s offState) transition(dev VirtualESS) state {
-	if dev.control.Run == true {
-		if dev.control.GridForm == true {
+	if dev.control.run == true {
+		if dev.control.gridForm == true {
 			return HzVState{}
 		}
 		return PQState{}
@@ -246,14 +248,16 @@ func (s PQState) action(dev VirtualESS) Status {
 		SOC:                  dev.status.SOC,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
+		Gridforming:          false,
+		Online:               true,
 	}
 }
 
 func (s PQState) transition(dev VirtualESS) state {
-	if dev.control.Run == false {
+	if dev.control.run == false {
 		return offState{}
 	}
-	if dev.control.GridForm == true {
+	if dev.control.gridForm == true {
 		return HzVState{}
 	}
 	return PQState{}
@@ -268,14 +272,16 @@ func (s HzVState) action(dev VirtualESS) Status {
 		SOC:                  dev.status.SOC,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
+		Gridforming:          true,
+		Online:               true,
 	}
 }
 
 func (s HzVState) transition(dev VirtualESS) state {
-	if dev.control.Run == false {
+	if dev.control.run == false {
 		return offState{}
 	}
-	if dev.control.GridForm == false {
+	if dev.control.gridForm == false {
 		return PQState{}
 	}
 	return HzVState{}

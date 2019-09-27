@@ -7,17 +7,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	queueSize = 50
+)
+
 type SystemModel struct {
 	ReportLoad chan SourceLoad
 	SwingLoad  chan Load
 	loads      map[uuid.UUID]Load
 	stop       chan bool
-}
-
-type PowerReporter interface {
-	GridFormer() bool
-	KW() float64
-	KVAR() float64
 }
 
 type SourceLoad struct {
@@ -32,10 +30,10 @@ type Load struct {
 
 func NewVirtualSystemModel() *SystemModel {
 	return &SystemModel{
-		ReportLoad: make(chan SourceLoad, 50),
+		ReportLoad: make(chan SourceLoad, queueSize),
 		SwingLoad:  make(chan Load),
 		loads:      make(map[uuid.UUID]Load),
-		stop:       make(chan bool),
+		stop:       make(chan bool, 1),
 	}
 }
 
@@ -58,10 +56,11 @@ func (s *SystemModel) RunVirtualSystem() {
 		select {
 		case v := <-s.ReportLoad:
 			s.loads[v.ID] = v.Load
-			log.Printf("[VirtualSystemModel: Reported Load %v]\n", v.Load)
+			//log.Printf("[VirtualSystemModel: Reported Load %v]\n", v)
 		case s.SwingLoad <- s.calcSwingLoad():
 			log.Printf("[VirtualSystemModel: Swing Load %v]\n", s.calcSwingLoad())
 		case <-s.stop:
+			//log.Println("[VirtualSystemModel: stopping]")
 			return
 		default:
 			time.Sleep(time.Duration(100) * time.Millisecond)

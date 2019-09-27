@@ -23,7 +23,8 @@ type Status struct {
 	SOC                  float64
 	PositiveRealCapacity float64
 	NegativeRealCapacity float64
-	GridForming          bool
+	Gridforming          bool
+	Online               bool
 }
 
 // Control is a data structure representing an architypical ESS control
