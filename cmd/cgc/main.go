@@ -39,7 +39,7 @@ func main() {
 func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 
-	vsm := virtual.SystemModel{}
+	vsm := virtual.NewVirtualSystemModel()
 
 	/*
 		grid, err := virtualgrid.New("../../config/asset/virtualGrid.json")
@@ -49,8 +49,7 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 		assets[grid.PID()] = &grid
 	*/
 
-	ess_vsm := vsm.Subscribe()
-	ess, err := virtualess.New("../../config/asset/virtualESS.json", ess_vsm)
+	ess, err := virtualess.New("../../config/asset/virtualESS.json", vsm)
 	if err != nil {
 		return assets, err
 	}
@@ -63,6 +62,8 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 		}
 		assets[pv.PID()] = &pv
 	*/
+
+	go vsm.RunVirtualSystem()
 
 	return assets, nil
 }

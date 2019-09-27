@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/pv"
+	"github.com/ohowland/cgc/internal/pkg/comm/modbuscomm"
 )
 
 // VirtualPV target
@@ -16,8 +17,8 @@ type VirtualPV struct {
 
 // Status data structure for the VirtualPV
 type Status struct {
-	KW   int `json:"KW"`
-	KVAR int `json:"KVAR"`
+	KW   float64 `json:"KW"`
+	KVAR float64 `json:"KVAR"`
 }
 
 // Control data structure for the VirtualPV
@@ -27,9 +28,9 @@ type Control struct {
 
 // Comm data structure for the VirtualPV
 type Comm struct {
-	TargetConfig comm.PollerConfig `json:"TargetConfig"`
-	handler      comm.ModbusComm
-	Registers    []comm.Register `json:"Registers"`
+	TargetConfig modbuscomm.PollerConfig `json:"TargetConfig"`
+	handler      modbuscomm.ModbusComm
+	Registers    []modbuscomm.Register `json:"Registers"`
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -90,13 +91,13 @@ func (c Control) payload() ([]byte, error) {
 }
 
 func (c Comm) read() ([]byte, error) {
-	registers := comm.FilterRegisters(c.Registers, "read-only")
+	registers := modbuscomm.FilterRegisters(c.Registers, "read-only")
 	response, err := c.handler.Read(registers)
 	return response, err
 }
 
 func (c Comm) write(payload []byte) error {
-	registers := comm.FilterRegisters(c.Registers, "write-only")
+	registers := modbuscomm.FilterRegisters(c.Registers, "write-only")
 	err := c.handler.Write(registers, payload)
 	return err
 }
@@ -134,7 +135,7 @@ func readCommConfig(config []byte) (Comm, error) {
 		return c, err
 	}
 
-	c.handler = comm.NewPoller(c.TargetConfig)
+	c.handler = modbuscomm.NewPoller(c.TargetConfig)
 	return c, nil
 }
 
@@ -143,4 +144,19 @@ func btoi(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// GridFormer implements the virtual.Power interface
+func (a VirtualPV) GridFormer() bool {
+	return false
+}
+
+// KW implements the asset.Power interface
+func (a VirtualPV) KW() float64 {
+	return a.status.KW
+}
+
+// KVAR implements the asset.Power interface
+func (a VirtualPV) KVAR() float64 {
+	return a.status.KVAR
 }

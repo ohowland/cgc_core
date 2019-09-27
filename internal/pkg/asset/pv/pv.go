@@ -101,3 +101,13 @@ func New(jsonConfig []byte, device asset.Device) (Asset, error) {
 	return Asset{PID, device, status, control, config}, err
 
 }
+
+// KW implements the asset.Power interface
+func (a Asset) KW() float64 {
+	return a.status.KW
+}
+
+// KVAR implements the asset.Power interface
+func (a Asset) KVAR() float64 {
+	return a.status.KVAR
+}

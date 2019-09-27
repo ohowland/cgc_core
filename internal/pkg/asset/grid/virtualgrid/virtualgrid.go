@@ -17,11 +17,11 @@ type VirtualGrid struct {
 
 // Status data structure for the VirtualGrid
 type Status struct {
-	KW                   int  `json:"KW"`
-	KVAR                 int  `json:"KVAR"`
-	PositiveRealCapacity int  `json:"PositiveRealCapacity"`
-	NegativeRealCapacity int  `json:"NegativeRealCapacity"`
-	Synchronized         bool `json:"Synchronized"`
+	KW                   float64 `json:"KW"`
+	KVAR                 float64 `json:"KVAR"`
+	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
+	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
+	Synchronized         bool    `json:"Synchronized"`
 }
 
 // Control data structure for the VirtualGrid
@@ -151,4 +151,19 @@ func btoi(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// GridFormer implements the virtual.Power interface
+func (a VirtualGrid) GridFormer() bool {
+	return a.status.GridForming
+}
+
+// KW implements the asset.Power interface
+func (a VirtualGrid) KW() float64 {
+	return a.status.KW
+}
+
+// KVAR implements the asset.Power interface
+func (a VirtualGrid) KVAR() float64 {
+	return a.status.KVAR
 }

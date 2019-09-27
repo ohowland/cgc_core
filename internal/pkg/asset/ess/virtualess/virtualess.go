@@ -3,14 +3,18 @@ package virtualess
 import (
 	"io/ioutil"
 	"log"
+	"reflect"
 	"time"
 
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/virtual"
+
+	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 )
 
 // VirtualESS target
 type VirtualESS struct {
+	id      uuid.UUID
 	status  Status
 	control Control
 	comm    Comm
@@ -35,14 +39,14 @@ type Control struct {
 }
 
 type Config struct {
-
 }
 
 // Comm data structure for the VirtualESS
 type Comm struct {
-	vsm      chan virtual.SwingLoads
-	incoming chan Status
-	outgoing chan Control
+	incoming      chan Status
+	outgoing      chan Control
+	vsmReportLoad chan virtual.SourceLoad
+	vsmSwingLoad  chan virtual.Load
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -84,35 +88,44 @@ func (a VirtualESS) Control(c ess.Control) {
 }
 
 func (a *VirtualESS) read() error {
-	log.Printf("[reading status: %v]", a)
+	log.Println("[VirtualESS: read requested]")
 	select {
 	case in := <-a.comm.incoming:
 		a.status = in
+		log.Printf("[VirtualESS: read status: %v]", in)
 	default:
+		log.Println("[VirtualESS: read failed]")
 	}
 	return nil
 }
 
 func (a *VirtualESS) write() error {
-	log.Printf("[writing control: %v]", a)
+	log.Println("[VirtualESS: write requested]")
 	select {
 	case a.comm.outgoing <- a.control:
+		log.Printf("[VirtualESS: wrote control: %v]", a.control)
 	default:
+		log.Println("[VirtualESS: write failed]")
+
 	}
 	return nil
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, vsm chan virtual.SwingLoads) (ess.Asset, error) {
+func New(configPath string, vsm *virtual.SystemModel) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
 	}
 
-	in := make(chan Status)
-	out := make(chan Control)
+	// TODO: Troubleshoot why this cannot be set to 0 length
+	in := make(chan Status, 1)
+	out := make(chan Control, 1)
+
+	id, err := uuid.NewUUID()
 
 	device := VirtualESS{
+		id: id,
 		status: Status{
 			KW:                   0,
 			KVAR:                 0,
@@ -128,9 +141,10 @@ func New(configPath string, vsm chan virtual.SwingLoads) (ess.Asset, error) {
 			GridForm: false,
 		},
 		comm: Comm{
-			vsm,
-			in,
-			out,
+			incoming:      in,
+			outgoing:      out,
+			vsmReportLoad: vsm.ReportLoad,
+			vsmSwingLoad:  vsm.SwingLoad,
 		},
 	}
 
@@ -144,23 +158,46 @@ func launchVirtualDevice(comm Comm) {
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
-			log.Println("[VirtualESS: control msg recieved]")
+			log.Println("[VirtualESS-Device: control msg recieved]")
 		case comm.incoming <- dev.status:
-			dev = updateVirtualDevice(dev, comm.vsm)
+			dev = updateVirtualSystem(dev, comm)
 			dev.status = sm.run(*dev)
-			log.Printf("[VirtualESS: state %v]", sm.currentState)
+			log.Printf("[VirtualESS-Device: state: %v]\n",
+				reflect.TypeOf(sm.currentState).String())
 		default:
 			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
 }
 
-func updateVirtualDevice(dev *VirtualESS, vsm chan virtual.SwingLoads) *VirtualESS {
-	select {
-	case v := <-vsm:
-		dev.status.KW = v.RealSwingLoad
-		dev.status.KVAR = v.ReactiveSwingLoad
-	default:
+func updateVirtualSystem(dev *VirtualESS, comm Comm) *VirtualESS {
+	if dev.status.GridForming {
+		assetLoad := virtual.SourceLoad{
+			ID: dev.id,
+			Load: virtual.Load{
+				KW:   0,
+				KVAR: 0,
+			},
+		}
+		select {
+		case v := <-comm.vsmSwingLoad:
+			dev.status.KW = v.KW
+			dev.status.KVAR = v.KVAR
+		case comm.vsmReportLoad <- assetLoad:
+		default:
+		}
+	} else {
+		assetLoad := virtual.SourceLoad{
+			ID: dev.id,
+			Load: virtual.Load{
+				KW:   dev.status.KW,
+				KVAR: dev.status.KVAR,
+			},
+		}
+		select {
+		case comm.vsmReportLoad <- assetLoad:
+		default:
+		}
 	}
 	return dev
 }
