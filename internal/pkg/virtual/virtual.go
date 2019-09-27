@@ -71,3 +71,56 @@ func (s *SystemModel) RunVirtualSystem() {
 func (s *SystemModel) StopVirtualSystem() {
 	s.stop <- true
 }
+
+/*
+type Source struct {
+	ID          uuid.UUID
+	Hz          float64
+	Volts       float64
+	KW          float64
+	KVAR        float64
+	Gridforming bool
+}
+
+func (a Bus) LoadsChan() chan<- Source {
+	return a.comm.sources
+}
+
+func (a Bus) GridformChan() <-chan Source {
+	return a.comm.gridformer
+}
+
+// updateVirtualSystem recieves load information for connected assets,
+// and calculates the swing load.
+func updateVirtualDevice(dev *Bus, comm Comm) *Bus {
+	select {
+	case s := <-comm.sources:
+		dev.status.ConnectedSources[s.ID] = s
+		//log.Printf("[VirtualBus-SystemModel: Reported Load %v]\n", v)
+	case comm.gridformer <- dev.gridformingLoad():
+		gridformer := dev.gridformingLoad()
+		dev.status.Hz = gridformer.Hz
+		dev.status.Volts = gridformer.Volts
+		log.Printf("[VirtualRelay-Device: Gridformer Load %v]\n", gridformer)
+	}
+	return dev
+}
+
+func (a Bus) gridformingLoad() Source {
+	kwSum := 0.0
+	kvarSum := 0.0
+	var swingMachine Source
+	for _, s := range a.status.ConnectedSources {
+		if s.Gridforming != true {
+			kwSum += s.KW
+			kvarSum += s.KVAR
+		} else {
+			swingMachine = s
+		}
+	}
+
+	swingMachine.KW = kwSum
+	swingMachine.KVAR = kvarSum
+	return swingMachine
+}
+*/
