@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/virtual"
 
+	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
 )
 
@@ -24,6 +24,8 @@ type VirtualFeeder struct {
 type Status struct {
 	KW     float64 `json:"KW"`
 	KVAR   float64 `json:"KVAR"`
+	Hz     float64 `json:"Hz"`
+	Volts  float64 `json:"Volts"`
 	Online bool    `json:"Online"`
 }
 
@@ -36,10 +38,10 @@ type Config struct{}
 
 // Comm data structure for the VirtualFeeder
 type Comm struct {
-	incoming      chan Status
-	outgoing      chan Control
-	vsmReportLoad chan virtual.SourceLoad
-	vsmSwingLoad  chan virtual.Load
+	incoming  chan Status
+	outgoing  chan Control
+	busInput  chan<- virtualbus.Source
+	busOutput <-chan virtualbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -57,8 +59,10 @@ func (a VirtualFeeder) WriteDeviceControl(c interface{}) error {
 // Status maps feeder.DeviceStatus to feeder.Status
 func (a VirtualFeeder) Status() feeder.Status {
 	return feeder.Status{
-		KW:     float64(a.status.KW),
-		KVAR:   float64(a.status.KVAR),
+		KW:     a.status.KW,
+		KVAR:   a.status.KVAR,
+		Hz:     a.status.Hz,
+		Volts:  a.status.Volts,
 		Online: a.status.Online,
 	}
 }
@@ -96,7 +100,7 @@ func (a *VirtualFeeder) write() error {
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
-func New(configPath string, vsm *virtual.SystemModel) (feeder.Asset, error) {
+func New(configPath string, bus *virtualbus.VirtualBus) (feeder.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return feeder.Asset{}, err
@@ -113,31 +117,33 @@ func New(configPath string, vsm *virtual.SystemModel) (feeder.Asset, error) {
 		status: Status{
 			KW:     0,
 			KVAR:   0,
+			Hz:     0,
+			Volts:  0,
 			Online: false,
 		},
 		control: Control{
 			closeFeeder: false,
 		},
 		comm: Comm{
-			incoming:      in,
-			outgoing:      out,
-			vsmReportLoad: vsm.ReportLoad,
-			vsmSwingLoad:  vsm.SwingLoad,
+			incoming:  in,
+			outgoing:  out,
+			busInput:  bus.LoadsChan(),
+			busOutput: bus.GridformChan(),
 		},
 	}
 
-	go launchVirtualDevice(device.comm)
+	go virtualDeviceLoop(device.comm)
 	return feeder.New(jsonConfig, device)
 }
 
-func launchVirtualDevice(comm Comm) {
+func virtualDeviceLoop(comm Comm) {
 	dev := &VirtualFeeder{}
 	sm := &stateMachine{offState{}}
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
 		case comm.incoming <- dev.status:
-			dev = updateVirtualSystem(dev, comm)
+			dev = updateVirtualBus(dev, comm)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualFeeder-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
@@ -147,19 +153,24 @@ func launchVirtualDevice(comm Comm) {
 	}
 }
 
-func updateVirtualSystem(dev *VirtualFeeder, comm Comm) *VirtualFeeder {
-	assetLoad := virtual.SourceLoad{
-		ID: dev.id,
-		Load: virtual.Load{
-			KW:   dev.status.KW,
-			KVAR: dev.status.KVAR,
-		},
+func updateVirtualBus(dev *VirtualFeeder, comm Comm) *VirtualFeeder {
+	dev.reportLoadToBus(comm)
+	return dev
+}
+
+func (a *VirtualFeeder) reportLoadToBus(comm Comm) {
+	assetLoad := virtualbus.Source{
+		ID:          a.id,
+		Hz:          a.status.Hz,
+		Volts:       a.status.Volts,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: false,
 	}
 	select {
-	case comm.vsmReportLoad <- assetLoad:
+	case comm.busInput <- assetLoad:
 	default:
 	}
-	return dev
 }
 
 type stateMachine struct {

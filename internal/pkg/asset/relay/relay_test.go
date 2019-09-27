@@ -1,4 +1,4 @@
-package bus
+package relay
 
 /*
 func TestReadConfig(t *testing.T) {

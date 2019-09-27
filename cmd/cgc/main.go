@@ -7,10 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/ohowland/cgc/internal/pkg/virtual"
-
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
@@ -41,25 +40,34 @@ func main() {
 func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 
-	vsm := virtual.NewVirtualSystemModel()
-
-	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json", vsm)
+	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json")
 	if err != nil {
 		return assets, err
 	}
 	assets[grid.PID()] = &grid
 
-	ess, err := virtualess.New("../../config/asset/virtualESS.json", vsm)
+	ess, err := virtualess.New("../../config/asset/virtualESS.json")
 	if err != nil {
 		return assets, err
 	}
 	assets[ess.PID()] = &ess
 
-	feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json", vsm)
+	feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json")
 	if err != nil {
 		return assets, err
 	}
 	assets[feeder.PID()] = &feeder
+
+	bus, err := virtualbus.New("../../config/asset/virtualBus.json")
+	if err != nil {
+		return assets, err
+	}
+
+	for _, asset := range assets {
+		bus.Link(asset)
+	}
+
+	assets[bus.PID()] = &bus
 
 	/*
 		pv, err := virtualpv.New("../../config/asset/virtualPV.json")
