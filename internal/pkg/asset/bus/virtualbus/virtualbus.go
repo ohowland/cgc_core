@@ -26,9 +26,9 @@ type VirtualBus struct {
 
 // Status data structure for the VirtualBus
 type Status struct {
-	Hz    float64               `json:"Hz"`
-	Volts float64               `json:"Volts"`
-	Loads map[uuid.UUID]float64 `json:"Loads"`
+	Hz               float64              `json:"Hz"`
+	Volts            float64              `json:"Volts"`
+	ConnectedSources map[uuid.UUID]Source `json:"Loads"`
 }
 
 // Control data structure for the VirtualBus
@@ -38,10 +38,19 @@ type Config struct{}
 
 // Comm data structure for the VirtualBus
 type Comm struct {
-	incoming chan Status
-	outgoing chan Control
-	loadsIn  chan virtual.SourceLoad
-	loadsOut chan virtual.Load
+	incoming      chan Status
+	outgoing      chan Control
+	sourcesIn     chan Source
+	gridformerOut chan Source
+}
+
+type Source struct {
+	ID          uuid.UUID
+	Voltage     float64
+	Frequency   float64
+	KW          float64
+	KVAR        float64
+	Gridforming bool
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -102,12 +111,11 @@ func New(configPath string, vsm *virtual.SystemModel) (bus.Asset, error) {
 		return bus.Asset{}, err
 	}
 
-	// TODO: Troubleshoot why this cannot be set to 0 length
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 
-	loadsIn := make(chan virtual.SourceLoad, queueSize)
-	loadsOut := make(chan virtual.Load, 1)
+	sourcesIn := make(chan Source, queueSize)
+	gridformerOut := make(chan Source, 1)
 
 	id, err := uuid.NewUUID()
 
@@ -119,10 +127,10 @@ func New(configPath string, vsm *virtual.SystemModel) (bus.Asset, error) {
 		},
 		control: Control{},
 		comm: Comm{
-			incoming: in,
-			outgoing: out,
-			loadsIn:  vsm.ReportLoad,
-			loadsOut: vsm.SwingLoad,
+			incoming:      in,
+			outgoing:      out,
+			sourcesIn:     sourcesIn,
+			gridformerOut: gridformerOut,
 		},
 	}
 
@@ -137,11 +145,11 @@ func launchVirtualDevice(comm Comm) {
 		select {
 		case dev.control = <-comm.outgoing:
 		case comm.incoming <- dev.status:
-			dev = updateVirtualSystem(dev, comm)
-			dev.status = sm.run(*dev)
-			log.Printf("[VirtualBus-Device: state: %v]\n",
-				reflect.TypeOf(sm.currentState).String())
 		default:
+			dev = updateVirtualSystem(dev, comm) // TODO: calc every loop?
+			dev.status = sm.run(*dev)
+			log.Printf("[VirtualBus-SystemModel: state: %v]\n",
+				reflect.TypeOf(sm.currentState).String())
 			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
@@ -149,52 +157,57 @@ func launchVirtualDevice(comm Comm) {
 
 func updateVirtualSystem(dev *VirtualBus, comm Comm) *VirtualBus {
 	select {
-	case asset := <-comm.loadsIn:
-		dev.status.loads[asset.ID] = asset.Load
-		//log.Printf("[VirtualSystemModel: Reported Load %v]\n", v)
-	case s.SwingLoad <- s.calcSwingLoad():
-		log.Printf("[VirtualSystemModel: Swing Load %v]\n", s.calcSwingLoad())
+	case s := <-comm.sourcesIn:
+		dev.status.ConnectedSources[s.ID] = s
+		//log.Printf("[VirtualBus-SystemModel: Reported Load %v]\n", v)
+	case comm.gridformerOut <- dev.swingMachineLoad():
+		log.Printf("[VirtualBus-SystemModel: Swing Load %v]\n",
+			dev.swingMachineLoad())
 	}
 	return dev
 }
 
-func (s SystemModel) calcSwingLoad() Load {
+func (a VirtualBus) swingMachineLoad() Source {
 	kwSum := 0.0
 	kvarSum := 0.0
-	for _, l := range s.loads {
-		kwSum += l.KW
-		kvarSum += l.KVAR
+	var swingMachine Source
+	for _, s := range a.status.ConnectedSources {
+		if s.Gridforming != true {
+			kwSum += s.KW
+			kvarSum += s.KVAR
+		} else {
+			swingMachine = s
+		}
 	}
-	return Load{
-		KW:   kwSum,
-		KVAR: kvarSum,
-	}
+
+	swingMachine.KW = kwSum
+	swingMachine.KVAR = kvarSum
+	return swingMachine
 }
 
 type stateMachine struct {
 	currentState state
 }
 
-func (s *stateMachine) run(dev VirtualFeeder) Status {
+func (s *stateMachine) run(dev VirtualBus) Status {
 	s.currentState = s.currentState.transition(dev)
 	return s.currentState.action(dev)
 }
 
 type state interface {
-	action(VirtualFeeder) Status
-	transition(VirtualFeeder) state
+	action(VirtualBus) Status
+	transition(VirtualBus) state
 }
 
 type offState struct{}
 
-func (s offState) action(dev VirtualFeeder) Status {
+func (s offState) action(dev VirtualBus) Status {
 	return Status{
-		KW:     0,
-		KVAR:   0,
-		Online: false,
+		Hz:    0,
+		Volts: 0,
 	}
 }
-func (s offState) transition(dev VirtualFeeder) state {
+func (s offState) transition(dev VirtualBus) state {
 	if dev.control.closeFeeder == true {
 		return onState{}
 	}
@@ -203,15 +216,13 @@ func (s offState) transition(dev VirtualFeeder) state {
 
 type onState struct{}
 
-func (s onState) action(dev VirtualFeeder) Status {
+func (s onState) action(dev VirtualBus) Status {
 	return Status{
-		KW:     dev.status.KW,   // TODO: Link to virtual system model
-		KVAR:   dev.status.KVAR, // TODO: Link to virtual system model
-		Online: true,
-	}
+		Hz:        dev.status.KW,   // TODO: Link to virtual system model
+		Volts:     dev.status.KVAR, // TODO: Link to virtual system model	}
 }
 
-func (s onState) transition(dev VirtualFeeder) state {
+func (s onState) transition(dev VirtualBus) state {
 	if dev.control.closeFeeder == false {
 		return offState{}
 	}
