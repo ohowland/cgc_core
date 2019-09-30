@@ -1,54 +1,60 @@
 package virtualpv
 
 import (
-	"encoding/json"
 	"io/ioutil"
+	"log"
 
+	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/asset/pv"
-	"github.com/ohowland/cgc/internal/pkg/comm/modbuscomm"
+	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualPV target
 type VirtualPV struct {
-	status  Status
-	control Control
-	comm    Comm
+	pid       uuid.UUID
+	status    Status
+	control   Control
+	comm      Comm
+	observers Observers
 }
 
 // Status data structure for the VirtualPV
 type Status struct {
-	KW   float64 `json:"KW"`
-	KVAR float64 `json:"KVAR"`
+	KW     float64 `json:"KW"`
+	KVAR   float64 `json:"KVAR"`
+	Hz     float64 `json:"Hz"`
+	Volt   float64 `json:"Volt"`
+	Online bool    `json:"Online"`
 }
 
 // Control data structure for the VirtualPV
 type Control struct {
-	RunRequest int
+	run bool
+}
+
+type Config struct {
 }
 
 // Comm data structure for the VirtualPV
 type Comm struct {
-	TargetConfig modbuscomm.PollerConfig `json:"TargetConfig"`
-	handler      modbuscomm.ModbusComm
-	Registers    []modbuscomm.Register `json:"Registers"`
+	incoming chan Status
+	outgoing chan Control
+}
+
+type Observers struct {
+	assetObserver chan<- virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
 func (a VirtualPV) ReadDeviceStatus() (interface{}, error) {
-	response, err := a.comm.read()
-	err = a.status.update(response)
+	err := a.read()
 	return a.Status(), err
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
 func (a VirtualPV) WriteDeviceControl(c interface{}) error {
-	a.Control(c.(pv.Control))
-	payload, err := a.control.payload()
-	if err != nil {
-		return err
-	}
-
-	err = a.comm.write(payload)
+	err := a.write()
 	return err
 }
 
@@ -56,8 +62,11 @@ func (a VirtualPV) WriteDeviceControl(c interface{}) error {
 func (a VirtualPV) Status() pv.Status {
 	// map deviceStatus to GridStatus
 	return pv.Status{
-		KW:   float64(a.status.KW),
-		KVAR: float64(a.status.KVAR),
+		KW:     a.status.KW,
+		KVAR:   a.status.KVAR,
+		Volt:   a.status.Volt,
+		Hz:     a.status.Hz,
+		Online: a.status.Online,
 	}
 }
 
@@ -66,97 +75,103 @@ func (a VirtualPV) Control(c pv.Control) {
 	// map GridControl params to deviceControl
 
 	updatedControl := Control{
-		RunRequest: btoi(c.RunRequest),
+		run: c.RunRequest,
 	}
 
 	a.control = updatedControl
 }
 
-// update unmarshals a JSON response into the VirtualGrid status
-func (a *Status) update(response []byte) error {
-	updatedStatus := &Status{}
-	err := json.Unmarshal(response, updatedStatus)
-	if err != nil {
-		return err
+func (a *VirtualPV) read() error {
+	select {
+	case in := <-a.comm.incoming:
+		a.status = in
+		//log.Printf("[VirtualESS: read status: %v]", in)
+	default:
+		log.Println("[VirtualPV: read failed]")
 	}
-
-	a = updatedStatus
-	return err
+	return nil
 }
 
-// payload marshals a JSON string from VirtualGrid control
-func (c Control) payload() ([]byte, error) {
-	payload, err := json.Marshal(c)
-	return payload, err
-}
+func (a *VirtualPV) write() error {
+	select {
+	case a.comm.outgoing <- a.control:
+		//log.Printf("[VirtualESS: write control: %v]", a.control)
+	default:
+		log.Println("[VirtualPV: write failed]")
 
-func (c Comm) read() ([]byte, error) {
-	registers := modbuscomm.FilterRegisters(c.Registers, "read-only")
-	response, err := c.handler.Read(registers)
-	return response, err
-}
-
-func (c Comm) write(payload []byte) error {
-	registers := modbuscomm.FilterRegisters(c.Registers, "write-only")
-	err := c.handler.Write(registers, payload)
-	return err
+	}
+	return nil
 }
 
 // New returns an initalized VirtualPV Asset; this is part of the Asset interface.
-func New(configPath string) (pv.Asset, error) {
+func New(configPath string, bus *virtualacbus.VirtualACBus) (pv.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return pv.Asset{}, err
+		return ess.Asset{}, err
 	}
 
-	commConfig, err := readCommConfig(jsonConfig)
-	if err != nil {
-		return pv.Asset{}, err
-	}
+	// TODO: Troubleshoot why this cannot be set to 0 length
+	in := make(chan Status, 1)
+	out := make(chan Control, 1)
+
+	pid, err := uuid.NewUUID()
 
 	device := VirtualPV{
+		pid: pid,
 		status: Status{
-			KW:   0,
-			KVAR: 0,
+			KW:     0,
+			KVAR:   0,
+			Hz:     0,
+			Volt:   0,
+			Online: false,
 		},
 		control: Control{
-			RunRequest: 0,
+			run: false,
 		},
-		comm: commConfig,
+		comm: Comm{
+			incoming: in,
+			outgoing: out,
+		},
+		observers: Observers{
+			assetObserver: bus.AssetObserver(),
+		},
 	}
 
+	go virtualDeviceLoop(device.comm, device.observers)
 	return pv.New(jsonConfig, device)
 }
 
-func readCommConfig(config []byte) (Comm, error) {
-	c := Comm{}
-	err := json.Unmarshal(config, &c)
-	if err != nil {
-		return c, err
+func virtualDeviceLoop(comm Comm, obs Observers) {
+	dev := &VirtualPV{} // The virtual 'hardware' device
+	//sm := &stateMachine{offState{}}
+	var ok bool
+	for {
+		select {
+		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
+			if !ok {
+				break
+			}
+		case comm.incoming <- dev.status: // read from 'hardware'
+			dev.updateObservers(obs)
+			//dev.status = sm.run(*dev)
+			//log.Printf("[VirtualESS-Device: state: %v]\n",
+			//reflect.TypeOf(sm.currentState).String())
+		}
+		log.Println("[VirtualESS-Device: shutdown]")
 	}
-
-	c.handler = modbuscomm.NewPoller(c.TargetConfig)
-	return c, nil
 }
 
-func btoi(b bool) int {
-	if b {
-		return 1
+func (a *VirtualPV) updateObservers(obs Observers) {
+	obs.assetObserver <- a.asSource()
+}
+
+func (a VirtualPV) asSource() virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
+		Hz:          a.status.Hz,
+		Volt:        a.status.Volt,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: false,
 	}
-	return 0
-}
-
-// GridFormer implements the virtual.Power interface
-func (a VirtualPV) GridFormer() bool {
-	return false
-}
-
-// KW implements the asset.Power interface
-func (a VirtualPV) KW() float64 {
-	return a.status.KW
-}
-
-// KVAR implements the asset.Power interface
-func (a VirtualPV) KVAR() float64 {
-	return a.status.KVAR
 }

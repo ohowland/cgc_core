@@ -18,8 +18,11 @@ type Asset struct {
 
 // Status is a data structure representing an architypical PV status
 type Status struct {
-	KW   float64
-	KVAR float64
+	KW     float64
+	KVAR   float64
+	Hz     float64
+	Volt   float64
+	Online bool
 }
 
 // Control is a data structure representing an architypical PV control

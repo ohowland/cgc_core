@@ -4,20 +4,20 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
-	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualFeeder target
 type VirtualFeeder struct {
-	id      uuid.UUID
-	status  Status
-	control Control
-	comm    Comm
+	pid       uuid.UUID
+	status    Status
+	control   Control
+	comm      Comm
+	observers Observers
 }
 
 // Status data structure for the VirtualFeeder
@@ -25,7 +25,7 @@ type Status struct {
 	KW     float64 `json:"KW"`
 	KVAR   float64 `json:"KVAR"`
 	Hz     float64 `json:"Hz"`
-	Volts  float64 `json:"Volts"`
+	Volt   float64 `json:"Volts"`
 	Online bool    `json:"Online"`
 }
 
@@ -38,10 +38,12 @@ type Config struct{}
 
 // Comm data structure for the VirtualFeeder
 type Comm struct {
-	incoming  chan Status
-	outgoing  chan Control
-	busInput  chan<- virtualbus.Source
-	busOutput <-chan virtualbus.Source
+	incoming chan Status
+	outgoing chan Control
+}
+
+type Observers struct {
+	assetObserver chan<- virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -62,7 +64,7 @@ func (a VirtualFeeder) Status() feeder.Status {
 		KW:     a.status.KW,
 		KVAR:   a.status.KVAR,
 		Hz:     a.status.Hz,
-		Volts:  a.status.Volts,
+		Volt:   a.status.Volt,
 		Online: a.status.Online,
 	}
 }
@@ -100,7 +102,7 @@ func (a *VirtualFeeder) write() error {
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualbus.VirtualBus) (feeder.Asset, error) {
+func New(configPath string, bus *virtualacbus.VirtualACBus) (feeder.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return feeder.Asset{}, err
@@ -110,66 +112,64 @@ func New(configPath string, bus *virtualbus.VirtualBus) (feeder.Asset, error) {
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 
-	id, err := uuid.NewUUID()
+	pid, err := uuid.NewUUID()
 
 	device := VirtualFeeder{
-		id: id,
+		pid: pid,
 		status: Status{
 			KW:     0,
 			KVAR:   0,
 			Hz:     0,
-			Volts:  0,
+			Volt:   0,
 			Online: false,
 		},
 		control: Control{
 			closeFeeder: false,
 		},
 		comm: Comm{
-			incoming:  in,
-			outgoing:  out,
-			busInput:  bus.LoadsChan(),
-			busOutput: bus.GridformChan(),
+			incoming: in,
+			outgoing: out,
+		},
+		observers: Observers{
+			assetObserver: bus.AssetObserver(),
 		},
 	}
 
-	go virtualDeviceLoop(device.comm)
+	go virtualDeviceLoop(device.comm, device.observers)
 	return feeder.New(jsonConfig, device)
 }
 
-func virtualDeviceLoop(comm Comm) {
+func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualFeeder{}
 	sm := &stateMachine{offState{}}
+	var ok bool
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
+			if !ok {
+				break
+			}
 		case comm.incoming <- dev.status:
-			dev = updateVirtualBus(dev, comm)
+			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualFeeder-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
-		default:
-			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
 }
 
-func updateVirtualBus(dev *VirtualFeeder, comm Comm) *VirtualFeeder {
-	dev.reportLoadToBus(comm)
-	return dev
+func (a *VirtualFeeder) updateObservers(obs Observers) {
+	obs.assetObserver <- a.asSource()
 }
 
-func (a *VirtualFeeder) reportLoadToBus(comm Comm) {
-	assetLoad := virtualbus.Source{
-		ID:          a.id,
+func (a *VirtualFeeder) asSource() virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
 		Hz:          a.status.Hz,
-		Volts:       a.status.Volts,
+		Volt:        a.status.Volt,
 		KW:          a.status.KW,
 		KVAR:        a.status.KVAR,
 		Gridforming: false,
-	}
-	select {
-	case comm.busInput <- assetLoad:
-	default:
 	}
 }
 

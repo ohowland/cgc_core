@@ -4,19 +4,20 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
+	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualGrid target
 type VirtualGrid struct {
-	id      uuid.UUID
-	status  Status
-	control Control
-	comm    Comm
+	id        uuid.UUID
+	status    Status
+	control   Control
+	comm      Comm
+	observers Observers
 }
 
 // Status data structure for the VirtualGrid
@@ -38,10 +39,13 @@ type Control struct {
 
 // Comm data structure for the VirtualGrid
 type Comm struct {
-	incoming  chan Status
-	outgoing  chan Control
-	busInput  chan<- virtualbus.Source
-	busOutput <-chan virtualbus.Source
+	incoming chan Status
+	outgoing chan Control
+}
+
+type Observers struct {
+	assetObserver chan<- virtualacbus.Source
+	busObserver   <-chan virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -103,7 +107,7 @@ func (a *VirtualGrid) write() error {
 }
 
 // New returns an initalized virtualbus Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualbus.VirtualBus) (grid.Asset, error) {
+func New(configPath string, bus *virtualacbus.VirtualACBus) (grid.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return grid.Asset{}, err
@@ -134,6 +138,10 @@ func New(configPath string, bus *virtualbus.VirtualBus) (grid.Asset, error) {
 			busInput:  bus.LoadsChan(),
 			busOutput: bus.GridformChan(),
 		},
+		observers: Observers{
+			assetObserver: bus.AssetObserver(),
+			busObserver:   bus.BusObserver(),
+		},
 	}
 
 	go virtualDeviceLoop(device.comm)
@@ -146,48 +154,36 @@ func virtualDeviceLoop(comm Comm) {
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
+			if !ok {
+				break
+			}
 		case comm.incoming <- dev.status:
-			dev = updateVirtualBus(dev, comm)
+			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualGrid-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
-		default:
-			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
 }
 
-func updateVirtualBus(dev *VirtualGrid, comm Comm) *VirtualGrid {
-	dev.getGridformingLoadFromBus(comm)
-	dev.reportLoadToBus(comm)
-	return dev
-}
-
-func (a *VirtualGrid) getGridformingLoadFromBus(comm Comm) {
-	if a.status.Online {
-		select {
-		case v := <-comm.busOutput:
-			a.status.KW = v.KW
-			a.status.KVAR = v.KVAR
-		default:
-		}
+func (a *VirtualGrid) updateObservers(obs Observers) {
+	obs.assetObserver <- a.asSource()
+	if a.status.Gridforming {
+		gridformer := <-obs.busObserver
+		a.status.KW = gridformer.KW
+		a.status.KVAR = gridformer.KVAR
 	}
 }
 
-func (a *VirtualGrid) reportLoadToBus(comm Comm) {
-	assetLoad := virtualbus.Source{
-		ID:          a.id,
+func (a VirtualGrid) asSource() virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
 		Hz:          a.status.Hz,
-		Volts:       a.status.Volts,
+		Volt:        a.status.Volt,
 		KW:          a.status.KW,
 		KVAR:        a.status.KVAR,
-		Gridforming: a.status.Online,
+		Gridforming: a.status.Gridforming,
 	}
-	select {
-	case comm.busInput <- assetLoad:
-	default:
-	}
-}
 
 type stateMachine struct {
 	currentState state

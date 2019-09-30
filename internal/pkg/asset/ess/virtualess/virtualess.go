@@ -48,7 +48,6 @@ type Config struct {
 type Comm struct {
 	incoming chan Status
 	outgoing chan Control
-	busObserver
 }
 
 type Observers struct {
@@ -176,7 +175,7 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 				break
 			}
 		case comm.incoming <- dev.status: // read from 'hardware'
-			dev.updateBusObservers(obs)
+			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualESS-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
@@ -185,9 +184,9 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 	}
 }
 
-func (a *VirtualESS) updateBusObservers(obs Observers) {
+func (a *VirtualESS) updateObservers(obs Observers) {
 	obs.assetObserver <- a.asSource()
-	if dev.status.Gridforming {
+	if a.status.Gridforming {
 		gridformer := <-obs.busObserver
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR

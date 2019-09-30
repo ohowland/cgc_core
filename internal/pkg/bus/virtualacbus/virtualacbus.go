@@ -56,6 +56,7 @@ func (b VirtualACBus) Volt() float64 {
 	return b.gridformer.Volt
 }
 
+/*
 func (b *VirtualACBus) AddMember(a asset.Asset) {
 	b.members[a.PID()] = a
 }
@@ -63,6 +64,7 @@ func (b *VirtualACBus) AddMember(a asset.Asset) {
 func (b *VirtualACBus) RemoveMember(a asset.Asset) {
 	delete(b.members, a.PID())
 }
+*/
 
 func (b VirtualACBus) AssetObserver() chan<- Source {
 	return b.assetObserver
