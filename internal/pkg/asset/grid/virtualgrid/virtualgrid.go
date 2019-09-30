@@ -6,14 +6,13 @@ import (
 	"reflect"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualGrid target
 type VirtualGrid struct {
-	id        uuid.UUID
+	pid       uuid.UUID
 	status    Status
 	control   Control
 	comm      Comm
@@ -25,7 +24,7 @@ type Status struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
-	Volts                float64 `json:"Volts"`
+	Volt                 float64 `json:"Volt"`
 	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
 	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
 	Synchronized         bool    `json:"Synchronized"`
@@ -107,7 +106,7 @@ func (a *VirtualGrid) write() error {
 }
 
 // New returns an initalized virtualbus Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualacbus.VirtualACBus) (grid.Asset, error) {
+func New(configPath string, bus virtualacbus.VirtualACBus) (grid.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return grid.Asset{}, err
@@ -117,10 +116,10 @@ func New(configPath string, bus *virtualacbus.VirtualACBus) (grid.Asset, error) 
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 
-	id, _ := uuid.NewUUID()
+	pid, _ := uuid.NewUUID()
 
 	device := VirtualGrid{
-		id: id,
+		pid: pid,
 		status: Status{
 			KW:                   0,
 			KVAR:                 0,
@@ -133,10 +132,8 @@ func New(configPath string, bus *virtualacbus.VirtualACBus) (grid.Asset, error) 
 			closeIntertie: false,
 		},
 		comm: Comm{
-			incoming:  in,
-			outgoing:  out,
-			busInput:  bus.LoadsChan(),
-			busOutput: bus.GridformChan(),
+			incoming: in,
+			outgoing: out,
 		},
 		observers: Observers{
 			assetObserver: bus.AssetObserver(),
@@ -144,13 +141,14 @@ func New(configPath string, bus *virtualacbus.VirtualACBus) (grid.Asset, error) 
 		},
 	}
 
-	go virtualDeviceLoop(device.comm)
+	go virtualDeviceLoop(device.comm, device.observers)
 	return grid.New(jsonConfig, device)
 }
 
-func virtualDeviceLoop(comm Comm) {
+func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualGrid{}
 	sm := &stateMachine{offState{}}
+	var ok bool
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
@@ -168,7 +166,7 @@ func virtualDeviceLoop(comm Comm) {
 
 func (a *VirtualGrid) updateObservers(obs Observers) {
 	obs.assetObserver <- a.asSource()
-	if a.status.Gridforming {
+	if a.status.Online {
 		gridformer := <-obs.busObserver
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR
@@ -182,8 +180,9 @@ func (a VirtualGrid) asSource() virtualacbus.Source {
 		Volt:        a.status.Volt,
 		KW:          a.status.KW,
 		KVAR:        a.status.KVAR,
-		Gridforming: a.status.Gridforming,
+		Gridforming: a.status.Online,
 	}
+}
 
 type stateMachine struct {
 	currentState state

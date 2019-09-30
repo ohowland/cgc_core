@@ -102,7 +102,7 @@ func (a *VirtualFeeder) write() error {
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualacbus.VirtualACBus) (feeder.Asset, error) {
+func New(configPath string, bus virtualacbus.VirtualACBus) (feeder.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return feeder.Asset{}, err

@@ -40,7 +40,7 @@ func main() {
 func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 
-	bus, err := virtualacbus.New()
+	bus, err := virtualacbus.New("../../config/bus/virtualACBus.json")
 
 	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json", bus)
 	if err != nil {
@@ -73,8 +73,8 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 		if err != nil {
 			return assets, err
 		}
-		return assets, nil
 	*/
+	return assets, nil
 }
 
 func launchAssets(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]chan interface{}, error) {

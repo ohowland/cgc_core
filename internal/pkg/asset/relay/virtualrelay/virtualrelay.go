@@ -25,8 +25,8 @@ type VirtualRelay struct {
 
 // Status data structure for the VirtualRelay
 type Status struct {
-	Hz    float64 `json:"Hz"`
-	Volts float64 `json:"Volts"`
+	Hz   float64 `json:"Hz"`
+	Volt float64 `json:"Volt"`
 }
 
 // Control data structure for the VirtualRelay
@@ -55,14 +55,13 @@ func (a VirtualRelay) WriteDeviceControl(c interface{}) error {
 // Status maps relay.DeviceStatus to relay.Status
 func (a VirtualRelay) Status() relay.Status {
 	return relay.Status{
-		Hz:        float64(a.status.Hz),
-		Volts:     float64(a.status.Volts),
-		Energized: false,
+		Hz:   float64(a.status.Hz),
+		Volt: float64(a.status.Volt),
 	}
 }
 
 // Control maps relay.Control to bus.DeviceControl
-func (a VirtualRelay) Control(c bus.Control) {
+func (a VirtualRelay) Control(c relay.Control) {
 
 	updatedControl := Control{}
 
@@ -147,50 +146,3 @@ func updateVirtualDevice(dev *VirtualRelay, comm Comm) {
 		reflect.TypeOf(sm.currentState).String())
 	time.Sleep(time.Duration(200) * time.Millisecond)
 }
-
-/*
-type stateMachine struct {
-	currentState state
-}
-
-func (s *stateMachine) run(dev VirtualRelay) Status {
-	s.currentState = s.currentState.transition(dev)
-	return s.currentState.action(dev)
-}
-
-type state interface {
-	action(VirtualRelay) Status
-	transition(VirtualRelay) state
-}
-
-type offState struct{}
-
-func (s offState) action(dev VirtualRelay) Status {
-	return Status{
-		Hz:    0,
-		Volts: 0,
-	}
-}
-func (s offState) transition(dev VirtualRelay) state {
-	if dev.status.Hz > 1 && dev.status.Volts > 1 {
-		return onState{}
-	}
-	return offState{}
-}
-
-type onState struct{}
-
-func (s onState) action(dev VirtualRelay) Status {
-	return Status{
-		Hz:    dev.status.Hz,    // TODO: Link to virtual system model
-		Volts: dev.status.Volts, // TODO: Link to virtual system model	}
-	}
-}
-
-func (s onState) transition(dev VirtualBus) state {
-	if dev.status.Hz < 1 && dev.status.Volts < 1 {
-		return offState{}
-	}
-	return onState{}
-}
-*/

@@ -91,7 +91,7 @@ func (b VirtualACBus) gridformerCalcs() Source {
 	return gridformer
 }
 
-func New() (VirtualACBus, error) {
+func New(configPath string) (VirtualACBus, error) {
 	id, _ := uuid.NewUUID()
 	bus := VirtualACBus{
 		pid:              id,
@@ -129,6 +129,7 @@ func (b *VirtualACBus) runVirtualSystem() {
 
 			if source.Gridforming == true {
 				b.gridformer = source
+				log.Printf("[VirtualACBus: %v]", b.gridformerCalcs())
 			}
 		case b.busObserver <- b.gridformerCalcs():
 		}

@@ -119,7 +119,7 @@ func (a *VirtualESS) write() error {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualacbus.VirtualACBus) (ess.Asset, error) {
+func New(configPath string, bus virtualacbus.VirtualACBus) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
@@ -180,8 +180,8 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 			log.Printf("[VirtualESS-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
 		}
-		log.Println("[VirtualESS-Device: shutdown]")
 	}
+	log.Println("[VirtualESS-Device: shutdown]")
 }
 
 func (a *VirtualESS) updateObservers(obs Observers) {

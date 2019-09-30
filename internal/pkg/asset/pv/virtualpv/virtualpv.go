@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/asset/pv"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
@@ -104,10 +103,10 @@ func (a *VirtualPV) write() error {
 }
 
 // New returns an initalized VirtualPV Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualacbus.VirtualACBus) (pv.Asset, error) {
+func New(configPath string, bus virtualacbus.VirtualACBus) (pv.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return ess.Asset{}, err
+		return pv.Asset{}, err
 	}
 
 	// TODO: Troubleshoot why this cannot be set to 0 length
