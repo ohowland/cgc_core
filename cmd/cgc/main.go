@@ -13,6 +13,8 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
 	"github.com/ohowland/cgc/internal/pkg/asset/relay/virtualrelay"
+	"github.com/ohowland/cgc/internal/pkg/bus"
+	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 func main() {
@@ -52,6 +54,14 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	}
 	assets[ess.PID()] = &ess
 
+	/*
+		pv, err := virtualpv.New("../../config/asset/virtualPV.json")
+		if err != nil {
+			return assets, err
+		}
+		assets[pv.PID()] = &pv
+	*/
+
 	feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json")
 	if err != nil {
 		return assets, err
@@ -62,26 +72,18 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	if err != nil {
 		return assets, err
 	}
+	return assets, nil
+}
 
-	bus, err := bus.New()
+func loadBusses(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]bus.Bus, error) {
+
+	bus, err := virtualacbus.New()
 
 	for _, asset := range assets {
-		bus.Link(asset)
+
 	}
 
 	assets[bus.PID()] = &bus
-
-	/*
-		pv, err := virtualpv.New("../../config/asset/virtualPV.json")
-		if err != nil {
-			return assets, err
-		}
-		assets[pv.PID()] = &pv
-	*/
-
-	go vsm.RunVirtualSystem()
-
-	return assets, nil
 }
 
 func launchAssets(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]chan interface{}, error) {

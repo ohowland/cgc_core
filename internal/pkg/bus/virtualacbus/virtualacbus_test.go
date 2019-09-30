@@ -10,101 +10,108 @@ import (
 )
 
 type DummyAsset struct {
-	id     uuid.UUID
+	pid    uuid.UUID
 	status Status
 }
 
 type Status struct {
-	KW   float64
-	KVAR float64
+	kW          float64
+	kVAR        float64
+	hz          float64
+	volt        float64
+	gridforming bool
 }
 
 func NewDummyAsset() DummyAsset {
-	id, _ := uuid.NewUUID()
+	pid, _ := uuid.NewUUID()
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return DummyAsset{
-		id: id,
+		pid: pid,
 		status: Status{
-			KW:   r.Float64() * 10000,
-			KVAR: r.Float64() * 10000,
+			kW:          r.Float64() * 10000,
+			kVAR:        r.Float64() * 10000,
+			hz:          60,
+			volt:        480,
+			gridforming: false,
 		},
 	}
 }
 
-func (a DummyAsset) load() SourceLoad {
-	return SourceLoad{
-		ID: a.id,
-		Load: Load{
-			KW:   a.status.KW,
-			KVAR: a.status.KVAR,
-		},
+func (a DummyAsset) asSource() Source {
+	return Source{
+		PID:         a.pid,
+		Hz:          a.status.hz,
+		Volt:        a.status.volt,
+		KW:          a.status.kW,
+		KVAR:        a.status.kVAR,
+		Gridforming: a.status.gridforming,
 	}
 }
 
-func TestNewVirtualSystemModel(t *testing.T) {
+func TestNewVirtualACBus(t *testing.T) {
 
-	vsm := NewVirtualSystemModel()
-
-	go vsm.RunVirtualSystem()
+	bus := New()
 	time.Sleep(time.Duration(200) * time.Millisecond)
-	vsm.StopVirtualSystem()
+	close(bus.observer)
 	time.Sleep(time.Duration(100) * time.Millisecond)
 }
 
 func TestCalcSwingLoad(t *testing.T) {
-	vsm := NewVirtualSystemModel()
-	go vsm.RunVirtualSystem()
+	bus := New()
 
 	asset1 := NewDummyAsset()
 	time.Sleep(time.Duration(1) * time.Millisecond)
 	asset2 := NewDummyAsset()
 
-	vsm.ReportLoad <- asset1.load()
-	vsm.ReportLoad <- asset2.load()
+	bus.observer <- asset1.asSource()
+	bus.observer <- asset2.asSource()
 
 	time.Sleep(time.Duration(200) * time.Millisecond)
 
-	swingload := <-vsm.SwingLoad
-	swingload = <-vsm.SwingLoad
+	gridformer := bus.Gridformer()
 
-	assertKwSum := asset1.status.KW + asset2.status.KW
-	assertKvarSum := asset1.status.KVAR + asset2.status.KVAR
+	assertKwSum := asset1.status.kW + asset2.status.kW
+	assertKvarSum := asset1.status.kVAR + asset2.status.kVAR
 
-	assert.Assert(t, swingload.KW == assertKwSum)
-	assert.Assert(t, swingload.KVAR == assertKvarSum)
+	assert.Assert(t, gridformer.KW == assertKwSum)
+	assert.Assert(t, gridformer.KVAR == assertKvarSum)
 
-	vsm.StopVirtualSystem()
+	close(bus.observer)
 }
 
 func TestCalcSwingLoadChange(t *testing.T) {
-	vsm := NewVirtualSystemModel()
-	go vsm.RunVirtualSystem()
+	bus := New()
 
-	asset1 := NewDummyAsset()
+	gridfollowingAsset1 := NewDummyAsset()
 	time.Sleep(time.Duration(1) * time.Millisecond)
-	asset2 := NewDummyAsset()
+	gridfollowingAsset2 := NewDummyAsset()
+	time.Sleep(time.Duration(1) * time.Millisecond)
+	gridformingAsset := NewDummyAsset()
 
-	vsm.ReportLoad <- asset1.load()
-	vsm.ReportLoad <- asset2.load()
+	gridformingAsset.status.gridforming = true
+
+	bus.observer <- gridfollowingAsset1.asSource()
+	bus.observer <- gridformingAsset.asSource()
+	bus.observer <- gridfollowingAsset2.asSource()
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 1; i <= 5; i++ {
+		gridfollowingAsset1.status.kW = r.Float64() * 1000
+		time.Sleep(time.Duration(10) * time.Millisecond)
+		gridfollowingAsset2.status.kW = r.Float64() * 1000
+
+		bus.observer <- gridfollowingAsset2.asSource()
+		bus.observer <- gridformingAsset.asSource()
+		bus.observer <- gridfollowingAsset1.asSource()
+	}
 
 	time.Sleep(time.Duration(200) * time.Millisecond)
 
-	swingload := <-vsm.SwingLoad
-	swingload = <-vsm.SwingLoad
+	gridformer := bus.Gridformer()
+	assertKwSum := gridfollowingAsset1.status.kW + gridfollowingAsset2.status.kW
+	assertKvarSum := gridfollowingAsset1.status.kVAR + gridfollowingAsset2.status.kVAR
+	assert.Assert(t, gridformer.KW == assertKwSum)
+	assert.Assert(t, gridformer.KVAR == assertKvarSum)
 
-	asset1.status.KW = 1
-	vsm.ReportLoad <- asset1.load()
-
-	time.Sleep(time.Duration(200) * time.Millisecond)
-
-	swingload = <-vsm.SwingLoad
-	swingload = <-vsm.SwingLoad
-
-	assertKwSum := asset1.status.KW + asset2.status.KW
-	assertKvarSum := asset1.status.KVAR + asset2.status.KVAR
-
-	assert.Assert(t, swingload.KW == assertKwSum)
-	assert.Assert(t, swingload.KVAR == assertKvarSum)
-
-	vsm.StopVirtualSystem()
+	close(bus.observer)
 }

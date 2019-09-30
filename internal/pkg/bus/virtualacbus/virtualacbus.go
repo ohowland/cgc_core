@@ -14,7 +14,8 @@ const (
 type VirtualACBus struct {
 	pid              uuid.UUID
 	members          map[uuid.UUID]asset.Asset
-	observer         chan Source
+	busObserver      chan Source
+	assetObserver    chan Source
 	connectedSources map[uuid.UUID]Source
 	gridformer       Source
 	staticConfig     StaticConfig
@@ -47,6 +48,14 @@ func (b VirtualACBus) Energized() bool {
 	return false
 }
 
+func (b VirtualACBus) Hz() float64 {
+	return b.gridformer.Hz
+}
+
+func (b VirtualACBus) Volt() float64 {
+	return b.gridformer.Volt
+}
+
 func (b *VirtualACBus) AddMember(a asset.Asset) {
 	b.members[a.PID()] = a
 }
@@ -55,11 +64,15 @@ func (b *VirtualACBus) RemoveMember(a asset.Asset) {
 	delete(b.members, a.PID())
 }
 
-func (b VirtualACBus) Observer() chan<- Source {
-	return b.observer
+func (b VirtualACBus) AssetObserver() chan<- Source {
+	return b.assetObserver
 }
 
-func (b VirtualACBus) Gridformer() Source {
+func (b VirtualACBus) BusObserver() <-chan Source {
+	return b.busObserver
+}
+
+func (b VirtualACBus) gridformerCalcs() Source {
 	kwSum := 0.0
 	kvarSum := 0.0
 	var gridformer Source
@@ -76,12 +89,14 @@ func (b VirtualACBus) Gridformer() Source {
 	return gridformer
 }
 
-func NewVirtalACBus() VirtualACBus {
+func New() (VirtualACBus, error) {
 	id, _ := uuid.NewUUID()
 	bus := VirtualACBus{
-		pid:      id,
-		members:  make(map[uuid.UUID]asset.Asset),
-		observer: make(chan Source, queueSize),
+		pid:              id,
+		members:          make(map[uuid.UUID]asset.Asset),
+		busObserver:      make(chan Source, 1),
+		assetObserver:    make(chan Source, queueSize),
+		connectedSources: make(map[uuid.UUID]Source),
 		gridformer: Source{
 			PID:         id,
 			Hz:          0.0,
@@ -95,20 +110,26 @@ func NewVirtalACBus() VirtualACBus {
 			ratedHz:   60.0,  // Get from config
 		},
 	}
-	go runVirtualSystem(&bus)
-	return bus
+
+	go bus.runVirtualSystem()
+	return bus, nil
 }
 
-func runVirtualSystem(bus *VirtualACBus) {
+func (b *VirtualACBus) runVirtualSystem() {
 	log.Println("[VirtualACBus: Running]")
 	for {
-		source, ok := <-bus.observer
+		select {
+		case source, ok := <-b.assetObserver:
+			if !ok {
+				break
+			}
+			b.connectedSources[source.PID] = source
 
-		if !ok {
-			break
+			if source.Gridforming == true {
+				b.gridformer = source
+			}
+		case b.busObserver <- b.gridformerCalcs():
 		}
 
-		bus.connectedSources[source.PID] = source
-		log.Printf("[VirtualACBus: Reported Load %source]\n", source)
 	}
 }

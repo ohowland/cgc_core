@@ -4,20 +4,20 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
-	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualESS target
 type VirtualESS struct {
-	id      uuid.UUID
-	status  Status
-	control Control
-	comm    Comm
+	pid       uuid.UUID
+	status    Status
+	control   Control
+	comm      Comm
+	observers Observers
 }
 
 // Status data structure for the VirtualESS
@@ -25,7 +25,7 @@ type Status struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
-	Volts                float64 `json:"Volts"`
+	Volt                 float64 `json:"Volt"`
 	SOC                  float64 `json:"SOC"`
 	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
 	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
@@ -46,10 +46,14 @@ type Config struct {
 
 // Comm data structure for the VirtualESS
 type Comm struct {
-	incoming  chan Status
-	outgoing  chan Control
-	busInput  chan<- virtualbus.Source
-	busOutput <-chan virtualbus.Source
+	incoming chan Status
+	outgoing chan Control
+	busObserver
+}
+
+type Observers struct {
+	assetObserver chan<- virtualacbus.Source
+	busObserver   <-chan virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -71,7 +75,7 @@ func (a VirtualESS) Status() ess.Status {
 		KW:                   a.status.KW,
 		KVAR:                 a.status.KVAR,
 		Hz:                   a.status.Hz,
-		Volts:                a.status.Volts,
+		Volt:                 a.status.Volt,
 		SOC:                  a.status.SOC,
 		PositiveRealCapacity: a.status.PositiveRealCapacity,
 		NegativeRealCapacity: a.status.NegativeRealCapacity,
@@ -116,7 +120,7 @@ func (a *VirtualESS) write() error {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, bus *virtualbus.VirtualBus) (ess.Asset, error) {
+func New(configPath string, bus *virtualacbus.VirtualACBus) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
@@ -126,15 +130,15 @@ func New(configPath string, bus *virtualbus.VirtualBus) (ess.Asset, error) {
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 
-	id, err := uuid.NewUUID()
+	pid, err := uuid.NewUUID()
 
 	device := VirtualESS{
-		id: id,
+		pid: pid,
 		status: Status{
 			KW:                   0,
 			KVAR:                 0,
 			Hz:                   0,
-			Volts:                0,
+			Volt:                 0,
 			SOC:                  0.6,
 			PositiveRealCapacity: 0,
 			NegativeRealCapacity: 0,
@@ -148,18 +152,20 @@ func New(configPath string, bus *virtualbus.VirtualBus) (ess.Asset, error) {
 			gridForm: false,
 		},
 		comm: Comm{
-			incoming:  in,
-			outgoing:  out,
-			busInput:  bus.LoadsChan(),
-			busOutput: bus.GridformChan(),
+			incoming: in,
+			outgoing: out,
+		},
+		observers: Observers{
+			assetObserver: bus.AssetObserver(),
+			busObserver:   bus.BusObserver(),
 		},
 	}
 
-	go virtualDeviceLoop(device.comm)
+	go virtualDeviceLoop(device.comm, device.observers)
 	return ess.New(jsonConfig, device)
 }
 
-func virtualDeviceLoop(comm Comm) {
+func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualESS{} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
 	var ok bool
@@ -169,47 +175,33 @@ func virtualDeviceLoop(comm Comm) {
 			if !ok {
 				break
 			}
-		case comm.incoming <- dev.status:
-			dev = updateVirtualBus(dev, comm) // read from 'hardware'
+		case comm.incoming <- dev.status: // read from 'hardware'
+			dev.updateBusObservers(obs)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualESS-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
-		default:
-			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
-	}
-	log.Println("[VirtualESS-Device: shutdown]")
-}
-
-func updateVirtualBus(dev *VirtualESS, comm Comm) *VirtualESS {
-	dev.getGridformingLoadFromBus(comm)
-	dev.reportLoadToBus(comm)
-	return dev
-}
-
-func (a *VirtualESS) getGridformingLoadFromBus(comm Comm) {
-	if a.status.Gridforming {
-		select {
-		case v := <-comm.busOutput:
-			a.status.KW = v.KW
-			a.status.KVAR = v.KVAR
-		default:
-		}
+		log.Println("[VirtualESS-Device: shutdown]")
 	}
 }
 
-func (a *VirtualESS) reportLoadToBus(comm Comm) {
-	assetLoad := virtualbus.Source{
-		ID:          a.id,
+func (a *VirtualESS) updateBusObservers(obs Observers) {
+	obs.assetObserver <- a.asSource()
+	if dev.status.Gridforming {
+		gridformer := <-obs.busObserver
+		a.status.KW = gridformer.KW
+		a.status.KVAR = gridformer.KVAR
+	}
+}
+
+func (a VirtualESS) asSource() virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
 		Hz:          a.status.Hz,
-		Volts:       a.status.Volts,
+		Volt:        a.status.Volt,
 		KW:          a.status.KW,
 		KVAR:        a.status.KVAR,
 		Gridforming: a.status.Gridforming,
-	}
-	select {
-	case comm.busInput <- assetLoad:
-	default:
 	}
 }
 

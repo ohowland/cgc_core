@@ -21,7 +21,7 @@ type Status struct {
 	KW                   float64
 	KVAR                 float64
 	Hz                   float64
-	Volts                float64
+	Volt                 float64
 	SOC                  float64
 	PositiveRealCapacity float64
 	NegativeRealCapacity float64
