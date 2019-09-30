@@ -1,0 +1,7 @@
+{
+  "StaticConfig": {
+    "Name": "Bus Relay",
+    "KWRated": 20,
+    "KVARRated": 10
+  }
+}

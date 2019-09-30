@@ -6,9 +6,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/ohowland/cgc/internal/pkg/virtual"
-
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
 )
 
@@ -24,6 +23,8 @@ type VirtualGrid struct {
 type Status struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
+	Hz                   float64 `json:"Hz"`
+	Volts                float64 `json:"Volts"`
 	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
 	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
 	Synchronized         bool    `json:"Synchronized"`
@@ -37,10 +38,10 @@ type Control struct {
 
 // Comm data structure for the VirtualGrid
 type Comm struct {
-	incoming      chan Status
-	outgoing      chan Control
-	vsmReportLoad chan virtual.SourceLoad
-	vsmSwingLoad  chan virtual.Load
+	incoming  chan Status
+	outgoing  chan Control
+	busInput  chan<- virtualbus.Source
+	busOutput <-chan virtualbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -59,10 +60,10 @@ func (a VirtualGrid) WriteDeviceControl(c interface{}) error {
 func (a VirtualGrid) Status() grid.Status {
 	// map deviceStatus to GridStatus
 	return grid.Status{
-		KW:                   float64(a.status.KW),
-		KVAR:                 float64(a.status.KVAR),
-		PositiveRealCapacity: float64(a.status.PositiveRealCapacity),
-		NegativeRealCapacity: float64(a.status.NegativeRealCapacity),
+		KW:                   a.status.KW,
+		KVAR:                 a.status.KVAR,
+		PositiveRealCapacity: a.status.PositiveRealCapacity,
+		NegativeRealCapacity: a.status.NegativeRealCapacity,
 		Synchronized:         a.status.Synchronized,
 		Online:               a.status.Online,
 	}
@@ -101,8 +102,8 @@ func (a *VirtualGrid) write() error {
 	return nil
 }
 
-// New returns an initalized SEL1547 Asset; this is part of the Asset interface.
-func New(configPath string, vsm *virtual.SystemModel) (grid.Asset, error) {
+// New returns an initalized virtualbus Asset; this is part of the Asset interface.
+func New(configPath string, bus *virtualbus.VirtualBus) (grid.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return grid.Asset{}, err
@@ -128,25 +129,25 @@ func New(configPath string, vsm *virtual.SystemModel) (grid.Asset, error) {
 			closeIntertie: false,
 		},
 		comm: Comm{
-			incoming:      in,
-			outgoing:      out,
-			vsmReportLoad: vsm.ReportLoad,
-			vsmSwingLoad:  vsm.SwingLoad,
+			incoming:  in,
+			outgoing:  out,
+			busInput:  bus.LoadsChan(),
+			busOutput: bus.GridformChan(),
 		},
 	}
 
-	go launchVirtualDevice(device.comm)
+	go virtualDeviceLoop(device.comm)
 	return grid.New(jsonConfig, device)
 }
 
-func launchVirtualDevice(comm Comm) {
+func virtualDeviceLoop(comm Comm) {
 	dev := &VirtualGrid{}
 	sm := &stateMachine{offState{}}
 	for {
 		select {
 		case dev.control = <-comm.outgoing:
 		case comm.incoming <- dev.status:
-			dev = updateVirtualSystem(dev, comm)
+			dev = updateVirtualBus(dev, comm)
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualGrid-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
@@ -156,37 +157,36 @@ func launchVirtualDevice(comm Comm) {
 	}
 }
 
-func updateVirtualSystem(dev *VirtualGrid, comm Comm) *VirtualGrid {
-	if dev.status.Online {
-		// Device is gridforming, so its load does not contribute to swing load.
-		assetLoad := virtual.SourceLoad{
-			ID: dev.id,
-			Load: virtual.Load{
-				KW:   0,
-				KVAR: 0,
-			},
-		}
+func updateVirtualBus(dev *VirtualGrid, comm Comm) *VirtualGrid {
+	dev.getGridformingLoadFromBus(comm)
+	dev.reportLoadToBus(comm)
+	return dev
+}
+
+func (a *VirtualGrid) getGridformingLoadFromBus(comm Comm) {
+	if a.status.Online {
 		select {
-		case v := <-comm.vsmSwingLoad:
-			dev.status.KW = v.KW
-			dev.status.KVAR = v.KVAR
-		case comm.vsmReportLoad <- assetLoad:
-		default:
-		}
-	} else {
-		assetLoad := virtual.SourceLoad{
-			ID: dev.id,
-			Load: virtual.Load{
-				KW:   dev.status.KW,
-				KVAR: dev.status.KVAR,
-			},
-		}
-		select {
-		case comm.vsmReportLoad <- assetLoad:
+		case v := <-comm.busOutput:
+			a.status.KW = v.KW
+			a.status.KVAR = v.KVAR
 		default:
 		}
 	}
-	return dev
+}
+
+func (a *VirtualGrid) reportLoadToBus(comm Comm) {
+	assetLoad := virtualbus.Source{
+		ID:          a.id,
+		Hz:          a.status.Hz,
+		Volts:       a.status.Volts,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: a.status.Online,
+	}
+	select {
+	case comm.busInput <- assetLoad:
+	default:
+	}
 }
 
 type stateMachine struct {

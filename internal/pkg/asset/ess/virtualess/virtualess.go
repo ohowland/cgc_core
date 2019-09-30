@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/virtual"
 
+	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 )
 
@@ -24,6 +24,8 @@ type VirtualESS struct {
 type Status struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
+	Hz                   float64 `json:"Hz"`
+	Volts                float64 `json:"Volts"`
 	SOC                  float64 `json:"SOC"`
 	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
 	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
@@ -44,10 +46,10 @@ type Config struct {
 
 // Comm data structure for the VirtualESS
 type Comm struct {
-	incoming      chan Status
-	outgoing      chan Control
-	vsmReportLoad chan virtual.SourceLoad
-	vsmSwingLoad  chan virtual.Load
+	incoming  chan Status
+	outgoing  chan Control
+	busInput  chan<- virtualbus.Source
+	busOutput <-chan virtualbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -66,11 +68,13 @@ func (a VirtualESS) WriteDeviceControl(c interface{}) error {
 func (a VirtualESS) Status() ess.Status {
 	// map deviceStatus to GridStatus
 	return ess.Status{
-		KW:                   float64(a.status.KW),
-		KVAR:                 float64(a.status.KVAR),
-		SOC:                  float64(a.status.SOC),
-		PositiveRealCapacity: float64(a.status.PositiveRealCapacity),
-		NegativeRealCapacity: float64(a.status.NegativeRealCapacity),
+		KW:                   a.status.KW,
+		KVAR:                 a.status.KVAR,
+		Hz:                   a.status.Hz,
+		Volts:                a.status.Volts,
+		SOC:                  a.status.SOC,
+		PositiveRealCapacity: a.status.PositiveRealCapacity,
+		NegativeRealCapacity: a.status.NegativeRealCapacity,
 		Gridforming:          a.status.Gridforming,
 		Online:               a.status.Online,
 	}
@@ -112,7 +116,7 @@ func (a *VirtualESS) write() error {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, vsm *virtual.SystemModel) (ess.Asset, error) {
+func New(configPath string, bus *virtualbus.VirtualBus) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
@@ -129,6 +133,8 @@ func New(configPath string, vsm *virtual.SystemModel) (ess.Asset, error) {
 		status: Status{
 			KW:                   0,
 			KVAR:                 0,
+			Hz:                   0,
+			Volts:                0,
 			SOC:                  0.6,
 			PositiveRealCapacity: 0,
 			NegativeRealCapacity: 0,
@@ -142,25 +148,29 @@ func New(configPath string, vsm *virtual.SystemModel) (ess.Asset, error) {
 			gridForm: false,
 		},
 		comm: Comm{
-			incoming:      in,
-			outgoing:      out,
-			vsmReportLoad: vsm.ReportLoad,
-			vsmSwingLoad:  vsm.SwingLoad,
+			incoming:  in,
+			outgoing:  out,
+			busInput:  bus.LoadsChan(),
+			busOutput: bus.GridformChan(),
 		},
 	}
 
-	go launchVirtualDevice(device.comm)
+	go virtualDeviceLoop(device.comm)
 	return ess.New(jsonConfig, device)
 }
 
-func launchVirtualDevice(comm Comm) {
-	dev := &VirtualESS{}
+func virtualDeviceLoop(comm Comm) {
+	dev := &VirtualESS{} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
+	var ok bool
 	for {
 		select {
-		case dev.control = <-comm.outgoing:
+		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
+			if !ok {
+				break
+			}
 		case comm.incoming <- dev.status:
-			dev = updateVirtualSystem(dev, comm)
+			dev = updateVirtualBus(dev, comm) // read from 'hardware'
 			dev.status = sm.run(*dev)
 			log.Printf("[VirtualESS-Device: state: %v]\n",
 				reflect.TypeOf(sm.currentState).String())
@@ -168,38 +178,39 @@ func launchVirtualDevice(comm Comm) {
 			time.Sleep(time.Duration(200) * time.Millisecond)
 		}
 	}
+	log.Println("[VirtualESS-Device: shutdown]")
 }
 
-func updateVirtualSystem(dev *VirtualESS, comm Comm) *VirtualESS {
-	if dev.status.Gridforming {
-		assetLoad := virtual.SourceLoad{
-			ID: dev.id,
-			Load: virtual.Load{
-				KW:   0,
-				KVAR: 0,
-			},
-		}
+func updateVirtualBus(dev *VirtualESS, comm Comm) *VirtualESS {
+	dev.getGridformingLoadFromBus(comm)
+	dev.reportLoadToBus(comm)
+	return dev
+}
+
+func (a *VirtualESS) getGridformingLoadFromBus(comm Comm) {
+	if a.status.Gridforming {
 		select {
-		case v := <-comm.vsmSwingLoad:
-			dev.status.KW = v.KW
-			dev.status.KVAR = v.KVAR
-		case comm.vsmReportLoad <- assetLoad:
-		default:
-		}
-	} else {
-		assetLoad := virtual.SourceLoad{
-			ID: dev.id,
-			Load: virtual.Load{
-				KW:   dev.status.KW,
-				KVAR: dev.status.KVAR,
-			},
-		}
-		select {
-		case comm.vsmReportLoad <- assetLoad:
+		case v := <-comm.busOutput:
+			a.status.KW = v.KW
+			a.status.KVAR = v.KVAR
 		default:
 		}
 	}
-	return dev
+}
+
+func (a *VirtualESS) reportLoadToBus(comm Comm) {
+	assetLoad := virtualbus.Source{
+		ID:          a.id,
+		Hz:          a.status.Hz,
+		Volts:       a.status.Volts,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: a.status.Gridforming,
+	}
+	select {
+	case comm.busInput <- assetLoad:
+	default:
+	}
 }
 
 type stateMachine struct {
