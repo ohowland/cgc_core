@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/bus/virtualbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/asset/relay/virtualrelay"
 )
 
 func main() {
@@ -58,10 +58,12 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	}
 	assets[feeder.PID()] = &feeder
 
-	bus, err := virtualbus.New("../../config/asset/virtualBus.json")
+	relay, err := virtualrelay.New("../../config/asset/virtualRelay.json")
 	if err != nil {
 		return assets, err
 	}
+
+	bus, err := bus.New()
 
 	for _, asset := range assets {
 		bus.Link(asset)

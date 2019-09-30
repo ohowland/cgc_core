@@ -18,8 +18,8 @@ type Asset struct {
 
 // Status is a data structure representing an architypical relay status
 type Status struct {
-	Hz    float64
-	Volts float64
+	Hz   float64
+	Volt float64
 }
 
 // Control is a data structure representing an architypical relay control
@@ -84,6 +84,16 @@ func (a *Asset) UpdateStatus() error {
 func (a Asset) WriteControl() error {
 	err := a.device.WriteDeviceControl(a.control)
 	return err
+}
+
+// Hz returns relay frequency. Part of the Relayer interface
+func (a Asset) Hz() float64 {
+	return a.status.Hz
+}
+
+// Volt returns relay AC RMS voltage. Part of the Relayer interface
+func (a Asset) Volt() float64 {
+	return a.status.Volt
 }
 
 // New returns a configured Asset

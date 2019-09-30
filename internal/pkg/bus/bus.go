@@ -1,29 +1,30 @@
-package asset
+package bus
 
 import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
-type Relayer interface {
-	Hz() float64
-	Volt() float64
-}
-
-type Bus struct {
-	id      uuid.UUID
-	relay   Relayer
-	members map[uuid.UUID]asset.Asset
-	status  Status
-}
-
-type Status struct {
-	Hz        float64 `json:"Hz"`
-	Volts     float64 `json:"Volts"`
-	Energized bool    `json:"Energized"`
+// Bus is the interface for power system connectivity graph.
+type Bus interface {
+	PID() uuid.UUID
+	AssetMembers() map[uuid.UUID]asset.Asset
+	Energized() bool
 }
 
 /*
+type BusGroup interface {
+	PID() uuid.UUID
+	BusGraph() BusGraph
+	Energized() bool
+}
+
+type BusGraph interface {
+	AssetMembers() map[uuid.UUID]asset.Asset
+	BusMembers() map[uuid.UUID]Bus
+}
+
+
 TODO:
 
 1. the bus object constructs a bus graph.
