@@ -10,59 +10,48 @@ type Relayer interface {
 	Hz() float64
 }
 
-type AssetObserver struct {
-	members map[uuid.UUID]asset.Asset
-	events  chan Status
-}
-
 type ACBus struct {
-	pid      uuid.UUID
-	relay    Relayer
-	observer AssetObserver
-	status   Status
+	pid          uuid.UUID
+	relay        Relayer
+	members      map[uuid.UUID]asset.Asset
+	staticConfig StaticConfig
 }
 
-type Status struct {
-	Hz        float64
-	Volt      float64
-	KW        float64
-	KVAR      float64
-	Energized bool
+type StaticConfig struct {
+	ratedVolt float64
+	ratedHz   float64
 }
 
 func (b ACBus) PID() uuid.UUID {
 	return b.pid
 }
-func (b ACBus) AssetMembers() map[uuid.UUID]asset.Asset {
-	return b.observer.members
-}
+
 func (b ACBus) Energized() bool {
-	return b.status.Energized
+	voltThreshold := b.staticConfig.ratedVolt * 0.5
+	hzThreshold := b.staticConfig.ratedHz * 0.5
+	if b.relay.Hz() > hzThreshold && b.relay.Volt() > voltThreshold {
+		return true
+	}
+	return false
 }
 
 func (b *ACBus) AddMember(a asset.Asset) {
-	b.observer.members[a.PID()] = a
+	b.members[a.PID()] = a
 }
 
 func (b *ACBus) RemoveMember(a asset.Asset) {
-	delete(b.observer.members, a.PID())
+	delete(b.members, a.PID())
 }
 
 func NewBus(relay Relayer) ACBus {
 	id, _ := uuid.NewUUID()
 	return ACBus{
-		pid:   id,
-		relay: relay,
-		observer: AssetObserver{
-			members: make(map[uuid.UUID]asset.Asset),
-			events:  make(chan Status, 1),
-		},
-		status: Status{
-			Hz:        0.0,
-			Volt:      0.0,
-			KW:        0.0,
-			KVAR:      0.0,
-			Energized: false,
+		pid:     id,
+		relay:   relay,
+		members: make(map[uuid.UUID]asset.Asset),
+		staticConfig: StaticConfig{
+			ratedVolt: 480.0, // Get from config
+			ratedHz:   60.0,  // Get from config
 		},
 	}
 }

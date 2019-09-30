@@ -2,13 +2,11 @@ package bus
 
 import (
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // Bus is the interface for power system connectivity graph.
 type Bus interface {
 	PID() uuid.UUID
-	AssetMembers() map[uuid.UUID]asset.Asset
 	Energized() bool
 }
 
