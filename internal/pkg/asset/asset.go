@@ -9,6 +9,8 @@ type Asset interface {
 	PID() uuid.UUID
 	UpdateStatus() error
 	WriteControl() error
+	SetControl(interface{}) error
+	Status() interface{}
 }
 
 // Device is the interface to read/write a physical component.

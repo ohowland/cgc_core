@@ -22,15 +22,14 @@ const logo = `
  __________________________________________    
 `
 
-type Slide func(nextSlide func()) (title string, content tview.Primitive)
+type HMI func(*tview.Pages) (title string, content tview.Primitive)
 
 var app = tview.NewApplication()
 var table *tview.Table
-var refreshInterval = time.Duration(200) * time.Millisecond
 
 func updateScheduler() {
-	for {
-		time.Sleep(refreshInterval)
+	refreshInterval := time.Tick(500 * time.Millisecond)
+	for range refreshInterval {
 		cellData := rand.Intn(10)
 		tableCell := tview.NewTableCell(strconv.Itoa(cellData)).
 			SetTextColor(tcell.ColorWhite).
@@ -43,35 +42,29 @@ func updateScheduler() {
 
 func main() {
 
-	slides := []Slide{
-		Cover,
-		MainHMI,
+	hmis := []HMI{
+		Splash,
+		Overview,
 	}
 
-	currentSlide := 0
 	pages := tview.NewPages()
 
-	nextSlide := func() {
-		currentSlide = (currentSlide + 1) % len(slides)
-		pages.SwitchToPage(strconv.Itoa(currentSlide))
-	}
-
-	for index, slide := range slides {
-		_, primative := slide(nextSlide)
-		pages.AddPage(strconv.Itoa(index), primative, true, index == currentSlide)
+	for _, hmi := range hmis {
+		title, primative := hmi(pages)
+		pages.AddPage(title, primative, true, title == "Splash")
 	}
 
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(pages, 0, 1, true)
 
-	go updateScheduler()
+	//go updateScheduler()
 	if err := app.SetRoot(layout, true).Run(); err != nil {
 		panic(err)
 	}
 }
 
-func Cover(nextSlide func()) (title string, content tview.Primitive) {
+func Splash(pages *tview.Pages) (title string, content tview.Primitive) {
 	lines := strings.Split(logo, "\n")
 	logoWidth := 0
 	logoHeight := len(lines)
@@ -83,7 +76,7 @@ func Cover(nextSlide func()) (title string, content tview.Primitive) {
 	logoBox := tview.NewTextView().
 		SetTextColor(tcell.ColorBlue).
 		SetDoneFunc(func(key tcell.Key) {
-			nextSlide()
+			pages.ShowPage("Overview")
 		})
 
 	fmt.Fprint(logoBox, logo)
@@ -103,16 +96,29 @@ func Cover(nextSlide func()) (title string, content tview.Primitive) {
 			AddItem(tview.NewBox(), 0, 1, false), logoHeight, 1, true).
 		AddItem(frame, 0, 10, false)
 
-	return "Cover", flex
+	return "Splash", flex
 }
 
+func Overview(pages *tview.Pages) (title string, content tview.Primitive) {
+
+	rootNode := "Bus A"
+	root := tview.NewTreeNode(rootNode).
+		SetColor(tcell.ColorBlue)
+	tree := tview.NewTreeView().
+		SetRoot(root).
+		SetCurrentNode(root)
+
+	add := 
+}
+
+/*
 const tableData = `Machine|kW|kVAR|Frequency|Voltage|Online|Gridforming
 ESS|0|0|60|480|False|False
 Grid|10|3|60|480|True|True
 Feeder|10|3|60|480|True|False
 `
 
-func MainHMI(nextSlide func()) (title string, content tview.Primitive) {
+func Overview(pages *tview.Pages) (title string, content tview.Primitive) {
 
 	table = tview.NewTable().
 		SetFixed(1, 1)
@@ -137,12 +143,17 @@ func MainHMI(nextSlide func()) (title string, content tview.Primitive) {
 
 	table.SetBorders(false).
 		SetSelectable(true, false).
-		SetSeparator(' ')
+		SetSeparator(' ').
+		SetSelectedFunc()
 
 	app.SetFocus(table)
 
-	return "Table", tview.NewFlex().
+	flex := tview.NewFlex().
 		AddItem(tview.NewFlex().
 			SetDirection(tview.FlexRow).
 			AddItem(table, 0, 1, true), 0, 1, true)
+
+	return "Overview", flex
 }
+
+*/

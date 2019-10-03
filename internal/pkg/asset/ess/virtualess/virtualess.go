@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -13,6 +14,7 @@ import (
 
 // VirtualESS target
 type VirtualESS struct {
+	mutex     *sync.Mutex
 	pid       uuid.UUID
 	status    Status
 	control   Control
@@ -99,6 +101,8 @@ func (a VirtualESS) Control(c ess.Control) {
 func (a *VirtualESS) read() error {
 	select {
 	case in := <-a.comm.incoming:
+		a.mutex.Lock()
+		defer a.mutex.Unlock()
 		a.status = in
 		//log.Printf("[VirtualESS: read status: %v]", in)
 	default:
@@ -107,7 +111,7 @@ func (a *VirtualESS) read() error {
 	return nil
 }
 
-func (a *VirtualESS) write() error {
+func (a VirtualESS) write() error {
 	select {
 	case a.comm.outgoing <- a.control:
 		//log.Printf("[VirtualESS: write control: %v]", a.control)
@@ -181,13 +185,16 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 				reflect.TypeOf(sm.currentState).String())
 		}
 	}
-	log.Println("[VirtualESS-Device: shutdown]")
+	//log.Println("[VirtualESS-Device: shutdown]")
 }
 
 func (a *VirtualESS) updateObservers(obs Observers) {
 	obs.assetObserver <- a.asSource()
 	if a.status.Gridforming {
 		gridformer := <-obs.busObserver
+
+		a.mutex.Lock()
+		defer a.mutex.Unlock()
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR
 	}

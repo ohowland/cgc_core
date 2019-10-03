@@ -1,4 +1,4 @@
-package asset
+package ess
 
 import (
 	"log"
@@ -23,25 +23,6 @@ const (
 	stopped       ProcessState = iota
 )
 
-// UpdateStatus requests process to perform a device status read
-type UpdateStatus struct{}
-
-// WriteControl requests process to perform a device control write
-type WriteControl struct{}
-
-// SetControl requests process to change asset control
-type SetControl struct {
-	payload interface{}
-}
-
-type GetStatus struct{}
-
-// Start the process
-type Start struct{}
-
-// Stop the actor
-type Stop struct{}
-
 // StartProcess spins up a Process
 func StartProcess(a Asset) chan interface{} {
 	log.Printf("starting processs %v\n", a)
@@ -58,8 +39,8 @@ func (p *Process) initialize() chan interface{} {
 	p.state = initialized
 
 	p.scheduler = NewScheduler()
-	read := NewTarget(p.inbox, UpdateStatus{}, 1000)
-	write := NewTarget(p.inbox, WriteControl{}, 1000)
+	read := NewTarget(p.inbox, UpdateStatus, 1000)
+	write := NewTarget(p.inbox, WriteControl, 1000)
 	p.scheduler.addTarget(read)
 	p.scheduler.addTarget(write)
 
@@ -90,6 +71,10 @@ func (p *Process) run() error {
 			if err != nil {
 				log.Print(err)
 			}
+
+		case GetStatus:
+			asset := *p.asset
+			msg.(GetStatus).sender <- asset.Status()
 
 		case Stop:
 			go p.stop()

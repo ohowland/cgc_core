@@ -2,6 +2,7 @@ package ess
 
 import (
 	"encoding/json"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
@@ -9,6 +10,7 @@ import (
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
+	mutex   *sync.Mutex
 	pid     uuid.UUID
 	device  asset.Device
 	status  Status
@@ -71,6 +73,8 @@ func (a Asset) Status() Status {
 
 // SetControl is a setter for the ess.Asset control field
 func (a *Asset) SetControl(c Control) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.control = c
 }
 
@@ -81,6 +85,8 @@ func (a Asset) Control() Control {
 
 // SetDynamicConfig is a setter for the ess.Asset dynamic config field
 func (a *Asset) SetDynamicConfig(c DynamicConfig) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.config.Dynamic = c
 }
 
@@ -96,6 +102,8 @@ func (a *Asset) UpdateStatus() error {
 		return err
 	}
 
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.status = status.(Status)
 	return err
 }
@@ -121,7 +129,6 @@ func New(jsonConfig []byte, device asset.Device) (Asset, error) {
 
 	status := Status{}
 	control := Control{}
-
-	return Asset{PID, device, status, control, config}, err
+	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
 }
