@@ -5,35 +5,22 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 func main() {
 	log.Println("[starting]")
 	log.Println("[loading assets]")
-	assets, err := loadAssets()
+	_, err := loadAssets()
 	if err != nil {
 		panic(err)
 	}
-
-	log.Println("[launching processes]")
-	processes, err := launchAssets(assets)
-	if err != nil {
-		panic(err)
-	}
-
-	log.Println("[running]")
-	time.Sleep(time.Duration(10) * time.Second)
 
 	log.Println("[stopping]")
-	stopAssets(processes)
 	os.Exit(0)
 }
 
@@ -42,11 +29,13 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 
 	bus, err := virtualacbus.New("../../config/bus/virtualACBus.json")
 
-	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json", bus)
-	if err != nil {
-		return assets, err
-	}
-	assets[grid.PID()] = &grid
+	/*
+		grid, err := virtualgrid.New("../../config/asset/virtualGrid.json", bus)
+		if err != nil {
+			return assets, err
+		}
+		assets[grid.PID()] = &grid
+	*/
 
 	ess, err := virtualess.New("../../config/asset/virtualESS.json", bus)
 	if err != nil {
@@ -62,11 +51,13 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 		assets[pv.PID()] = &pv
 	*/
 
-	feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json", bus)
-	if err != nil {
-		return assets, err
-	}
-	assets[feeder.PID()] = &feeder
+	/*
+		feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json", bus)
+		if err != nil {
+			return assets, err
+		}
+		assets[feeder.PID()] = &feeder
+	*/
 
 	/*
 		relay, err := virtualrelay.New("../../config/asset/virtualRelay.json")
@@ -75,27 +66,6 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 		}
 	*/
 	return assets, nil
-}
-
-func launchAssets(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]chan interface{}, error) {
-	inboxes := make(map[uuid.UUID]chan interface{})
-	for _, a := range assets {
-		inboxes[a.PID()] = asset.StartProcess(a)
-	}
-
-	return inboxes, nil
-}
-
-func startAssets(assets map[uuid.UUID]chan interface{}) {
-	for _, inbox := range assets {
-		inbox <- asset.Start{}
-	}
-}
-
-func stopAssets(assets map[uuid.UUID]chan interface{}) {
-	for _, inbox := range assets {
-		inbox <- asset.Stop{}
-	}
 }
 
 type systemConfig struct {
