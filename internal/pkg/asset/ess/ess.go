@@ -2,22 +2,30 @@ package ess
 
 import (
 	"encoding/json"
+	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
+	mux     *sync.Mutex
 	pid     uuid.UUID
-	device  asset.Device
+	device  DeviceController
 	status  Status
 	control Control
 	config  Config
 }
 
+// DeviceController is the hardware abstraction layer
+type DeviceController interface {
+	ReadDeviceStatus(func(Status))
+	WriteDeviceControl(Control)
+}
+
 // Status is a data structure representing an architypical ESS status
 type Status struct {
+	Timestamp            int64
 	KW                   float64
 	KVAR                 float64
 	Hz                   float64
@@ -40,8 +48,7 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Static  StaticConfig  `json:"StaticConfig"`
-	Dynamic DynamicConfig `json:"DynamicConfig"`
+	Static StaticConfig `json:"StaticConfig"`
 }
 
 // StaticConfig is a data structure representing an architypical fixed ESS configuration
@@ -50,13 +57,6 @@ type StaticConfig struct { // Should this get transfered over to the specific cl
 	KWRated   float64 `json:"KWRated"`
 	KVARRated float64 `json:"KVARRated"`
 	KWHRated  float64 `json:"KWHRated"`
-}
-
-// DynamicConfig is a data structure representing an architypical adjustable ESS configuration
-type DynamicConfig struct { // TODO: Is this more of a DISPATCH config? Does this belong as an ESS dispatch module?
-	LowSOC    float64 `json:"LowSOC"`
-	HighSOC   float64 `json:"HighSOC"`
-	TargetSOC float64 `json:"TargetSOC"`
 }
 
 // PID is a getter for the ess.Asset status field
@@ -69,45 +69,33 @@ func (a Asset) Status() Status {
 	return a.status
 }
 
-// SetControl is a setter for the ess.Asset control field
-func (a *Asset) SetControl(c Control) {
-	a.control = c
-}
-
-// Control is a getter for the ess.Asset control field
-func (a Asset) Control() Control {
-	return a.control
-}
-
-// SetDynamicConfig is a setter for the ess.Asset dynamic config field
-func (a *Asset) SetDynamicConfig(c DynamicConfig) {
-	a.config.Dynamic = c
-}
-
-// StaticConfig is a getter for the ess.Asset static config field
-func (a Asset) StaticConfig() StaticConfig {
-	return a.config.Static
-}
-
 // UpdateStatus requests a physical device read and updates the ess.Asset status field
-func (a *Asset) UpdateStatus() error {
-	status, err := a.device.ReadDeviceStatus()
-	if err != nil {
-		return err
-	}
+func (a *Asset) UpdateStatus() {
+	go a.device.ReadDeviceStatus(a.setStatus)
+}
 
-	a.status = status.(Status)
-	return err
+func (a *Asset) setStatus(s Status) {
+	if a.filterTimestamp(s.Timestamp) {
+		a.mux.Lock()
+		defer a.mux.Unlock()
+		a.status = s
+	}
 }
 
 // WriteControl requests a physical device write of the data held in the GridAsset control field.
-func (a Asset) WriteControl() error {
-	err := a.device.WriteDeviceControl(a.control)
-	return err
+func (a Asset) WriteControl() {
+	go a.device.WriteDeviceControl(a.control)
+}
+
+// SetControl is a setter for the ess.Asset control field
+func (a *Asset) SetControl(c Control) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control = c
 }
 
 // New returns a configured Asset
-func New(jsonConfig []byte, device asset.Device) (Asset, error) {
+func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	config := Config{}
 	err := json.Unmarshal(jsonConfig, &config)
 	if err != nil {
@@ -121,7 +109,10 @@ func New(jsonConfig []byte, device asset.Device) (Asset, error) {
 
 	status := Status{}
 	control := Control{}
+	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
-	return Asset{PID, device, status, control, config}, err
+}
 
+func (a *Asset) filterTimestamp(timestamp int64) bool {
+	return timestamp > a.status.Timestamp
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/asset/pv/virtualpv"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
@@ -23,17 +24,20 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("[launching processes]")
-	processes, err := launchAssets(assets)
-	if err != nil {
-		panic(err)
+	ticker := time.NewTicker(1 * time.Second)
+	var i int
+	for {
+		<-ticker.C
+		for _, asset := range assets {
+			asset.UpdateStatus()
+		}
+		i++
+		if i > 10 {
+			break
+		}
 	}
 
-	log.Println("[running]")
-	time.Sleep(time.Duration(10) * time.Second)
-
 	log.Println("[stopping]")
-	stopAssets(processes)
 	os.Exit(0)
 }
 
@@ -54,13 +58,11 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	}
 	assets[ess.PID()] = &ess
 
-	/*
-		pv, err := virtualpv.New("../../config/asset/virtualPV.json")
-		if err != nil {
-			return assets, err
-		}
-		assets[pv.PID()] = &pv
-	*/
+	pv, err := virtualpv.New("../../config/asset/virtualPV.json", bus)
+	if err != nil {
+		return assets, err
+	}
+	assets[pv.PID()] = &pv
 
 	feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json", bus)
 	if err != nil {
@@ -68,34 +70,7 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	}
 	assets[feeder.PID()] = &feeder
 
-	/*
-		relay, err := virtualrelay.New("../../config/asset/virtualRelay.json")
-		if err != nil {
-			return assets, err
-		}
-	*/
 	return assets, nil
-}
-
-func launchAssets(assets map[uuid.UUID]asset.Asset) (map[uuid.UUID]chan interface{}, error) {
-	inboxes := make(map[uuid.UUID]chan interface{})
-	for _, a := range assets {
-		inboxes[a.PID()] = asset.StartProcess(a)
-	}
-
-	return inboxes, nil
-}
-
-func startAssets(assets map[uuid.UUID]chan interface{}) {
-	for _, inbox := range assets {
-		inbox <- asset.Start{}
-	}
-}
-
-func stopAssets(assets map[uuid.UUID]chan interface{}) {
-	for _, inbox := range assets {
-		inbox <- asset.Stop{}
-	}
 }
 
 type systemConfig struct {
