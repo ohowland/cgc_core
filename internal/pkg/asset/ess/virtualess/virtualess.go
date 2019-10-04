@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"log"
 	"reflect"
-	"sync"
 
 	"github.com/google/uuid"
 
@@ -14,7 +13,6 @@ import (
 
 // VirtualESS target
 type VirtualESS struct {
-	mutex     *sync.Mutex
 	pid       uuid.UUID
 	status    Status
 	control   Control
@@ -58,19 +56,19 @@ type Observers struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualESS) ReadDeviceStatus() (interface{}, error) {
-	err := a.read()
-	return a.Status(), err
+func (a *VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status) {
+	a.read()
+	setParentStatus(a.mapStatus()) // callback for to write parent status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualESS) WriteDeviceControl(c interface{}) error {
-	err := a.write()
-	return err
+func (a *VirtualESS) WriteDeviceControl(c ess.Control) {
+	a.mapControl(c)
+	a.write()
 }
 
 // Status maps ess.DeviceStatus to ess.Status
-func (a VirtualESS) Status() ess.Status {
+func (a VirtualESS) mapStatus() ess.Status {
 	// map deviceStatus to GridStatus
 	return ess.Status{
 		KW:                   a.status.KW,
@@ -86,7 +84,7 @@ func (a VirtualESS) Status() ess.Status {
 }
 
 // Control maps ess.Control to ess.DeviceControl
-func (a VirtualESS) Control(c ess.Control) {
+func (a VirtualESS) mapControl(c ess.Control) {
 
 	updatedControl := Control{
 		run:      c.Run,
@@ -101,8 +99,6 @@ func (a VirtualESS) Control(c ess.Control) {
 func (a *VirtualESS) read() error {
 	select {
 	case in := <-a.comm.incoming:
-		a.mutex.Lock()
-		defer a.mutex.Unlock()
 		a.status = in
 		//log.Printf("[VirtualESS: read status: %v]", in)
 	default:
@@ -193,8 +189,6 @@ func (a *VirtualESS) updateObservers(obs Observers) {
 	if a.status.Gridforming {
 		gridformer := <-obs.busObserver
 
-		a.mutex.Lock()
-		defer a.mutex.Unlock()
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR
 	}

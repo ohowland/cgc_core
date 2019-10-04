@@ -21,7 +21,6 @@ func TestReadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertStaticConfig := StaticConfig{"ESS", 20, 10, 0.6}
-	assertDynamicConfig := DynamicConfig{}
-	assertConfig := Config{Static: assertStaticConfig, Dynamic: assertDynamicConfig}
+	assertConfig := Config{Static: assertStaticConfig}
 	assert.Assert(t, testConfig == assertConfig)
 }
