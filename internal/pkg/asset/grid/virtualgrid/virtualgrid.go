@@ -22,6 +22,7 @@ type VirtualGrid struct {
 
 // Status data structure for the VirtualGrid
 type Status struct {
+	timestamp            int64
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
@@ -64,6 +65,7 @@ func (a VirtualGrid) WriteDeviceControl(c grid.Control) {
 func mapStatus(s Status) grid.Status {
 	// map deviceStatus to GridStatus
 	return grid.Status{
+		Timestamp:            s.timestamp,
 		KW:                   s.KW,
 		KVAR:                 s.KVAR,
 		PositiveRealCapacity: s.PositiveRealCapacity,
@@ -82,17 +84,16 @@ func mapControl(c grid.Control) Control {
 }
 
 func (a VirtualGrid) read() Status {
-	log.Println("[VirtualGrid-Device] READ")
+	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
-	log.Println("[VirtualGrid-Device] READ RESPONSE")
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	return <-a.comm.incoming
+	readStatus := <-a.comm.incoming
+	readStatus.timestamp = timestamp
+	return readStatus
 }
 
 func (a VirtualGrid) write() {
-	log.Println("[VirtualGrid-Device] WRITE")
 	fuzzing := rand.Intn(2000)
-	log.Println("[VirtualGrid-Device] WRITE RESPONSE")
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	a.comm.outgoing <- a.control
 }

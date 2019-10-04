@@ -3,6 +3,8 @@ package virtualpv
 import (
 	"io/ioutil"
 	"log"
+	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset/pv"
@@ -20,19 +22,17 @@ type VirtualPV struct {
 
 // Status data structure for the VirtualPV
 type Status struct {
-	KW     float64 `json:"KW"`
-	KVAR   float64 `json:"KVAR"`
-	Hz     float64 `json:"Hz"`
-	Volt   float64 `json:"Volt"`
-	Online bool    `json:"Online"`
+	timestamp int64
+	KW        float64 `json:"KW"`
+	KVAR      float64 `json:"KVAR"`
+	Hz        float64 `json:"Hz"`
+	Volt      float64 `json:"Volt"`
+	Online    bool    `json:"Online"`
 }
 
 // Control data structure for the VirtualPV
 type Control struct {
 	run bool
-}
-
-type Config struct {
 }
 
 // Comm data structure for the VirtualPV
@@ -46,60 +46,34 @@ type Observers struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualPV) ReadDeviceStatus() (interface{}, error) {
-	err := a.read()
-	return a.Status(), err
+func (a VirtualPV) ReadDeviceStatus(setParentStatus func(pv.Status)) {
+	a.status = a.read()
+	setParentStatus(mapStatus(a.status)) // callback for to write parent status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualPV) WriteDeviceControl(c interface{}) error {
-	err := a.write()
-	return err
+func (a VirtualPV) WriteDeviceControl(c pv.Control) {
+	a.control = mapControl(c)
+	a.write()
 }
 
-// Status maps grid.DeviceStatus to grid.Status
-func (a VirtualPV) Status() pv.Status {
-	// map deviceStatus to GridStatus
-	return pv.Status{
-		KW:     a.status.KW,
-		KVAR:   a.status.KVAR,
-		Volt:   a.status.Volt,
-		Hz:     a.status.Hz,
-		Online: a.status.Online,
-	}
+func (a VirtualPV) read() Status {
+	timestamp := time.Now().UnixNano()
+	fuzzing := rand.Intn(2000)
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	readStatus := <-a.comm.incoming
+	readStatus.timestamp = timestamp
+	return readStatus
 }
 
-// Control maps grid.Control to grid.DeviceControl
-func (a VirtualPV) Control(c pv.Control) {
-	// map GridControl params to deviceControl
-
-	updatedControl := Control{
-		run: c.RunRequest,
-	}
-
-	a.control = updatedControl
+func (a VirtualPV) write() {
+	fuzzing := rand.Intn(2000)
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	a.comm.outgoing <- a.control
 }
 
-func (a *VirtualPV) read() error {
-	select {
-	case in := <-a.comm.incoming:
-		a.status = in
-		//log.Printf("[VirtualESS: read status: %v]", in)
-	default:
-		log.Println("[VirtualPV: read failed]")
-	}
-	return nil
-}
-
-func (a *VirtualPV) write() error {
-	select {
-	case a.comm.outgoing <- a.control:
-		//log.Printf("[VirtualESS: write control: %v]", a.control)
-	default:
-		log.Println("[VirtualPV: write failed]")
-
-	}
-	return nil
+func (a *VirtualPV) updateObservers(obs Observers) {
+	obs.assetObserver <- mapSource(*a)
 }
 
 // New returns an initalized VirtualPV Asset; this is part of the Asset interface.
@@ -140,31 +114,7 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (pv.Asset, error) {
 	return pv.New(jsonConfig, device)
 }
 
-func virtualDeviceLoop(comm Comm, obs Observers) {
-	dev := &VirtualPV{} // The virtual 'hardware' device
-	//sm := &stateMachine{offState{}}
-	var ok bool
-	for {
-		select {
-		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
-			if !ok {
-				break
-			}
-		case comm.incoming <- dev.status: // read from 'hardware'
-			dev.updateObservers(obs)
-			//dev.status = sm.run(*dev)
-			//log.Printf("[VirtualESS-Device: state: %v]\n",
-			//reflect.TypeOf(sm.currentState).String())
-		}
-		log.Println("[VirtualESS-Device: shutdown]")
-	}
-}
-
-func (a *VirtualPV) updateObservers(obs Observers) {
-	obs.assetObserver <- a.asSource()
-}
-
-func (a VirtualPV) asSource() virtualacbus.Source {
+func mapSource(a VirtualPV) virtualacbus.Source {
 	return virtualacbus.Source{
 		PID:         a.pid,
 		Hz:          a.status.Hz,
@@ -172,5 +122,47 @@ func (a VirtualPV) asSource() virtualacbus.Source {
 		KW:          a.status.KW,
 		KVAR:        a.status.KVAR,
 		Gridforming: false,
+	}
+}
+
+// Status maps grid.DeviceStatus to grid.Status
+func mapStatus(s Status) pv.Status {
+	// map deviceStatus to GridStatus
+	return pv.Status{
+		Timestamp: s.timestamp,
+		KW:        s.KW,
+		KVAR:      s.KVAR,
+		Volt:      s.Volt,
+		Hz:        s.Hz,
+		Online:    s.Online,
+	}
+}
+
+// Control maps grid.Control to grid.DeviceControl
+func mapControl(c pv.Control) Control {
+	// map GridControl params to deviceControl
+	return Control{
+		run: c.RunRequest,
+	}
+}
+
+func virtualDeviceLoop(comm Comm, obs Observers) {
+	dev := &VirtualPV{} // The virtual 'hardware' device
+	//sm := &stateMachine{offState{}}
+	var ok bool
+loop:
+	for {
+		select {
+		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
+			if !ok {
+				break loop
+			}
+		case comm.incoming <- dev.status: // read from 'hardware'
+			dev.updateObservers(obs)
+			//dev.status = sm.run(*dev)
+			//log.Printf("[VirtualPV-Device: state: %v]\n",
+			//reflect.TypeOf(sm.currentState).String())
+		}
+		log.Println("[VirtualPV-Device] shutdown")
 	}
 }

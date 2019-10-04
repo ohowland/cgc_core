@@ -25,6 +25,7 @@ type DeviceController interface {
 
 // Status is a data structure representing an architypical Grid Intertie status
 type Status struct {
+	Timestamp            int64
 	KW                   float64
 	KVAR                 float64
 	Hz                   float64
@@ -69,9 +70,11 @@ func (a *Asset) UpdateStatus() {
 }
 
 func (a *Asset) setStatus(s Status) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.status = s
+	if a.filterTimestamp(s.Timestamp) {
+		a.mux.Lock()
+		defer a.mux.Unlock()
+		a.status = s
+	}
 }
 
 // WriteControl requests a physical device write of the data held in the GridAsset control field.
@@ -103,4 +106,8 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	control := Control{}
 	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
+}
+
+func (a *Asset) filterTimestamp(timestamp int64) bool {
+	return timestamp > a.status.Timestamp
 }

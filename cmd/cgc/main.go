@@ -10,6 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
+	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/asset/pv/virtualpv"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
@@ -43,13 +46,11 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 
 	bus, err := virtualacbus.New("../../config/bus/virtualACBus.json")
 
-	/*
-		grid, err := virtualgrid.New("../../config/asset/virtualGrid.json", bus)
-		if err != nil {
-			return assets, err
-		}
-		assets[grid.PID()] = &grid
-	*/
+	grid, err := virtualgrid.New("../../config/asset/virtualGrid.json", bus)
+	if err != nil {
+		return assets, err
+	}
+	assets[grid.PID()] = &grid
 
 	ess, err := virtualess.New("../../config/asset/virtualESS.json", bus)
 	if err != nil {
@@ -57,28 +58,18 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	}
 	assets[ess.PID()] = &ess
 
-	/*
-		pv, err := virtualpv.New("../../config/asset/virtualPV.json")
-		if err != nil {
-			return assets, err
-		}
-		assets[pv.PID()] = &pv
-	*/
+	pv, err := virtualpv.New("../../config/asset/virtualPV.json")
+	if err != nil {
+		return assets, err
+	}
+	assets[pv.PID()] = &pv
 
-	/*
-		feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json", bus)
-		if err != nil {
-			return assets, err
-		}
-		assets[feeder.PID()] = &feeder
-	*/
+	feeder, err := virtualfeeder.New("../../config/asset/virtualFeeder.json", bus)
+	if err != nil {
+		return assets, err
+	}
+	assets[feeder.PID()] = &feeder
 
-	/*
-		relay, err := virtualrelay.New("../../config/asset/virtualRelay.json")
-		if err != nil {
-			return assets, err
-		}
-	*/
 	return assets, nil
 }
 

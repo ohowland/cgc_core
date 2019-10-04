@@ -3,7 +3,8 @@ package virtualfeeder
 import (
 	"io/ioutil"
 	"log"
-	"reflect"
+	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -22,11 +23,12 @@ type VirtualFeeder struct {
 
 // Status data structure for the VirtualFeeder
 type Status struct {
-	KW     float64 `json:"KW"`
-	KVAR   float64 `json:"KVAR"`
-	Hz     float64 `json:"Hz"`
-	Volt   float64 `json:"Volts"`
-	Online bool    `json:"Online"`
+	timestamp int64
+	KW        float64 `json:"KW"`
+	KVAR      float64 `json:"KVAR"`
+	Hz        float64 `json:"Hz"`
+	Volt      float64 `json:"Volts"`
+	Online    bool    `json:"Online"`
 }
 
 // Control data structure for the VirtualFeeder
@@ -47,58 +49,50 @@ type Observers struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualFeeder) ReadDeviceStatus() (interface{}, error) {
-	err := a.read()
-	return a.Status(), err
+
+func (a VirtualFeeder) ReadDeviceStatus(setParentStatus func(feeder.Status)) {
+	a.status = a.read()
+	setParentStatus(mapStatus(a.status)) // callback for to write parent status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualFeeder) WriteDeviceControl(c interface{}) error {
-	err := a.write()
-	return err
+func (a VirtualFeeder) WriteDeviceControl(c feeder.Control) {
+	a.control = mapControl(c)
+	a.write()
 }
 
 // Status maps feeder.DeviceStatus to feeder.Status
-func (a VirtualFeeder) Status() feeder.Status {
+func mapStatus(s Status) feeder.Status {
 	return feeder.Status{
-		KW:     a.status.KW,
-		KVAR:   a.status.KVAR,
-		Hz:     a.status.Hz,
-		Volt:   a.status.Volt,
-		Online: a.status.Online,
+		Timestamp: s.timestamp,
+		KW:        s.KW,
+		KVAR:      s.KVAR,
+		Hz:        s.Hz,
+		Volt:      s.Volt,
+		Online:    s.Online,
 	}
 }
 
 // Control maps feeder.Control to feeder.DeviceControl
-func (a VirtualFeeder) Control(c feeder.Control) {
-
-	updatedControl := Control{
+func mapControl(c feeder.Control) Control {
+	return Control{
 		closeFeeder: c.CloseFeeder,
 	}
-
-	a.control = updatedControl
 }
 
-func (a *VirtualFeeder) read() error {
-	select {
-	case in := <-a.comm.incoming:
-		a.status = in
-		//log.Printf("[VirtualFeeder: read status: %v]", in)
-	default:
-		log.Println("[VirtualFeeder: read failed]")
-	}
-	return nil
+func (a *VirtualFeeder) read() Status {
+	timestamp := time.Now().UnixNano()
+	fuzzing := rand.Intn(2000)
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	readStatus := <-a.comm.incoming
+	readStatus.timestamp = timestamp
+	return readStatus
 }
 
-func (a *VirtualFeeder) write() error {
-	select {
-	case a.comm.outgoing <- a.control:
-		//log.Printf("[VirtualFeeder: write control: %v]", a.control)
-	default:
-		log.Println("[VirtualFeeder: write failed]")
-
-	}
-	return nil
+func (a *VirtualFeeder) write() {
+	fuzzing := rand.Intn(2000)
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	a.comm.outgoing <- a.control
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
@@ -117,11 +111,12 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (feeder.Asset, error)
 	device := VirtualFeeder{
 		pid: pid,
 		status: Status{
-			KW:     0,
-			KVAR:   0,
-			Hz:     0,
-			Volt:   0,
-			Online: false,
+			timestamp: 0,
+			KW:        0,
+			KVAR:      0,
+			Hz:        0,
+			Volt:      0,
+			Online:    false,
 		},
 		control: Control{
 			closeFeeder: false,
@@ -143,19 +138,21 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualFeeder{}
 	sm := &stateMachine{offState{}}
 	var ok bool
+loop:
 	for {
 		select {
-		case dev.control = <-comm.outgoing:
+		case dev.control, ok = <-comm.outgoing:
 			if !ok {
-				break
+				break loop
 			}
 		case comm.incoming <- dev.status:
 			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
-			log.Printf("[VirtualFeeder-Device: state: %v]\n",
-				reflect.TypeOf(sm.currentState).String())
+			//log.Printf("[VirtualFeeder-Device: state: %v]\n",
+			//	reflect.TypeOf(sm.currentState).String())
 		}
 	}
+	log.Println("[VirtualFeeder-Device] shutdown")
 }
 
 func (a *VirtualFeeder) updateObservers(obs Observers) {

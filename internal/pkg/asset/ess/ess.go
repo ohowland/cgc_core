@@ -82,10 +82,6 @@ func (a *Asset) setStatus(s Status) {
 	}
 }
 
-func (a *Asset) filterTimestamp(timestamp int64) bool {
-	return timestamp > a.status.Timestamp
-}
-
 // WriteControl requests a physical device write of the data held in the GridAsset control field.
 func (a Asset) WriteControl() {
 	go a.device.WriteDeviceControl(a.control)
@@ -115,4 +111,8 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	control := Control{}
 	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
+}
+
+func (a *Asset) filterTimestamp(timestamp int64) bool {
+	return timestamp > a.status.Timestamp
 }

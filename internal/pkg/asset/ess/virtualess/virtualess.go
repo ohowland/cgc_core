@@ -66,36 +66,9 @@ func (a VirtualESS) WriteDeviceControl(c ess.Control) {
 	a.write()
 }
 
-// Status maps ess.DeviceStatus to ess.Status
-func mapStatus(s Status) ess.Status {
-	// map deviceStatus to GridStatus
-	return ess.Status{
-		Timestamp:            s.timestamp,
-		KW:                   s.KW,
-		KVAR:                 s.KVAR,
-		Hz:                   s.Hz,
-		Volt:                 s.Volt,
-		SOC:                  s.SOC,
-		PositiveRealCapacity: s.PositiveRealCapacity,
-		NegativeRealCapacity: s.NegativeRealCapacity,
-		Gridforming:          s.Gridforming,
-		Online:               s.Online,
-	}
-}
-
-// Control maps ess.Control to ess.DeviceControl
-func mapControl(c ess.Control) Control {
-	return Control{
-		run:      c.Run,
-		kW:       c.KW,
-		kVAR:     c.KVAR,
-		gridForm: c.GridForm,
-	}
-}
-
 func (a VirtualESS) read() Status {
 	timestamp := time.Now().UnixNano()
-	fuzzing := rand.Intn(3000)
+	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus := <-a.comm.incoming
 	readStatus.timestamp = timestamp
@@ -106,6 +79,15 @@ func (a VirtualESS) write() {
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	a.comm.outgoing <- a.control
+}
+
+func (a *VirtualESS) updateObservers(obs Observers) {
+	obs.assetObserver <- mapSource(*a)
+	if a.status.Gridforming {
+		gridformer := <-obs.busObserver
+		a.status.KW = gridformer.KW
+		a.status.KVAR = gridformer.KVAR
+	}
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
@@ -124,6 +106,7 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (ess.Asset, error) {
 	device := VirtualESS{
 		pid: pid,
 		status: Status{
+			timestamp:            0,
 			KW:                   0,
 			KVAR:                 0,
 			Hz:                   0,
@@ -154,6 +137,44 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (ess.Asset, error) {
 	return ess.New(jsonConfig, device)
 }
 
+// Status maps ess.DeviceStatus to ess.Status
+func mapStatus(s Status) ess.Status {
+	// map deviceStatus to GridStatus
+	return ess.Status{
+		Timestamp:            s.timestamp,
+		KW:                   s.KW,
+		KVAR:                 s.KVAR,
+		Hz:                   s.Hz,
+		Volt:                 s.Volt,
+		SOC:                  s.SOC,
+		PositiveRealCapacity: s.PositiveRealCapacity,
+		NegativeRealCapacity: s.NegativeRealCapacity,
+		Gridforming:          s.Gridforming,
+		Online:               s.Online,
+	}
+}
+
+// Control maps ess.Control to ess.DeviceControl
+func mapControl(c ess.Control) Control {
+	return Control{
+		run:      c.Run,
+		kW:       c.KW,
+		kVAR:     c.KVAR,
+		gridForm: c.GridForm,
+	}
+}
+
+func mapSource(a VirtualESS) virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
+		Hz:          a.status.Hz,
+		Volt:        a.status.Volt,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: a.status.Gridforming,
+	}
+}
+
 func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualESS{} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
@@ -173,26 +194,6 @@ loop:
 		}
 	}
 	log.Println("[VirtualESS-Device] shutdown")
-}
-
-func (a *VirtualESS) updateObservers(obs Observers) {
-	obs.assetObserver <- a.asSource()
-	if a.status.Gridforming {
-		gridformer := <-obs.busObserver
-		a.status.KW = gridformer.KW
-		a.status.KVAR = gridformer.KVAR
-	}
-}
-
-func (a VirtualESS) asSource() virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         a.pid,
-		Hz:          a.status.Hz,
-		Volt:        a.status.Volt,
-		KW:          a.status.KW,
-		KVAR:        a.status.KVAR,
-		Gridforming: a.status.Gridforming,
-	}
 }
 
 type stateMachine struct {
