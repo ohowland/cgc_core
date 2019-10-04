@@ -1,5 +1,7 @@
 package dispatch
 
+type Dispatcher interface{}
+
 type StateController interface {
 	Standby(bool) error
 	Gridform(bool) error
