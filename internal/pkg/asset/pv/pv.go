@@ -14,6 +14,7 @@ type Asset struct {
 	device  DeviceController
 	status  Status
 	control Control
+	config  Config
 }
 
 // DeviceController is the hardware abstraction layer
