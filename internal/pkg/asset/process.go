@@ -11,6 +11,7 @@ type Process struct {
 	scheduler Scheduler
 	inbox     chan interface{}
 	state     ProcessState
+	observers []chan interface{}
 }
 
 // ProcessState encodes available actor states
@@ -31,10 +32,16 @@ type WriteControl struct{}
 
 // SetControl requests process to change asset control
 type SetControl struct {
+	sender  chan interface{}
 	payload interface{}
 }
 
-type GetStatus struct{}
+// PushStatus pushes the asset's status to all observers
+type PushStatus struct{}
+
+type Subscribe struct {
+	sender chan interface{}
+}
 
 // Start the process
 type Start struct{}
@@ -60,8 +67,10 @@ func (p *Process) initialize() chan interface{} {
 	p.scheduler = NewScheduler()
 	read := NewTarget(p.inbox, UpdateStatus{}, 1000)
 	write := NewTarget(p.inbox, WriteControl{}, 1000)
+	push := NewTarget(p.inbox, PushStatus{}, 1000)
 	p.scheduler.addTarget(read)
 	p.scheduler.addTarget(write)
+	p.scheduler.addTarget(push)
 
 	return p.inbox
 }
@@ -74,14 +83,18 @@ func (p *Process) run() error {
 		switch msg.(type) {
 
 		case UpdateStatus:
-			// mutex?
 			asset := *p.asset
 			asset.UpdateStatus()
 
 		case WriteControl:
-			// mutex?
 			asset := *p.asset
 			asset.WriteControl()
+
+		case PushStatus:
+			asset := *p.asset
+			for _, obs := range p.observers {
+				obs <- asset.Status()
+			}
 
 		case SetControl:
 			payload := msg.(SetControl).payload
@@ -91,9 +104,15 @@ func (p *Process) run() error {
 				log.Print(err)
 			}
 
+		case Subscribe:
+			subscriber := msg.(Subscribe).sender
+			p.observers = append(p.observers, subscriber)
+
 		case Stop:
 			go p.stop()
 			return nil
+
+		default:
 		}
 	}
 	return nil
