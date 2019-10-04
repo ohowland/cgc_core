@@ -11,6 +11,7 @@ type Relayer interface {
 }
 
 type ACBus struct {
+	name         string
 	pid          uuid.UUID
 	relay        Relayer
 	members      map[uuid.UUID]asset.Asset
@@ -20,6 +21,10 @@ type ACBus struct {
 type StaticConfig struct {
 	ratedVolt float64
 	ratedHz   float64
+}
+
+func (b ACBus) Name() string {
+	return b.name
 }
 
 func (b ACBus) PID() uuid.UUID {
@@ -46,6 +51,7 @@ func (b *ACBus) RemoveMember(a asset.Asset) {
 func NewBus(relay Relayer) ACBus {
 	id, _ := uuid.NewUUID()
 	return ACBus{
+		name:    "ACBus",
 		pid:     id,
 		relay:   relay,
 		members: make(map[uuid.UUID]asset.Asset),

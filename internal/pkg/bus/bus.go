@@ -6,6 +6,7 @@ import (
 
 // Bus is the interface for power system connectivity graph.
 type Bus interface {
+	Name() string
 	PID() uuid.UUID
 	Energized() bool
 }

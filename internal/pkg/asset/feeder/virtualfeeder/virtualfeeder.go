@@ -1,6 +1,7 @@
 package virtualfeeder
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
@@ -17,6 +19,7 @@ type VirtualFeeder struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
+	config    Config
 	comm      Comm
 	observers Observers
 }
@@ -36,7 +39,10 @@ type Control struct {
 	closeFeeder bool
 }
 
-type Config struct{}
+// StaticConfig is a data structure representing an architypical fixed feeder configuration
+type Config struct { // Should this get transfered over to the specific class?
+	Bus string `json:"Bus"`
+}
 
 // Comm data structure for the VirtualFeeder
 type Comm struct {
@@ -49,7 +55,6 @@ type Observers struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-
 func (a VirtualFeeder) ReadDeviceStatus(setParentStatus func(feeder.Status)) {
 	a.status = a.read()
 	setParentStatus(mapStatus(a.status)) // callback for to write parent status
@@ -96,11 +101,19 @@ func (a *VirtualFeeder) write() {
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
-func New(configPath string, bus virtualacbus.VirtualACBus) (feeder.Asset, error) {
+func New(configPath string, buses map[string]bus.Bus) (feeder.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return feeder.Asset{}, err
 	}
+
+	config := Config{}
+	err = json.Unmarshal(jsonConfig, &config)
+	if err != nil {
+		return feeder.Asset{}, err
+	}
+
+	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
 
 	// TODO: Troubleshoot why this cannot be set to 0 length
 	in := make(chan Status, 1)
@@ -121,6 +134,7 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (feeder.Asset, error)
 		control: Control{
 			closeFeeder: false,
 		},
+		config: config,
 		comm: Comm{
 			incoming: in,
 			outgoing: out,

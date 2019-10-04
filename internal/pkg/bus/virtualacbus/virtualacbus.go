@@ -12,6 +12,7 @@ const (
 )
 
 type VirtualACBus struct {
+	name             string
 	pid              uuid.UUID
 	members          map[uuid.UUID]asset.Asset
 	busObserver      chan Source
@@ -33,6 +34,10 @@ type Source struct {
 	KW          float64
 	KVAR        float64
 	Gridforming bool
+}
+
+func (b VirtualACBus) Name() string {
+	return b.name
 }
 
 func (b VirtualACBus) PID() uuid.UUID {

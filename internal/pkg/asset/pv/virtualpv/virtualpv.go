@@ -1,6 +1,7 @@
 package virtualpv
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset/pv"
+	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
@@ -16,6 +18,7 @@ type VirtualPV struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
+	config    Config
 	comm      Comm
 	observers Observers
 }
@@ -33,6 +36,11 @@ type Status struct {
 // Control data structure for the VirtualPV
 type Control struct {
 	run bool
+}
+
+// Config is a data structure representing an architypical fixed PV configuration
+type Config struct {
+	Bus string `json:"Bus"`
 }
 
 // Comm data structure for the VirtualPV
@@ -77,13 +85,20 @@ func (a *VirtualPV) updateObservers(obs Observers) {
 }
 
 // New returns an initalized VirtualPV Asset; this is part of the Asset interface.
-func New(configPath string, bus virtualacbus.VirtualACBus) (pv.Asset, error) {
+func New(configPath string, buses map[string]bus.Bus) (pv.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return pv.Asset{}, err
 	}
 
-	// TODO: Troubleshoot why this cannot be set to 0 length
+	config := Config{}
+	err = json.Unmarshal(jsonConfig, &config)
+	if err != nil {
+		return pv.Asset{}, err
+	}
+
+	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
+
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 

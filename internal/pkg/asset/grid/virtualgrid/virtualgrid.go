@@ -1,6 +1,7 @@
 package virtualgrid
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
+	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
@@ -16,6 +18,7 @@ type VirtualGrid struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
+	config    Config
 	comm      Comm
 	observers Observers
 }
@@ -36,6 +39,11 @@ type Status struct {
 // Control data structure for the VirtualGrid
 type Control struct {
 	closeIntertie bool
+}
+
+// Config differentiates between two types of configurations, static and dynamic
+type Config struct {
+	Bus string `json:"Bus"`
 }
 
 // Comm data structure for the VirtualGrid
@@ -99,11 +107,19 @@ func (a VirtualGrid) write() {
 }
 
 // New returns an initalized virtualbus Asset; this is part of the Asset interface.
-func New(configPath string, bus virtualacbus.VirtualACBus) (grid.Asset, error) {
+func New(configPath string, buses map[string]bus.Bus) (grid.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return grid.Asset{}, err
 	}
+
+	config := Config{}
+	err = json.Unmarshal(jsonConfig, &config)
+	if err != nil {
+		return grid.Asset{}, err
+	}
+
+	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
 
 	// TODO: Troubleshoot why this cannot be set to 0 length
 	in := make(chan Status, 1)
@@ -124,6 +140,7 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (grid.Asset, error) {
 		control: Control{
 			closeIntertie: false,
 		},
+		config: config,
 		comm: Comm{
 			incoming: in,
 			outgoing: out,

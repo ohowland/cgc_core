@@ -41,14 +41,12 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Static StaticConfig `json:"StaticConfig"`
+	Bus string `json:"Bus"`
 }
 
-// StaticConfig is a data structure representing an architypical fixed ESS configuration
+// StaticConfig is a data structure representing an architypical fixed feeder configuration
 type StaticConfig struct { // Should this get transfered over to the specific class?
-	Name      string  `json:"Name"`
-	KWRated   float64 `json:"KWRated"`
-	KVARRated float64 `json:"KVARRated"`
+
 }
 
 // PID is a getter for the ess.Asset status field

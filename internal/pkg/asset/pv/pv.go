@@ -14,7 +14,6 @@ type Asset struct {
 	device  DeviceController
 	status  Status
 	control Control
-	config  Config
 }
 
 // DeviceController is the hardware abstraction layer
@@ -39,14 +38,9 @@ type Control struct {
 	Enable     bool
 }
 
-// Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Static StaticConfig `json:"StaticConfig"`
-}
-
-// StaticConfig is a data structure representing an architypical fixed PV configuration
-type StaticConfig struct {
 	Name      string  `json:"Name"`
+	Bus       string  `json:"Bus"`
 	KWRated   float64 `json:"KwRated"`
 	KVARRated float64 `json:"KvarRated"`
 }
@@ -88,13 +82,13 @@ func (a *Asset) SetControl(c Control) {
 
 // New returns a configured pv.Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	config := Config{}
-	err := json.Unmarshal(jsonConfig, &config)
+	PID, err := uuid.NewUUID()
 	if err != nil {
 		return Asset{}, err
 	}
 
-	PID, err := uuid.NewUUID()
+	config := Config{}
+	err = json.Unmarshal(jsonConfig, &config)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -103,7 +97,6 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	control := Control{}
 
 	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
-
 }
 
 func (a *Asset) filterTimestamp(timestamp int64) bool {

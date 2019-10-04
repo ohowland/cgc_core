@@ -44,14 +44,10 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Static StaticConfig `json:"StaticConfig"`
-}
-
-// StaticConfig is a data structure representing an architypical fixed Grid Intertie configuration
-type StaticConfig struct {
 	Name      string  `json:"Name"`
-	KWRated   float64 `json:"KwRated"`
-	KVARRated float64 `json:"KvarRated"`
+	Bus       string  `json:"Bus"`
+	KWRated   float64 `json:"KWRated"`
+	KVARRated float64 `json:"KVARRated"`
 }
 
 // PID is a getter for the GridAsset status field

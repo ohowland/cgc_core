@@ -1,6 +1,7 @@
 package virtualess
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
@@ -17,6 +19,7 @@ type VirtualESS struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
+	config    Config
 	comm      Comm
 	observers Observers
 }
@@ -41,6 +44,11 @@ type Control struct {
 	kW       float64
 	kVAR     float64
 	gridForm bool
+}
+
+// Config differentiates between two types of configurations, static and dynamic
+type Config struct {
+	Bus string `json:"Bus"`
 }
 
 // Comm data structure for the VirtualESS
@@ -91,13 +99,20 @@ func (a *VirtualESS) updateObservers(obs Observers) {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, bus virtualacbus.VirtualACBus) (ess.Asset, error) {
+func New(configPath string, buses map[string]bus.Bus) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
 	}
 
-	// TODO: Troubleshoot why this cannot be set to 0 length
+	config := Config{}
+	err = json.Unmarshal(jsonConfig, &config)
+	if err != nil {
+		return ess.Asset{}, err
+	}
+
+	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
+
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 
@@ -123,6 +138,7 @@ func New(configPath string, bus virtualacbus.VirtualACBus) (ess.Asset, error) {
 			kVAR:     0,
 			gridForm: false,
 		},
+		config: config,
 		comm: Comm{
 			incoming: in,
 			outgoing: out,

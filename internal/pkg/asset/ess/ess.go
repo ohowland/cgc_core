@@ -46,14 +46,9 @@ type Control struct {
 	GridForm bool
 }
 
-// Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Static StaticConfig `json:"StaticConfig"`
-}
-
-// StaticConfig is a data structure representing an architypical fixed ESS configuration
-type StaticConfig struct { // Should this get transfered over to the specific class?
 	Name      string  `json:"Name"`
+	Bus       string  `json:"Bus"`
 	KWRated   float64 `json:"KWRated"`
 	KVARRated float64 `json:"KVARRated"`
 	KWHRated  float64 `json:"KWHRated"`
@@ -96,13 +91,13 @@ func (a *Asset) SetControl(c Control) {
 
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	config := Config{}
-	err := json.Unmarshal(jsonConfig, &config)
+	PID, err := uuid.NewUUID()
 	if err != nil {
 		return Asset{}, err
 	}
 
-	PID, err := uuid.NewUUID()
+	config := Config{}
+	err = json.Unmarshal(jsonConfig, &config)
 	if err != nil {
 		return Asset{}, err
 	}
