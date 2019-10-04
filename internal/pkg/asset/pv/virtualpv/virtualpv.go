@@ -163,6 +163,7 @@ loop:
 			//log.Printf("[VirtualPV-Device: state: %v]\n",
 			//reflect.TypeOf(sm.currentState).String())
 		}
-		log.Println("[VirtualPV-Device] shutdown")
 	}
+	log.Println("[VirtualPV-Device] shutdown")
+
 }

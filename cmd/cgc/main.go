@@ -58,7 +58,7 @@ func loadAssets() (map[uuid.UUID]asset.Asset, error) {
 	}
 	assets[ess.PID()] = &ess
 
-	pv, err := virtualpv.New("../../config/asset/virtualPV.json")
+	pv, err := virtualpv.New("../../config/asset/virtualPV.json", bus)
 	if err != nil {
 		return assets, err
 	}
