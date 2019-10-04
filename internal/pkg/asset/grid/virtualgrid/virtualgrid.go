@@ -3,7 +3,8 @@ package virtualgrid
 import (
 	"io/ioutil"
 	"log"
-	"reflect"
+	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
@@ -48,61 +49,52 @@ type Observers struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualGrid) ReadDeviceStatus() (interface{}, error) {
-	err := a.read()
-	return a.Status(), err
+func (a VirtualGrid) ReadDeviceStatus(setAssetStatus func(grid.Status)) {
+	a.status = a.read()
+	setAssetStatus(mapStatus(a.status))
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualGrid) WriteDeviceControl(c interface{}) error {
-	err := a.write()
-	return err
+func (a VirtualGrid) WriteDeviceControl(c grid.Control) {
+	a.control = mapControl(c)
+	a.write()
 }
 
 // Status maps grid.DeviceStatus to grid.Status
-func (a VirtualGrid) Status() grid.Status {
+func mapStatus(s Status) grid.Status {
 	// map deviceStatus to GridStatus
 	return grid.Status{
-		KW:                   a.status.KW,
-		KVAR:                 a.status.KVAR,
-		PositiveRealCapacity: a.status.PositiveRealCapacity,
-		NegativeRealCapacity: a.status.NegativeRealCapacity,
-		Synchronized:         a.status.Synchronized,
-		Online:               a.status.Online,
+		KW:                   s.KW,
+		KVAR:                 s.KVAR,
+		PositiveRealCapacity: s.PositiveRealCapacity,
+		NegativeRealCapacity: s.NegativeRealCapacity,
+		Synchronized:         s.Synchronized,
+		Online:               s.Online,
 	}
 }
 
 // Control maps grid.Control to grid.DeviceControl
-func (a VirtualGrid) Control(c grid.Control) {
+func mapControl(c grid.Control) Control {
 	// map GridControl params to deviceControl
-
-	updatedControl := Control{
+	return Control{
 		closeIntertie: c.CloseIntertie,
 	}
-
-	a.control = updatedControl
 }
 
-func (a *VirtualGrid) read() error {
-	select {
-	case in := <-a.comm.incoming:
-		a.status = in
-		//log.Printf("[VirtualGrid: read status: %v]", in)
-	default:
-		log.Println("[VirtualGrid: read failed]")
-	}
-	return nil
+func (a VirtualGrid) read() Status {
+	log.Println("[VirtualGrid-Device] READ")
+	fuzzing := rand.Intn(2000)
+	log.Println("[VirtualGrid-Device] READ RESPONSE")
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	return <-a.comm.incoming
 }
 
-func (a *VirtualGrid) write() error {
-	select {
-	case a.comm.outgoing <- a.control:
-		//log.Printf("[VirtualGrid: write control: %v]", a.control)
-	default:
-		log.Println("[VirtualGrid: write failed]")
-
-	}
-	return nil
+func (a VirtualGrid) write() {
+	log.Println("[VirtualGrid-Device] WRITE")
+	fuzzing := rand.Intn(2000)
+	log.Println("[VirtualGrid-Device] WRITE RESPONSE")
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	a.comm.outgoing <- a.control
 }
 
 // New returns an initalized virtualbus Asset; this is part of the Asset interface.
@@ -149,19 +141,21 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualGrid{}
 	sm := &stateMachine{offState{}}
 	var ok bool
+loop:
 	for {
 		select {
-		case dev.control = <-comm.outgoing:
+		case dev.control, ok = <-comm.outgoing:
 			if !ok {
-				break
+				break loop
 			}
 		case comm.incoming <- dev.status:
 			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
-			log.Printf("[VirtualGrid-Device: state: %v]\n",
-				reflect.TypeOf(sm.currentState).String())
+			//log.Printf("[VirtualGrid-Device: state: %v]\n",
+			//	reflect.TypeOf(sm.currentState).String())
 		}
 	}
+	log.Println("[VirtualGrid-Device] shutdown")
 }
 
 func (a *VirtualGrid) updateObservers(obs Observers) {

@@ -5,26 +5,27 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 )
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
+	mux     *sync.Mutex
 	pid     uuid.UUID
-	device  Device
+	device  DeviceController
 	status  Status
 	control Control
 	config  Config
 }
 
-type Device interface {
-	ReadDeviceStatus(func(ess.Status))
+// DeviceController is the hardware abstraction layer
+type DeviceController interface {
+	ReadDeviceStatus(func(Status))
 	WriteDeviceControl(Control)
 }
 
 // Status is a data structure representing an architypical ESS status
 type Status struct {
-	mutex                *sync.Mutex
+	Timestamp            int64
 	KW                   float64
 	KVAR                 float64
 	Hz                   float64
@@ -38,7 +39,6 @@ type Status struct {
 
 // Control is a data structure representing an architypical ESS control
 type Control struct {
-	mutex    *sync.Mutex
 	Run      bool
 	Enable   bool
 	KW       float64
@@ -69,33 +69,37 @@ func (a Asset) Status() Status {
 	return a.status
 }
 
-// SetControl is a setter for the ess.Asset control field
-func (a *Asset) SetControl(c Control) {
-	a.control.mutex.Lock()
-	defer a.control.mutex.Unlock()
-	a.control = c
-}
-
 // UpdateStatus requests a physical device read and updates the ess.Asset status field
-func (a *Asset) UpdateStatus() error {
+func (a *Asset) UpdateStatus() {
 	go a.device.ReadDeviceStatus(a.setStatus)
-	return nil
 }
 
 func (a *Asset) setStatus(s Status) {
-	a.control.mutex.Lock()
-	defer a.control.mutex.Unlock()
-	a.status = s
+	if a.filterTimestamp(s.Timestamp) {
+		a.mux.Lock()
+		defer a.mux.Unlock()
+		a.status = s
+	}
+}
+
+func (a *Asset) filterTimestamp(timestamp int64) bool {
+	return timestamp > a.status.Timestamp
 }
 
 // WriteControl requests a physical device write of the data held in the GridAsset control field.
-func (a Asset) WriteControl() error {
+func (a Asset) WriteControl() {
 	go a.device.WriteDeviceControl(a.control)
-	return nil
+}
+
+// SetControl is a setter for the ess.Asset control field
+func (a *Asset) SetControl(c Control) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control = c
 }
 
 // New returns a configured Asset
-func New(jsonConfig []byte, device Device) (Asset, error) {
+func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	config := Config{}
 	err := json.Unmarshal(jsonConfig, &config)
 	if err != nil {
@@ -107,12 +111,8 @@ func New(jsonConfig []byte, device Device) (Asset, error) {
 		return Asset{}, err
 	}
 
-	status := Status{
-		mutex: &sync.Mutex{},
-	}
-	control := Control{
-		mutex: &sync.Mutex{},
-	}
-	return Asset{PID, device, status, control, config}, err
+	status := Status{}
+	control := Control{}
+	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
 }

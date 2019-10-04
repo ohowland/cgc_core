@@ -3,7 +3,8 @@ package virtualess
 import (
 	"io/ioutil"
 	"log"
-	"reflect"
+	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -22,6 +23,7 @@ type VirtualESS struct {
 
 // Status data structure for the VirtualESS
 type Status struct {
+	timestamp            int64
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
@@ -41,9 +43,6 @@ type Control struct {
 	gridForm bool
 }
 
-type Config struct {
-}
-
 // Comm data structure for the VirtualESS
 type Comm struct {
 	incoming chan Status
@@ -56,66 +55,57 @@ type Observers struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a *VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status) {
-	a.read()
-	setParentStatus(a.mapStatus()) // callback for to write parent status
+func (a VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status)) {
+	a.status = a.read()
+	setParentStatus(mapStatus(a.status)) // callback for to write parent status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a *VirtualESS) WriteDeviceControl(c ess.Control) {
-	a.mapControl(c)
+func (a VirtualESS) WriteDeviceControl(c ess.Control) {
+	a.control = mapControl(c)
 	a.write()
 }
 
 // Status maps ess.DeviceStatus to ess.Status
-func (a VirtualESS) mapStatus() ess.Status {
+func mapStatus(s Status) ess.Status {
 	// map deviceStatus to GridStatus
 	return ess.Status{
-		KW:                   a.status.KW,
-		KVAR:                 a.status.KVAR,
-		Hz:                   a.status.Hz,
-		Volt:                 a.status.Volt,
-		SOC:                  a.status.SOC,
-		PositiveRealCapacity: a.status.PositiveRealCapacity,
-		NegativeRealCapacity: a.status.NegativeRealCapacity,
-		Gridforming:          a.status.Gridforming,
-		Online:               a.status.Online,
+		Timestamp:            s.timestamp,
+		KW:                   s.KW,
+		KVAR:                 s.KVAR,
+		Hz:                   s.Hz,
+		Volt:                 s.Volt,
+		SOC:                  s.SOC,
+		PositiveRealCapacity: s.PositiveRealCapacity,
+		NegativeRealCapacity: s.NegativeRealCapacity,
+		Gridforming:          s.Gridforming,
+		Online:               s.Online,
 	}
 }
 
 // Control maps ess.Control to ess.DeviceControl
-func (a VirtualESS) mapControl(c ess.Control) {
-
-	updatedControl := Control{
+func mapControl(c ess.Control) Control {
+	return Control{
 		run:      c.Run,
 		kW:       c.KW,
 		kVAR:     c.KVAR,
 		gridForm: c.GridForm,
 	}
-
-	a.control = updatedControl
 }
 
-func (a *VirtualESS) read() error {
-	select {
-	case in := <-a.comm.incoming:
-		a.status = in
-		//log.Printf("[VirtualESS: read status: %v]", in)
-	default:
-		log.Println("[VirtualESS: read failed]")
-	}
-	return nil
+func (a VirtualESS) read() Status {
+	timestamp := time.Now().UnixNano()
+	fuzzing := rand.Intn(3000)
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	readStatus := <-a.comm.incoming
+	readStatus.timestamp = timestamp
+	return readStatus
 }
 
-func (a VirtualESS) write() error {
-	select {
-	case a.comm.outgoing <- a.control:
-		//log.Printf("[VirtualESS: write control: %v]", a.control)
-	default:
-		log.Println("[VirtualESS: write failed]")
-
-	}
-	return nil
+func (a VirtualESS) write() {
+	fuzzing := rand.Intn(2000)
+	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+	a.comm.outgoing <- a.control
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
@@ -168,27 +158,27 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 	dev := &VirtualESS{} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
 	var ok bool
+loop:
 	for {
 		select {
 		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
 			if !ok {
-				break
+				break loop
 			}
 		case comm.incoming <- dev.status: // read from 'hardware'
 			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
-			log.Printf("[VirtualESS-Device: state: %v]\n",
-				reflect.TypeOf(sm.currentState).String())
+			//log.Printf("[VirtualESS-Device: state: %v]\n",
+			//	reflect.TypeOf(sm.currentState).String())
 		}
 	}
-	//log.Println("[VirtualESS-Device: shutdown]")
+	log.Println("[VirtualESS-Device] shutdown")
 }
 
 func (a *VirtualESS) updateObservers(obs Observers) {
 	obs.assetObserver <- a.asSource()
 	if a.status.Gridforming {
 		gridformer := <-obs.busObserver
-
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR
 	}

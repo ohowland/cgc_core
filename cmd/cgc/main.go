@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
@@ -15,9 +16,22 @@ import (
 func main() {
 	log.Println("[starting]")
 	log.Println("[loading assets]")
-	_, err := loadAssets()
+	assets, err := loadAssets()
 	if err != nil {
 		panic(err)
+	}
+
+	ticker := time.NewTicker(1 * time.Second)
+	var i int
+	for {
+		<-ticker.C
+		for _, asset := range assets {
+			asset.UpdateStatus()
+		}
+		i++
+		if i > 10 {
+			break
+		}
 	}
 
 	log.Println("[stopping]")
