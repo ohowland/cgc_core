@@ -48,7 +48,7 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Bus string `json:"Bus"`
+	bus bus.Bus
 }
 
 // Comm data structure for the VirtualESS
@@ -105,13 +105,16 @@ func New(configPath string, buses map[string]bus.Bus) (ess.Asset, error) {
 		return ess.Asset{}, err
 	}
 
-	config := Config{}
+	config := struct {
+		Bus string `json:"Bus"`
+	}{""}
+
 	err = json.Unmarshal(jsonConfig, &config)
 	if err != nil {
 		return ess.Asset{}, err
 	}
 
-	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
+	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
 
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
@@ -138,18 +141,16 @@ func New(configPath string, buses map[string]bus.Bus) (ess.Asset, error) {
 			kVAR:     0,
 			gridForm: false,
 		},
-		config: config,
+		config: Config{
+			bus: bus,
+		},
 		comm: Comm{
 			incoming: in,
 			outgoing: out,
 		},
-		observers: Observers{
-			assetObserver: bus.AssetObserver(),
-			busObserver:   bus.BusObserver(),
-		},
 	}
 
-	go virtualDeviceLoop(device.comm, device.observers)
+	device.startVirtualDeviceLoop()
 	return ess.New(jsonConfig, device)
 }
 
@@ -191,7 +192,24 @@ func mapSource(a VirtualESS) virtualacbus.Source {
 	}
 }
 
+func (a *VirtualESS) startVirtualDeviceLoop() {
+
+	bus := a.config.bus.(*virtualacbus.VirtualACBus)
+	observers := Observers{
+		assetObserver: bus.AssetObserver(),
+		busObserver:   bus.BusObserver(),
+	}
+
+	go virtualDeviceLoop(a.comm, observers)
+}
+
+func (a VirtualESS) stopVirtualDeviceLoop() {
+	close(a.observers.assetObserver)
+	close(a.comm.outgoing)
+}
+
 func virtualDeviceLoop(comm Comm, obs Observers) {
+	defer close(comm.incoming)
 	dev := &VirtualESS{} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
 	var ok bool

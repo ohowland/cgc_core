@@ -4,7 +4,9 @@ console.log('opened websocket');
 socket.addEventListener('message', function (event) {
     console.log('Message from server ', event.data);
     var msg = JSON.parse(event.data)
-
     var name = "." + msg.asset
-    $(name).text(event.data)
+    $(name + "-name").text(msg.asset)
+    $(name + "-kw").text(msg.kw)
+    $(name + "-kvar").text(msg.kvar)
+
 });

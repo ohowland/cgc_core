@@ -97,7 +97,7 @@ func New(configPath string, buses map[string]bus.Bus) (pv.Asset, error) {
 		return pv.Asset{}, err
 	}
 
-	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
+	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
 
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)

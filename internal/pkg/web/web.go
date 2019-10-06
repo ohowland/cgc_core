@@ -58,7 +58,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 func pingMessages() {
 	// send status messages to client
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(500 * time.Millisecond)
 	assets := []string{"ess", "grid", "feeder"}
 	for range ticker.C {
 		kw := strconv.Itoa(rand.Intn(100))

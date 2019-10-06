@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,31 +17,40 @@ import (
 )
 
 func main() {
-	log.Println("[starting]")
-	log.Println("[loading assets]")
-	busses, err := buildBusses()
-	assets, err := buildAssets(busses)
+	log.Println("Starting CGC v0.1")
+
+	log.Println("Building buses")
+	buses, err := buildBuses()
 	if err != nil {
 		panic(err)
 	}
+
+	log.Println("[Building assets]")
+	assets, err := buildAssets(buses)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Println("Starting update loops")
 	launchUpdateLoop(assets)
 
 	//composites, err := buildComposites(assets)
-
 	//launchDispatch(assets)
 	//launchHMI(assets)
 
-	log.Println("[stopping]")
-	os.Exit(0)
+	log.Println("Stopping system")
 }
 
 func buildBuses() (map[string]bus.Bus, error) {
 	buses := make(map[string]bus.Bus)
+
 	bus, err := virtualacbus.New("./config/bus/virtualACBus.json")
+	if err != nil {
+		return buses, err
+	}
+	buses[bus.Name()] = &bus
 
-	busses[bus.Name()] = &bus
-
-	return busses, err
+	return buses, err
 }
 
 func buildAssets(buses map[string]bus.Bus) (map[uuid.UUID]asset.Asset, error) {
@@ -82,6 +90,7 @@ func launchUpdateLoop(assets map[uuid.UUID]asset.Asset) error {
 		<-ticker.C
 		for _, asset := range assets {
 			asset.UpdateStatus()
+			asset.WriteControl()
 		}
 		i++
 		if i > 10 {

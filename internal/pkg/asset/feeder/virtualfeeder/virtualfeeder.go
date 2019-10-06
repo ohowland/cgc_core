@@ -113,7 +113,7 @@ func New(configPath string, buses map[string]bus.Bus) (feeder.Asset, error) {
 		return feeder.Asset{}, err
 	}
 
-	bus := buses[config.Bus].(virtualacbus.VirtualACBus)
+	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
 
 	// TODO: Troubleshoot why this cannot be set to 0 length
 	in := make(chan Status, 1)
