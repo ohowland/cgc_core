@@ -9,6 +9,8 @@ type Bus interface {
 	Name() string
 	PID() uuid.UUID
 	Energized() bool
+	Hz() float64
+	Volt() float64
 }
 
 /*

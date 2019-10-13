@@ -112,11 +112,12 @@ func (a Asset) WriteControl() {
 	go a.device.WriteDeviceControl(control)
 }
 
-// PID is a getter for the ess.Asset status field
+// PID is a getter for the asset PID
 func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
+// Name is a getter for the asset Name
 func (a Asset) Name() string {
 	return a.config.Name
 }

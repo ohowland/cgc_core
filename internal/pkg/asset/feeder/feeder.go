@@ -5,11 +5,12 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // Asset is a data structure for an Feeder Asset
 type Asset struct {
-	mux     *sync.Mutex
+	mux     sync.Mutex
 	pid     uuid.UUID
 	device  DeviceController
 	status  Status
@@ -20,7 +21,7 @@ type Asset struct {
 // DeviceController is the hardware abstraction layer
 type DeviceController interface {
 	ReadDeviceStatus(func(Status))
-	WriteDeviceControl(Control)
+	WriteDeviceControl(MachineControl)
 }
 
 // Status is a data structure representing an architypical Feeder status
@@ -35,8 +36,20 @@ type Status struct {
 
 // Control is a data structure representing an architypical Feeder control
 type Control struct {
+	dispatch    MachineControl
+	operator    MachineControl
+	supervisory SupervisoryControl
+}
+
+// MachineControl is a data structure representing an architypical Feeder control
+type MachineControl struct {
+	mux         sync.Mutex
 	CloseFeeder bool
-	Enable      bool
+}
+
+type SupervisoryControl struct {
+	Enable bool
+	Manual bool
 }
 
 // Config differentiates between two types of configurations, static and dynamic
@@ -45,46 +58,6 @@ type Config struct {
 	Bus       string  `json:"Bus"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
-}
-
-// StaticConfig is a data structure representing an architypical fixed feeder configuration
-type StaticConfig struct { // Should this get transfered over to the specific class?
-
-}
-
-// PID is a getter for the ess.Asset status field
-func (a Asset) PID() uuid.UUID {
-	return a.pid
-}
-
-// Status is a getter for the ess.Asset status field
-func (a Asset) Status() Status {
-	return a.status
-}
-
-// UpdateStatus requests a physical device read and updates the ess.Asset status field
-func (a *Asset) UpdateStatus() {
-	go a.device.ReadDeviceStatus(a.setStatus)
-}
-
-func (a *Asset) setStatus(s Status) {
-	if a.filterTimestamp(s.Timestamp) {
-		a.mux.Lock()
-		defer a.mux.Unlock()
-		a.status = s
-	}
-}
-
-// SetControl is a setter for the ess.Asset control field
-func (a *Asset) SetControl(c Control) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.control = c
-}
-
-// WriteControl requests a physical device write of the data held in the GridAsset control field.
-func (a Asset) WriteControl() {
-	go a.device.WriteDeviceControl(a.control)
 }
 
 // New returns a configured Asset
@@ -103,11 +76,40 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	status := Status{}
 	control := Control{}
 
-	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
+	return Asset{sync.Mutex{}, PID, device, status, control, config}, err
 }
 
-func (a *Asset) filterTimestamp(timestamp int64) bool {
-	return timestamp > a.status.Timestamp
+// UpdateStatus requests a physical device read and updates the ess.Asset status field
+func (a *Asset) UpdateStatus() {
+	go a.device.ReadDeviceStatus(a.setStatus)
+}
+
+func (a *Asset) setStatus(s Status) {
+	if s.Timestamp > a.status.Timestamp {
+		a.mux.Lock()
+		defer a.mux.Unlock()
+		a.status = s
+	}
+}
+
+// WriteControl requests a physical device write of the data held in the GridAsset control field.
+func (a Asset) WriteControl() {
+	var control MachineControl
+	if a.control.supervisory.Manual {
+		a.control.operator.mux.Lock()
+		defer a.control.operator.mux.Unlock()
+		control = a.control.operator
+	} else {
+		a.control.dispatch.mux.Lock()
+		defer a.control.dispatch.mux.Unlock()
+		control = a.control.dispatch
+	}
+	go a.device.WriteDeviceControl(control)
+}
+
+// PID is a getter for the ess.Asset status field
+func (a Asset) PID() uuid.UUID {
+	return a.pid
 }
 
 func (a Asset) Name() string {
@@ -115,15 +117,37 @@ func (a Asset) Name() string {
 }
 
 func (a Asset) KW() float64 {
-	return a.Status().KW
+	return a.status.KW
 }
 
 func (a Asset) KVAR() float64 {
-	return a.Status().KVAR
+	return a.status.KVAR
 }
 
-func (a *Asset) RunCmd(run bool) {
+func (a *Asset) DispatchControlHandle() asset.MachineControl {
+	return &a.control.dispatch
+}
+
+func (a *Asset) OperatorControlHandle() asset.MachineControl {
+	return &a.control.operator
+}
+
+// KWCmd sets the asset's real power setpoint
+func (a *MachineControl) KWCmd(kw float64) {}
+
+// KVARCmd sets the asset's reactive power setpoint
+func (a *MachineControl) KVARCmd(kvar float64) {}
+
+// RunCmd sets the asset's run request state
+func (a *MachineControl) RunCmd(run bool) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control.CloseFeeder = run
+	a.CloseFeeder = run
+}
+
+// GridformCmd sets the asset's gridform request state
+func (a *MachineControl) GridformCmd(gridform bool) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.CloseFeeder = gridform
 }

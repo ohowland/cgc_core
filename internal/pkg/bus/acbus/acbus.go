@@ -31,6 +31,14 @@ func (b ACBus) PID() uuid.UUID {
 	return b.pid
 }
 
+func (b ACBus) Hz() float64 {
+	return b.relay.Hz()
+}
+
+func (b ACBus) Volt() float64 {
+	return b.relay.Volt()
+}
+
 func (b ACBus) Energized() bool {
 	voltThreshold := b.staticConfig.ratedVolt * 0.5
 	hzThreshold := b.staticConfig.ratedHz * 0.5

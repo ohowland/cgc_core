@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +44,7 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Bus string `json:"Bus"`
+	Bus bus.Bus
 }
 
 // Comm data structure for the VirtualGrid
@@ -64,31 +65,9 @@ func (a VirtualGrid) ReadDeviceStatus(setAssetStatus func(grid.Status)) {
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualGrid) WriteDeviceControl(c grid.Control) {
+func (a VirtualGrid) WriteDeviceControl(c grid.MachineControl) {
 	a.control = mapControl(c)
 	a.write()
-}
-
-// Status maps grid.DeviceStatus to grid.Status
-func mapStatus(s Status) grid.Status {
-	// map deviceStatus to GridStatus
-	return grid.Status{
-		Timestamp:            s.timestamp,
-		KW:                   s.KW,
-		KVAR:                 s.KVAR,
-		PositiveRealCapacity: s.PositiveRealCapacity,
-		NegativeRealCapacity: s.NegativeRealCapacity,
-		Synchronized:         s.Synchronized,
-		Online:               s.Online,
-	}
-}
-
-// Control maps grid.Control to grid.DeviceControl
-func mapControl(c grid.Control) Control {
-	// map GridControl params to deviceControl
-	return Control{
-		closeIntertie: c.CloseIntertie,
-	}
 }
 
 func (a VirtualGrid) read() Status {
@@ -101,9 +80,16 @@ func (a VirtualGrid) read() Status {
 }
 
 func (a VirtualGrid) write() {
-	fuzzing := rand.Intn(2000)
-	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	a.comm.outgoing <- a.control
+}
+
+func (a *VirtualGrid) updateObservers(obs Observers) {
+	obs.assetObserver <- mapSource(*a)
+	if a.status.Online {
+		gridformer := <-obs.busObserver
+		a.status.KW = gridformer.KW
+		a.status.KVAR = gridformer.KVAR
+	}
 }
 
 // New returns an initalized virtualbus Asset; this is part of the Asset interface.
@@ -113,7 +99,10 @@ func New(configPath string, buses map[string]bus.Bus) (grid.Asset, error) {
 		return grid.Asset{}, err
 	}
 
-	config := Config{}
+	config := struct {
+		Bus string `json:"Bus"`
+	}{""}
+
 	err = json.Unmarshal(jsonConfig, &config)
 	if err != nil {
 		return grid.Asset{}, err
@@ -140,23 +129,70 @@ func New(configPath string, buses map[string]bus.Bus) (grid.Asset, error) {
 		control: Control{
 			closeIntertie: false,
 		},
-		config: config,
+		config: Config{
+			Bus: bus,
+		},
 		comm: Comm{
 			incoming: in,
 			outgoing: out,
 		},
-		observers: Observers{
-			assetObserver: bus.AssetObserver(),
-			busObserver:   bus.BusObserver(),
-		},
 	}
 
-	go virtualDeviceLoop(device.comm, device.observers)
+	device.startVirtualDeviceLoop()
 	return grid.New(jsonConfig, device)
 }
 
-func virtualDeviceLoop(comm Comm, obs Observers) {
-	dev := &VirtualGrid{}
+// Status maps grid.DeviceStatus to grid.Status
+func mapStatus(s Status) grid.Status {
+	// map deviceStatus to GridStatus
+	return grid.Status{
+		Timestamp:            s.timestamp,
+		KW:                   s.KW,
+		KVAR:                 s.KVAR,
+		PositiveRealCapacity: s.PositiveRealCapacity,
+		NegativeRealCapacity: s.NegativeRealCapacity,
+		Synchronized:         s.Synchronized,
+		Online:               s.Online,
+	}
+}
+
+// Control maps grid.Control to grid.DeviceControl
+func mapControl(c grid.MachineControl) Control {
+	// map GridControl params to deviceControl
+	return Control{
+		closeIntertie: c.CloseIntertie,
+	}
+}
+
+func mapSource(a VirtualGrid) virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
+		Hz:          a.status.Hz,
+		Volt:        a.status.Volt,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: a.status.Online,
+	}
+}
+
+func (a *VirtualGrid) startVirtualDeviceLoop() {
+	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
+	observers := Observers{
+		assetObserver: bus.AssetObserver(),
+		busObserver:   bus.BusObserver(),
+	}
+
+	go virtualDeviceLoop(a.pid, a.comm, observers)
+}
+
+func (a VirtualGrid) stopVirtualDeviceLoop() {
+	close(a.observers.assetObserver)
+	close(a.comm.outgoing)
+}
+
+func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs Observers) {
+	defer close(comm.incoming)
+	dev := &VirtualGrid{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
 loop:
@@ -169,31 +205,9 @@ loop:
 		case comm.incoming <- dev.status:
 			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
-			//log.Printf("[VirtualGrid-Device: state: %v]\n",
-			//	reflect.TypeOf(sm.currentState).String())
 		}
 	}
 	log.Println("[VirtualGrid-Device] shutdown")
-}
-
-func (a *VirtualGrid) updateObservers(obs Observers) {
-	obs.assetObserver <- a.asSource()
-	if a.status.Online {
-		gridformer := <-obs.busObserver
-		a.status.KW = gridformer.KW
-		a.status.KVAR = gridformer.KVAR
-	}
-}
-
-func (a VirtualGrid) asSource() virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         a.pid,
-		Hz:          a.status.Hz,
-		Volt:        a.status.Volt,
-		KW:          a.status.KW,
-		KVAR:        a.status.KVAR,
-		Gridforming: a.status.Online,
-	}
 }
 
 type stateMachine struct {
@@ -216,14 +230,18 @@ func (s offState) action(dev VirtualGrid) Status {
 	return Status{
 		KW:                   0,
 		KVAR:                 0,
+		Hz:                   0,
+		Volt:                 0,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualGrid
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualGrid
-		Synchronized:         false,
+		Synchronized:         true,
 		Online:               false,
 	}
 }
 func (s offState) transition(dev VirtualGrid) state {
 	if dev.control.closeIntertie == true {
+		log.Printf("VirtualGrid-Device: state: %v\n",
+			reflect.TypeOf(onState{}).String())
 		return onState{}
 	}
 	return offState{}
@@ -235,8 +253,10 @@ func (s onState) action(dev VirtualGrid) Status {
 	return Status{
 		KW:                   dev.status.KW,   // TODO: Link to virtual system model
 		KVAR:                 dev.status.KVAR, // TODO: Link to virtual system model
-		PositiveRealCapacity: 10,              // TODO: Get Config into VirtualGrid
-		NegativeRealCapacity: 10,              // TODO: Get Config into VirtualGrid
+		Hz:                   60,
+		Volt:                 480,
+		PositiveRealCapacity: 10, // TODO: Get Config into VirtualGrid
+		NegativeRealCapacity: 10, // TODO: Get Config into VirtualGrid
 		Synchronized:         true,
 		Online:               true,
 	}
@@ -244,6 +264,8 @@ func (s onState) action(dev VirtualGrid) Status {
 
 func (s onState) transition(dev VirtualGrid) state {
 	if dev.control.closeIntertie == false {
+		log.Printf("VirtualGrid-Device: state: %v\n",
+			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}
 	return onState{}

@@ -1,5 +1,5 @@
 {
-    "Name": "Virtual Grid Intertie",
+    "Name": "grid",
     "Bus": "Virtual Bus",
     "RatedKW": 20,
     "RatedKVAR": 10

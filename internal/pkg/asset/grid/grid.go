@@ -5,11 +5,12 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // Asset is a datastructure for an Energy Storage System Asset
 type Asset struct {
-	mux     *sync.Mutex
+	mux     sync.Mutex
 	pid     uuid.UUID
 	device  DeviceController
 	status  Status
@@ -20,7 +21,7 @@ type Asset struct {
 // DeviceController is the hardware abstraction layer
 type DeviceController interface {
 	ReadDeviceStatus(func(Status))
-	WriteDeviceControl(Control)
+	WriteDeviceControl(MachineControl)
 }
 
 // Status is a data structure representing an architypical Grid Intertie status
@@ -38,14 +39,19 @@ type Status struct {
 
 // Control is a data structure representing an architypical Grid Intertie control
 type Control struct {
+	dispatch    MachineControl
+	operator    MachineControl
+	supervisory SupervisoryControl
+}
+
+type MachineControl struct {
+	mux           sync.Mutex
 	CloseIntertie bool
-	Enable        bool
 }
 
 type SupervisoryControl struct {
-	mux    sync.Mutex
-	enable bool
-	manual bool
+	Enable bool
+	Manual bool
 }
 
 // Config differentiates between two types of configurations, static and dynamic
@@ -71,18 +77,8 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 	status := Status{}
 	control := Control{}
-	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
+	return Asset{sync.Mutex{}, PID, device, status, control, config}, err
 
-}
-
-// PID is a getter for the GridAsset status field
-func (a Asset) PID() uuid.UUID {
-	return a.pid
-}
-
-// Status is a getter for the GridAsset status field
-func (a Asset) Status() Status {
-	return a.status
 }
 
 // UpdateStatus requests a physical device read and updates the GridAsset status field
@@ -91,7 +87,7 @@ func (a *Asset) UpdateStatus() {
 }
 
 func (a *Asset) setStatus(s Status) {
-	if a.filterTimestamp(s.Timestamp) {
+	if s.Timestamp > a.status.Timestamp { // mux before?
 		a.mux.Lock()
 		defer a.mux.Unlock()
 		a.status = s
@@ -100,18 +96,22 @@ func (a *Asset) setStatus(s Status) {
 
 // WriteControl requests a physical device write of the data held in the GridAsset control field.
 func (a Asset) WriteControl() {
-	go a.device.WriteDeviceControl(a.control)
+	var control MachineControl
+	if a.control.supervisory.Manual {
+		a.control.operator.mux.Lock()
+		defer a.control.operator.mux.Unlock()
+		control = a.control.operator
+	} else {
+		a.control.dispatch.mux.Lock()
+		defer a.control.dispatch.mux.Unlock()
+		control = a.control.dispatch
+	}
+	go a.device.WriteDeviceControl(control)
 }
 
-// SetControl is a setter for the ess.Asset control field
-func (a *Asset) SetControl(c Control) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.control = c
-}
-
-func (a *Asset) filterTimestamp(timestamp int64) bool {
-	return timestamp > a.status.Timestamp
+// PID is a getter for the GridAsset status field
+func (a Asset) PID() uuid.UUID {
+	return a.pid
 }
 
 func (a Asset) Name() string {
@@ -119,15 +119,37 @@ func (a Asset) Name() string {
 }
 
 func (a Asset) KW() float64 {
-	return a.Status().KW
+	return a.status.KW
 }
 
 func (a Asset) KVAR() float64 {
-	return a.Status().KVAR
+	return a.status.KVAR
 }
 
-func (a *Asset) RunCmd(run bool) {
+func (a *Asset) DispatchControlHandle() asset.MachineControl {
+	return &a.control.dispatch
+}
+
+func (a *Asset) OperatorControlHandle() asset.MachineControl {
+	return &a.control.operator
+}
+
+// KWCmd sets the asset's real power setpoint
+func (a *MachineControl) KWCmd(kw float64) {}
+
+// KVARCmd sets the asset's reactive power setpoint
+func (a *MachineControl) KVARCmd(kvar float64) {}
+
+// RunCmd sets the asset's run request state
+func (a *MachineControl) RunCmd(run bool) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control.CloseIntertie = run
+	a.CloseIntertie = run
+}
+
+// GridformCmd sets the asset's gridform request state
+func (a *MachineControl) GridformCmd(gridform bool) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.CloseIntertie = gridform
 }

@@ -91,7 +91,7 @@ func (b VirtualACBus) gridformerCalcs() Source {
 			gridformer = s
 		}
 	}
-	gridformer.KW = kwSum
+	gridformer.KW = kwSum * -1
 	gridformer.KVAR = kvarSum
 	return gridformer
 }
@@ -126,6 +126,7 @@ func New(configPath string) (VirtualACBus, error) {
 func (b *VirtualACBus) runVirtualSystem() {
 	log.Println("[VirtualACBus: Running]")
 	for {
+		log.Println(b.Energized())
 		select {
 		case source, ok := <-b.assetObserver:
 			if !ok {
@@ -135,10 +136,18 @@ func (b *VirtualACBus) runVirtualSystem() {
 
 			if source.Gridforming == true {
 				b.gridformer = source
-				log.Printf("[VirtualACBus: %v]", b.gridformerCalcs())
 			}
 		case b.busObserver <- b.gridformerCalcs():
+		default:
+			var gridformerFound bool
+			for _, s := range b.connectedSources {
+				if s.Gridforming {
+					gridformerFound = true
+				}
+			}
+			if !gridformerFound {
+				b.gridformer = Source{}
+			}
 		}
-
 	}
 }

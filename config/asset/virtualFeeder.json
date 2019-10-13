@@ -1,6 +1,8 @@
 {
-    "Name": "Virtual Feeder",
+    "Name": "feeder",
     "Bus": "Virtual Bus",
     "RatedKW": 20,
-    "RatedKVAR": 10
+    "RatedKVAR": 10,
+    "AverageKW": 10,
+    "AverageKVAR": 3
 }

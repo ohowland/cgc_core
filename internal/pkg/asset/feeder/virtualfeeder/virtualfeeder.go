@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,7 +42,9 @@ type Control struct {
 
 // StaticConfig is a data structure representing an architypical fixed feeder configuration
 type Config struct { // Should this get transfered over to the specific class?
-	Bus string `json:"Bus"`
+	Bus         bus.Bus
+	AverageKW   float64
+	AverageKVAR float64
 }
 
 // Comm data structure for the VirtualFeeder
@@ -52,37 +55,19 @@ type Comm struct {
 
 type Observers struct {
 	assetObserver chan<- virtualacbus.Source
+	busObserver   <-chan virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualFeeder) ReadDeviceStatus(setParentStatus func(feeder.Status)) {
+func (a VirtualFeeder) ReadDeviceStatus(setAssetStatus func(feeder.Status)) {
 	a.status = a.read()
-	setParentStatus(mapStatus(a.status)) // callback for to write parent status
+	setAssetStatus(mapStatus(a.status)) // callback for to write parent status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualFeeder) WriteDeviceControl(c feeder.Control) {
+func (a VirtualFeeder) WriteDeviceControl(c feeder.MachineControl) {
 	a.control = mapControl(c)
 	a.write()
-}
-
-// Status maps feeder.DeviceStatus to feeder.Status
-func mapStatus(s Status) feeder.Status {
-	return feeder.Status{
-		Timestamp: s.timestamp,
-		KW:        s.KW,
-		KVAR:      s.KVAR,
-		Hz:        s.Hz,
-		Volt:      s.Volt,
-		Online:    s.Online,
-	}
-}
-
-// Control maps feeder.Control to feeder.DeviceControl
-func mapControl(c feeder.Control) Control {
-	return Control{
-		closeFeeder: c.CloseFeeder,
-	}
 }
 
 func (a *VirtualFeeder) read() Status {
@@ -94,10 +79,12 @@ func (a *VirtualFeeder) read() Status {
 	return readStatus
 }
 
-func (a *VirtualFeeder) write() {
-	fuzzing := rand.Intn(2000)
-	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
+func (a VirtualFeeder) write() {
 	a.comm.outgoing <- a.control
+}
+
+func (a *VirtualFeeder) updateObservers(obs Observers) {
+	obs.assetObserver <- mapSource(*a)
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
@@ -107,7 +94,12 @@ func New(configPath string, buses map[string]bus.Bus) (feeder.Asset, error) {
 		return feeder.Asset{}, err
 	}
 
-	config := Config{}
+	config := struct {
+		Bus         string  `json:"Bus"`
+		AverageKW   float64 `json:"AverageKW"`
+		AverageKVAR float64 `json:"AverageKVAR"`
+	}{"", 0, 0}
+
 	err = json.Unmarshal(jsonConfig, &config)
 	if err != nil {
 		return feeder.Asset{}, err
@@ -134,54 +126,82 @@ func New(configPath string, buses map[string]bus.Bus) (feeder.Asset, error) {
 		control: Control{
 			closeFeeder: false,
 		},
-		config: config,
+		config: Config{
+			Bus:         bus,
+			AverageKW:   config.AverageKW,
+			AverageKVAR: config.AverageKVAR,
+		},
 		comm: Comm{
 			incoming: in,
 			outgoing: out,
 		},
-		observers: Observers{
-			assetObserver: bus.AssetObserver(),
-		},
 	}
 
-	go virtualDeviceLoop(device.comm, device.observers)
+	device.startVirtualDeviceLoop()
 	return feeder.New(jsonConfig, device)
 }
 
-func virtualDeviceLoop(comm Comm, obs Observers) {
-	dev := &VirtualFeeder{}
+// Status maps feeder.DeviceStatus to feeder.Status
+func mapStatus(s Status) feeder.Status {
+	return feeder.Status{
+		Timestamp: s.timestamp,
+		KW:        s.KW,
+		KVAR:      s.KVAR,
+		Hz:        s.Hz,
+		Volt:      s.Volt,
+		Online:    s.Online,
+	}
+}
+
+// Control maps feeder.Control to feeder.DeviceControl
+func mapControl(c feeder.MachineControl) Control {
+	return Control{
+		closeFeeder: c.CloseFeeder,
+	}
+}
+
+func mapSource(a VirtualFeeder) virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
+		Hz:          a.status.Hz,
+		Volt:        a.status.Volt,
+		KW:          a.status.KW * -1,
+		KVAR:        a.status.KVAR,
+		Gridforming: false,
+	}
+}
+
+func (a *VirtualFeeder) startVirtualDeviceLoop() {
+	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
+	observers := Observers{
+		assetObserver: bus.AssetObserver(),
+	}
+
+	go virtualDeviceLoop(*a, observers)
+}
+
+func (a VirtualFeeder) stopVirtualDeviceLoop() {
+	close(a.observers.assetObserver)
+	close(a.comm.outgoing)
+}
+
+func virtualDeviceLoop(dev VirtualFeeder, obs Observers) {
+	defer close(dev.comm.incoming)
 	sm := &stateMachine{offState{}}
 	var ok bool
 loop:
 	for {
 		select {
-		case dev.control, ok = <-comm.outgoing:
+		case dev.control, ok = <-dev.comm.outgoing:
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- dev.status:
+		case dev.comm.incoming <- dev.status:
 			dev.updateObservers(obs)
-			dev.status = sm.run(*dev)
-			//log.Printf("[VirtualFeeder-Device: state: %v]\n",
-			//	reflect.TypeOf(sm.currentState).String())
+			dev.status = sm.run(dev)
 		}
 	}
 	log.Println("[VirtualFeeder-Device] shutdown")
-}
-
-func (a *VirtualFeeder) updateObservers(obs Observers) {
-	obs.assetObserver <- a.asSource()
-}
-
-func (a *VirtualFeeder) asSource() virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         a.pid,
-		Hz:          a.status.Hz,
-		Volt:        a.status.Volt,
-		KW:          a.status.KW,
-		KVAR:        a.status.KVAR,
-		Gridforming: false,
-	}
 }
 
 type stateMachine struct {
@@ -204,11 +224,15 @@ func (s offState) action(dev VirtualFeeder) Status {
 	return Status{
 		KW:     0,
 		KVAR:   0,
+		Hz:     dev.config.Bus.Hz(),
+		Volt:   dev.config.Bus.Volt(),
 		Online: false,
 	}
 }
 func (s offState) transition(dev VirtualFeeder) state {
 	if dev.control.closeFeeder == true {
+		log.Printf("[VirtualFeeder-Device: state: %v]\n",
+			reflect.TypeOf(onState{}).String())
 		return onState{}
 	}
 	return offState{}
@@ -217,15 +241,27 @@ func (s offState) transition(dev VirtualFeeder) state {
 type onState struct{}
 
 func (s onState) action(dev VirtualFeeder) Status {
+	// TODO: determine why bus pointer isn't working here.
+	// unable to successfully call dev.config.Bus.Energized()
+	var kw float64
+	var kvar float64
+	if true {
+		kw = dev.config.AverageKW
+		kvar = dev.config.AverageKVAR
+	}
 	return Status{
-		KW:     dev.status.KW,   // TODO: Link to virtual system model
-		KVAR:   dev.status.KVAR, // TODO: Link to virtual system model
+		KW:     kw,   // TODO: Link to virtual system model
+		KVAR:   kvar, // TODO: Link to virtual system model
+		Hz:     dev.config.Bus.Hz(),
+		Volt:   dev.config.Bus.Volt(),
 		Online: true,
 	}
 }
 
 func (s onState) transition(dev VirtualFeeder) state {
 	if dev.control.closeFeeder == false {
+		log.Printf("[VirtualFeeder-Device: state: %v]\n",
+			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}
 	return onState{}

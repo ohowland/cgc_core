@@ -89,7 +89,8 @@ func (a VirtualESS) write() {
 }
 
 func (a *VirtualESS) updateObservers(obs Observers) {
-	obs.assetObserver <- mapSource(*a)
+	source := mapSource(*a)
+	obs.assetObserver <- source
 	if a.status.Gridforming {
 		gridformer := <-obs.busObserver
 		a.status.KW = gridformer.KW
@@ -199,7 +200,7 @@ func (a *VirtualESS) startVirtualDeviceLoop() {
 		busObserver:   bus.BusObserver(),
 	}
 
-	go virtualDeviceLoop(a.comm, observers)
+	go virtualDeviceLoop(a.pid, a.comm, observers)
 }
 
 func (a VirtualESS) stopVirtualDeviceLoop() {
@@ -207,18 +208,18 @@ func (a VirtualESS) stopVirtualDeviceLoop() {
 	close(a.comm.outgoing)
 }
 
-func virtualDeviceLoop(comm Comm, obs Observers) {
+func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs Observers) {
 	defer close(comm.incoming)
-	dev := &VirtualESS{} // The virtual 'hardware' device
+	dev := &VirtualESS{pid: pid} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
+	var ok bool
 loop:
 	for {
 		select {
-		case control, ok := <-comm.outgoing: // write to 'hardware'
+		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
 			if !ok {
 				break loop
 			}
-			dev.control = control
 		case comm.incoming <- dev.status: // read from 'hardware'
 			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
