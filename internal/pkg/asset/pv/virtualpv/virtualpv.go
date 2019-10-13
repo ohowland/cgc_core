@@ -157,7 +157,7 @@ func mapStatus(s Status) pv.Status {
 func mapControl(c pv.Control) Control {
 	// map GridControl params to deviceControl
 	return Control{
-		run: c.RunRequest,
+		run: c.Run,
 	}
 }
 

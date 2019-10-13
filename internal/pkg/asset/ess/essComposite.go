@@ -21,8 +21,8 @@ func NewComposite() Composite {
 	return Composite{}
 }
 
-func (c *Composite) AddMember(a *Asset) {
-	c.members[a.pid] = a
+func (c *Composite) AddMember(a asset.Asset) {
+	c.members[a.PID()] = a
 }
 
 func (c *Composite) RemoveMember(pid uuid.UUID) {

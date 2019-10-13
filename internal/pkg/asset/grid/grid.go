@@ -42,12 +42,37 @@ type Control struct {
 	Enable        bool
 }
 
+type SupervisoryControl struct {
+	mux    sync.Mutex
+	enable bool
+	manual bool
+}
+
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
 	Name      string  `json:"Name"`
 	Bus       string  `json:"Bus"`
-	KWRated   float64 `json:"KWRated"`
-	KVARRated float64 `json:"KVARRated"`
+	RatedKW   float64 `json:"RatedKW"`
+	RatedKVAR float64 `json:"RatedKVAR"`
+}
+
+// New returns a configured Asset
+func New(jsonConfig []byte, device DeviceController) (Asset, error) {
+	config := Config{}
+	err := json.Unmarshal(jsonConfig, &config)
+	if err != nil {
+		return Asset{}, err
+	}
+
+	PID, err := uuid.NewUUID()
+	if err != nil {
+		return Asset{}, err
+	}
+
+	status := Status{}
+	control := Control{}
+	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
+
 }
 
 // PID is a getter for the GridAsset status field
@@ -85,25 +110,24 @@ func (a *Asset) SetControl(c Control) {
 	a.control = c
 }
 
-// New returns a configured Asset
-func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	config := Config{}
-	err := json.Unmarshal(jsonConfig, &config)
-	if err != nil {
-		return Asset{}, err
-	}
-
-	PID, err := uuid.NewUUID()
-	if err != nil {
-		return Asset{}, err
-	}
-
-	status := Status{}
-	control := Control{}
-	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
-
-}
-
 func (a *Asset) filterTimestamp(timestamp int64) bool {
 	return timestamp > a.status.Timestamp
+}
+
+func (a Asset) Name() string {
+	return a.config.Name
+}
+
+func (a Asset) KW() float64 {
+	return a.Status().KW
+}
+
+func (a Asset) KVAR() float64 {
+	return a.Status().KVAR
+}
+
+func (a *Asset) RunCmd(run bool) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control.CloseIntertie = run
 }

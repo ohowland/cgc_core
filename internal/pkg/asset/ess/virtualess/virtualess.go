@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,15 +41,15 @@ type Status struct {
 
 // Control data structure for the VirtualESS
 type Control struct {
-	run      bool
-	kW       float64
-	kVAR     float64
-	gridForm bool
+	Run      bool    `json:"Run"`
+	KW       float64 `json:"KW"`
+	KVAR     float64 `json:"KVAR"`
+	Gridform bool    `json:"Gridform"`
 }
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	bus bus.Bus
+	Bus bus.Bus
 }
 
 // Comm data structure for the VirtualESS
@@ -69,7 +70,7 @@ func (a VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status)) {
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualESS) WriteDeviceControl(c ess.Control) {
+func (a VirtualESS) WriteDeviceControl(c ess.MachineControl) {
 	a.control = mapControl(c)
 	a.write()
 }
@@ -84,8 +85,6 @@ func (a VirtualESS) read() Status {
 }
 
 func (a VirtualESS) write() {
-	fuzzing := rand.Intn(2000)
-	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	a.comm.outgoing <- a.control
 }
 
@@ -136,13 +135,13 @@ func New(configPath string, buses map[string]bus.Bus) (ess.Asset, error) {
 			Online:               false,
 		},
 		control: Control{
-			run:      false,
-			kW:       0,
-			kVAR:     0,
-			gridForm: false,
+			Run:      false,
+			KW:       0,
+			KVAR:     0,
+			Gridform: false,
 		},
 		config: Config{
-			bus: bus,
+			Bus: bus,
 		},
 		comm: Comm{
 			incoming: in,
@@ -172,12 +171,12 @@ func mapStatus(s Status) ess.Status {
 }
 
 // Control maps ess.Control to ess.DeviceControl
-func mapControl(c ess.Control) Control {
+func mapControl(c ess.MachineControl) Control {
 	return Control{
-		run:      c.Run,
-		kW:       c.KW,
-		kVAR:     c.KVAR,
-		gridForm: c.GridForm,
+		Run:      c.Run,
+		KW:       c.KW,
+		KVAR:     c.KVAR,
+		Gridform: c.Gridform,
 	}
 }
 
@@ -194,7 +193,7 @@ func mapSource(a VirtualESS) virtualacbus.Source {
 
 func (a *VirtualESS) startVirtualDeviceLoop() {
 
-	bus := a.config.bus.(*virtualacbus.VirtualACBus)
+	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
 	observers := Observers{
 		assetObserver: bus.AssetObserver(),
 		busObserver:   bus.BusObserver(),
@@ -212,19 +211,17 @@ func virtualDeviceLoop(comm Comm, obs Observers) {
 	defer close(comm.incoming)
 	dev := &VirtualESS{} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
-	var ok bool
 loop:
 	for {
 		select {
-		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
+		case control, ok := <-comm.outgoing: // write to 'hardware'
 			if !ok {
 				break loop
 			}
+			dev.control = control
 		case comm.incoming <- dev.status: // read from 'hardware'
 			dev.updateObservers(obs)
 			dev.status = sm.run(*dev)
-			//log.Printf("[VirtualESS-Device: state: %v]\n",
-			//	reflect.TypeOf(sm.currentState).String())
 		}
 	}
 	log.Println("[VirtualESS-Device] shutdown")
@@ -258,10 +255,14 @@ func (s offState) action(dev VirtualESS) Status {
 	}
 }
 func (s offState) transition(dev VirtualESS) state {
-	if dev.control.run == true {
-		if dev.control.gridForm == true {
+	if dev.control.Run == true {
+		if dev.control.Gridform == true {
+			log.Printf("VirtualESS-Device: state: %v\n",
+				reflect.TypeOf(HzVState{}).String())
 			return HzVState{}
 		}
+		log.Printf("VirtualESS-Device: state: %v\n",
+			reflect.TypeOf(PQState{}).String())
 		return PQState{}
 	}
 	return offState{}
@@ -271,8 +272,8 @@ type PQState struct{}
 
 func (s PQState) action(dev VirtualESS) Status {
 	return Status{
-		KW:                   dev.status.KW,
-		KVAR:                 dev.status.KVAR,
+		KW:                   dev.control.KW,
+		KVAR:                 dev.control.KVAR,
 		SOC:                  dev.status.SOC,
 		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
 		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
@@ -282,10 +283,14 @@ func (s PQState) action(dev VirtualESS) Status {
 }
 
 func (s PQState) transition(dev VirtualESS) state {
-	if dev.control.run == false {
+	if dev.control.Run == false {
+		log.Printf("VirtualESS-Device: state: %v\n",
+			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}
-	if dev.control.gridForm == true {
+	if dev.control.Gridform == true {
+		log.Printf("VirtualESS-Device: state: %v\n",
+			reflect.TypeOf(HzVState{}).String())
 		return HzVState{}
 	}
 	return PQState{}
@@ -306,10 +311,14 @@ func (s HzVState) action(dev VirtualESS) Status {
 }
 
 func (s HzVState) transition(dev VirtualESS) state {
-	if dev.control.run == false {
+	if dev.control.Run == false {
+		log.Printf("VirtualESS-Device: state: %v\n",
+			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}
-	if dev.control.gridForm == false {
+	if dev.control.Gridform == false {
+		log.Printf("VirtualESS-Device: state: %v\n",
+			reflect.TypeOf(PQState{}).String())
 		return PQState{}
 	}
 	return HzVState{}

@@ -1,13 +1,8 @@
 {
-  "StaticConfig": {
-    "Name": "Grid Intertie",
-    "KWRated": 20,
-    "KVARRated": 10,
-    "KWHRated": 50
-  },
-  "DynamicConfig": {
-    "LowSOC": 20,
-    "HighSOC": 20,
-    "TargetSOC": 20
+  "Config": {
+    "Name": "ESS",
+    "RatedKW": 20,
+    "RatedKVAR": 10,
+    "RatedKWH": 50
   }
 }

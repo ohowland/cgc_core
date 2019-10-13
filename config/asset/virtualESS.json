@@ -1,13 +1,7 @@
 {
-  "StaticConfig": {
-    "Name": "Virtual ESS",
-    "KWRated": 20,
-    "KVARRated": 10,
-    "KWHRated": 50
-  },
-  "DynamicConfig": {
-    "LowSOC": 20,
-    "HighSOC": 20,
-    "TargetSOC": 20
-  }
+    "Name": "ess",
+    "Bus": "Virtual Bus",
+    "RatedKW": 20,
+    "RatedKVAR": 10,
+    "RatedKWH": 50
 }

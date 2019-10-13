@@ -1,32 +1,43 @@
-package main
+package web
 
 import (
+	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 var clients = make(map[*websocket.Conn]bool)
-var broadcast = make(chan Message)
+var command = make(chan CommandMessage)
 var upgrader = websocket.Upgrader{}
 
-type Message struct {
+type UpdateMessage struct {
 	Asset string `json:"asset"`
 	KW    string `json:"kw"`
 	KVAR  string `json:"kvar"`
 }
 
-func main() {
-	fs := http.FileServer(http.Dir("./static"))
+type CommandMessage struct {
+	Asset string `json:"asset"`
+	Run   bool   `json:"run"`
+	KW    string `json:"kw"`
+	KVAR  string `json:"kvar"`
+}
+
+func StartServer(assets map[uuid.UUID]asset.Asset) {
+
+	fs := http.FileServer(http.Dir("./internal/pkg/web/static"))
 	http.Handle("/", fs)
 
 	http.HandleFunc("/ws", handleConnections)
 
-	go pingMessages()
+	go hmiUpdater(assets)
+	go commandDistribution(assets)
 
 	log.Println("http server started on :8000")
 	err := http.ListenAndServe(":8000", nil)
@@ -45,36 +56,64 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clients[ws] = true
 
 	for {
-		var msg Message
+		var msg CommandMessage
 		err := ws.ReadJSON(&msg)
 		if err != nil {
 			log.Printf("error: %v", err)
 			delete(clients, ws)
 			break
 		}
-		// send control messages back to controller
+		command <- msg
 	}
 }
 
-func pingMessages() {
+func hmiUpdater(assets map[uuid.UUID]asset.Asset) {
 	// send status messages to client
 	ticker := time.NewTicker(500 * time.Millisecond)
-	assets := []string{"ess", "grid", "feeder"}
 	for range ticker.C {
-		kw := strconv.Itoa(rand.Intn(100))
-		kvar := strconv.Itoa(rand.Intn(100))
-		msg := Message{
-			Asset: assets[rand.Intn(3)],
-			KW:    kw,
-			KVAR:  kvar,
-		}
-		for client := range clients {
-			err := client.WriteJSON(msg)
-			if err != nil {
-				log.Printf("error: %v", err)
-				client.Close()
-				delete(clients, client)
+		for _, a := range assets {
+			power := a.(asset.PowerReader)
+			msg := UpdateMessage{
+				Asset: a.Name(),
+				KW:    fmt.Sprintf("%f", power.KW()),
+				KVAR:  fmt.Sprintf("%f", power.KVAR()),
+			}
+			for client := range clients {
+				err := client.WriteJSON(msg)
+				if err != nil {
+					log.Printf("error: %v", err)
+					client.Close()
+					delete(clients, client)
+				}
 			}
 		}
 	}
+}
+
+func commandDistribution(assets map[uuid.UUID]asset.Asset) {
+	assetControllers := machineControlMap(assets)
+	for msg := range command {
+		c, ok := assetControllers[msg.Asset]
+		if !ok {
+			log.Printf("unknown asset name: %v\n", msg.Asset)
+		} else {
+			c.RunCmd(msg.Run)
+			kw, err := strconv.ParseFloat(msg.KW, 64)
+			if err == nil {
+				c.KWCmd(kw)
+			}
+			kvar, err := strconv.ParseFloat(msg.KVAR, 64)
+			if err == nil {
+				c.KVARCmd(kvar)
+			}
+		}
+	}
+}
+
+func machineControlMap(assets map[uuid.UUID]asset.Asset) map[string]asset.MachineControl {
+	controlMap := make(map[string]asset.MachineControl)
+	for _, asset := range assets {
+		controlMap[asset.Name()] = asset.DispatchControlHandle()
+	}
+	return controlMap
 }

@@ -12,19 +12,19 @@ const (
 )
 
 type VirtualACBus struct {
-	name             string
 	pid              uuid.UUID
 	members          map[uuid.UUID]asset.Asset
 	busObserver      chan Source
 	assetObserver    chan Source
 	connectedSources map[uuid.UUID]Source
 	gridformer       Source
-	staticConfig     StaticConfig
+	config           Config
 }
 
-type StaticConfig struct {
-	ratedVolt float64
-	ratedHz   float64
+type Config struct {
+	Name      string  `json:"Name"`
+	RatedVolt float64 `json:"RatedVolt"`
+	RatedHz   float64 `json:"RatedHz"`
 }
 
 type Source struct {
@@ -37,7 +37,7 @@ type Source struct {
 }
 
 func (b VirtualACBus) Name() string {
-	return b.name
+	return b.config.Name
 }
 
 func (b VirtualACBus) PID() uuid.UUID {
@@ -45,8 +45,8 @@ func (b VirtualACBus) PID() uuid.UUID {
 }
 
 func (b VirtualACBus) Energized() bool {
-	voltThreshold := b.staticConfig.ratedVolt * 0.5
-	hzThreshold := b.staticConfig.ratedHz * 0.5
+	voltThreshold := b.config.RatedVolt * 0.5
+	hzThreshold := b.config.RatedHz * 0.5
 	if b.gridformer.Hz > hzThreshold && b.gridformer.Volt > voltThreshold {
 		return true
 	}
@@ -112,9 +112,10 @@ func New(configPath string) (VirtualACBus, error) {
 			KVAR:        0.0,
 			Gridforming: true,
 		},
-		staticConfig: StaticConfig{
-			ratedVolt: 480.0, // Get from config
-			ratedHz:   60.0,  // Get from config
+		config: Config{
+			Name:      "Virtual Bus",
+			RatedVolt: 480.0, // Get from config
+			RatedHz:   60.0,  // Get from config
 		},
 	}
 

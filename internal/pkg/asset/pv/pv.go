@@ -35,15 +35,17 @@ type Status struct {
 
 // Control is a data structure representing an architypical PV control
 type Control struct {
-	RunRequest bool
-	Enable     bool
+	Run     bool
+	Enable  bool
+	KWLimit float64
+	KVAR    float64
 }
 
 type Config struct {
 	Name      string  `json:"Name"`
 	Bus       string  `json:"Bus"`
-	KWRated   float64 `json:"KwRated"`
-	KVARRated float64 `json:"KvarRated"`
+	RatedKW   float64 `json:"RatedKW"`
+	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
 // PID is a getter for the unique identifier field
@@ -102,4 +104,34 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 func (a *Asset) filterTimestamp(timestamp int64) bool {
 	return timestamp > a.status.Timestamp
+}
+
+func (a Asset) Name() string {
+	return a.config.Name
+}
+
+func (a Asset) KW() float64 {
+	return a.Status().KW
+}
+
+func (a Asset) KVAR() float64 {
+	return a.Status().KVAR
+}
+
+func (a *Asset) KWCmd(kw float64) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control.KWLimit = kw
+}
+
+func (a *Asset) KVARCmd(kvar float64) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control.KVAR = kvar
+}
+
+func (a *Asset) RunCmd(run bool) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control.Run = run
 }

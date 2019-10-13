@@ -1,9 +1,6 @@
 {
-  "StaticConfig": {
     "Name": "Virtual PV",
-    "KWRated": 20,
-    "KVARRated": 10
-  },
-  "DynamicConfig": {
-  }
+    "Bus": "Virtual Bus",
+    "RatedKW": 20,
+    "RatedKVAR": 10
 }

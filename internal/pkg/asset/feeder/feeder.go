@@ -41,7 +41,10 @@ type Control struct {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	Bus string `json:"Bus"`
+	Name      string  `json:"Name"`
+	Bus       string  `json:"Bus"`
+	RatedKW   float64 `json:"RatedKW"`
+	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
 // StaticConfig is a data structure representing an architypical fixed feeder configuration
@@ -105,4 +108,22 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 func (a *Asset) filterTimestamp(timestamp int64) bool {
 	return timestamp > a.status.Timestamp
+}
+
+func (a Asset) Name() string {
+	return a.config.Name
+}
+
+func (a Asset) KW() float64 {
+	return a.Status().KW
+}
+
+func (a Asset) KVAR() float64 {
+	return a.Status().KVAR
+}
+
+func (a *Asset) RunCmd(run bool) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control.CloseFeeder = run
 }

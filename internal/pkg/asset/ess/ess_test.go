@@ -10,7 +10,7 @@ import (
 
 func TestReadConfig(t *testing.T) {
 	testConfig := Config{}
-	jsonConfig, err := ioutil.ReadFile("ipc30c3_test_comm.json")
+	jsonConfig, err := ioutil.ReadFile("ess_test_config.json")
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestReadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStaticConfig := StaticConfig{"ESS", 20, 10, 0.6}
-	assertConfig := Config{Static: assertStaticConfig}
+
+	assertConfig := Config{"ESS", 20, 10, 50}
 	assert.Assert(t, testConfig == assertConfig)
 }
