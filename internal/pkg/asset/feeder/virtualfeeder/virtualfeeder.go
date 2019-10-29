@@ -201,7 +201,7 @@ loop:
 			dev.status = sm.run(dev)
 		}
 	}
-	log.Println("[VirtualFeeder-Device] shutdown")
+	log.Println("VirtualFeeder-Device: shutdown")
 }
 
 type stateMachine struct {
@@ -231,7 +231,7 @@ func (s offState) action(dev VirtualFeeder) Status {
 }
 func (s offState) transition(dev VirtualFeeder) state {
 	if dev.control.closeFeeder == true {
-		log.Printf("[VirtualFeeder-Device: state: %v]\n",
+		log.Printf("VirtualFeeder-Device: state: %v\n",
 			reflect.TypeOf(onState{}).String())
 		return onState{}
 	}
@@ -260,7 +260,7 @@ func (s onState) action(dev VirtualFeeder) Status {
 
 func (s onState) transition(dev VirtualFeeder) state {
 	if dev.control.closeFeeder == false {
-		log.Printf("[VirtualFeeder-Device: state: %v]\n",
+		log.Printf("VirtualFeeder-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}

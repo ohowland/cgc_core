@@ -126,7 +126,6 @@ func New(configPath string) (VirtualACBus, error) {
 func (b *VirtualACBus) runVirtualSystem() {
 	log.Println("[VirtualACBus: Running]")
 	for {
-		log.Println(b.Energized())
 		select {
 		case source, ok := <-b.assetObserver:
 			if !ok {

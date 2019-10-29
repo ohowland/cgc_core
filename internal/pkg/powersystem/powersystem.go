@@ -1,12 +1,11 @@
 import (
-	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/bus"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
-type Model struct {
-	root       bus.Bus
-	buses      map[string]bus.Bus
-	composites map[uuid.UUID]asset.Composite
+type Microgrid struct {
+	model    bus.BusGraph
+	dispatch dispatch.Dispatcher
 }
 
 func newPowerSystem(configPath) Microgrid {

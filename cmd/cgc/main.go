@@ -14,22 +14,26 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/web"
 )
 
-func buildBuses() (map[string]bus.Bus, error) {
-	buses := make(map[string]bus.Bus)
+func buildBuses() (map[uuid.UUID]bus.Bus, error) {
+	buses := make(map[uuid.UUID]bus.Bus)
 
 	bus, err := virtualacbus.New("./config/bus/virtualACBus.json")
 	if err != nil {
 		return buses, err
 	}
-	buses[bus.Name()] = &bus
+	buses[bus.PID()] = &bus
 
 	return buses, err
+}
+
+func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
+	return bus.NewBusGraph(buses)
 }
 
 func buildAssets(buses map[string]bus.Bus) (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 
-	ess, err := virtualess.New("./config/asset/virtualESS.json", buses)
+	ess, err := virtualess.New("./config/asset/virtualESS.json")
 	if err != nil {
 		return assets, err
 	}
@@ -76,23 +80,52 @@ func launchServer(assets map[uuid.UUID]asset.Asset) {
 func main() {
 	log.Println("Starting CGC v0.1")
 
-	log.Println("Building buses")
+	log.Println("Building Buses")
 	buses, err := buildBuses()
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println("[Building assets]")
+	log.Println("Assembling Bus Graph")
+	busGraph, err := buildBusGraph(buses)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Println("[Building Assets]")
 	assets, err := buildAssets(buses)
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println("Starting webserver")
-	launchServer(assets)
+	log.Println("[Assembling Microgrid]")
+	microgrid, err := buildMicrogrid(busGraph)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Println("[Starting Dispatch]")
+	dispatch, err := buildDispatch(busGraph)
+	if err != nil {
+		panic(err)
+	}
+
+	microgrid.linkDispatch(dispatch)
+	if err != nil {
+		panic(err)
+	}
 
 	log.Println("Starting update loops")
 	launchUpdateLoop(assets)
+
+	log.Println("Starting dispatch loop")
+	launchDispatchLoop(dispatch)
+
+	log.Println("Starting Datalogging")
+	launchDatalogging(assets)
+
+	log.Println("Starting webserver")
+	launchServer(assets)
 
 	log.Println("Stopping system")
 }

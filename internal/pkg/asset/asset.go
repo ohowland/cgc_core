@@ -19,6 +19,18 @@ type PowerReader interface {
 	KVAR() float64
 }
 
+type CapacityReader interface {
+	RealPositive() float64
+	RealNegative() float64
+	ReactiveSourcing() float64
+	ReactiveSinking() float64
+}
+
+type StateReader interface {
+	Dispatchable() bool // Capacity is offline, but can brought online.
+	Operative() bool    // Capacity is available to the system explicitly or implicitly.
+}
+
 type MachineControl interface {
 	KWCmd(float64)
 	KVARCmd(float64)

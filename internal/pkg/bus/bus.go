@@ -8,9 +8,28 @@ import (
 type Bus interface {
 	Name() string
 	PID() uuid.UUID
-	Energized() bool
 	Hz() float64
 	Volt() float64
+}
+
+type BusGraph struct {
+	rootNode       Bus
+	adjacentcyList map[Bus][]Bus
+}
+
+// NewBusGraph builds a graph datastructure of the buses
+func NewBusGraph(buses map[uuid.UUID]Bus) BusGraph {
+	var busList []Bus
+	for _, bus := range buses {
+		busList = append(busList, bus)
+	}
+
+	busAdjList := make(map[Bus][]Bus)
+	busAdjList[busList[0]] = busList[1:]
+	return BusGraph{
+		busList[0],
+		busAdjList,
+	}
 }
 
 /*
