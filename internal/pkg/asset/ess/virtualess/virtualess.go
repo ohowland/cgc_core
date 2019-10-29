@@ -1,7 +1,6 @@
 package virtualess
 
 import (
-	"encoding/json"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	a "google.golang.org/genproto"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/bus"
@@ -20,7 +20,6 @@ type VirtualESS struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
-	config    Config
 	comm      Comm
 	observers Observers
 }
@@ -45,11 +44,6 @@ type Control struct {
 	KW       float64 `json:"KW"`
 	KVAR     float64 `json:"KVAR"`
 	Gridform bool    `json:"Gridform"`
-}
-
-// Config differentiates between two types of configurations, static and dynamic
-type Config struct {
-	Bus bus.Bus
 }
 
 // Comm data structure for the VirtualESS
@@ -99,22 +93,11 @@ func (a *VirtualESS) updateObservers(obs Observers) {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, buses map[string]bus.Bus) (ess.Asset, error) {
+func New(configPath string) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return ess.Asset{}, err
 	}
-
-	config := struct {
-		Bus string `json:"Bus"`
-	}{""}
-
-	err = json.Unmarshal(jsonConfig, &config)
-	if err != nil {
-		return ess.Asset{}, err
-	}
-
-	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
 
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
@@ -141,16 +124,13 @@ func New(configPath string, buses map[string]bus.Bus) (ess.Asset, error) {
 			KVAR:     0,
 			Gridform: false,
 		},
-		config: Config{
-			Bus: bus,
-		},
 		comm: Comm{
 			incoming: in,
 			outgoing: out,
 		},
 	}
 
-	device.startVirtualDeviceLoop()
+	//device.startVirtualDeviceLoop()
 	return ess.New(jsonConfig, device)
 }
 
@@ -192,18 +172,24 @@ func mapSource(a VirtualESS) virtualacbus.Source {
 	}
 }
 
-func (a *VirtualESS) startVirtualDeviceLoop() {
-
+func getBusObservers(bus bus.Bus) Observers {
 	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
-	observers := Observers{
+	return Observers{
 		assetObserver: bus.AssetObserver(),
 		busObserver:   bus.BusObserver(),
 	}
-
-	go virtualDeviceLoop(a.pid, a.comm, observers)
 }
 
-func (a VirtualESS) stopVirtualDeviceLoop() {
+func (a *VirtualESS) LinkVirtualDevice(bus bus.Bus) error {
+	a.observers = getBusObservers(bus)
+	return nil
+}
+
+func (a *VirtualESS) StartVirualDevice() {
+	go virtualDeviceLoop(a.pid, a.comm, a.observers)
+}
+
+func (a VirtualESS) StopVirtualDeviceLoop() {
 	close(a.observers.assetObserver)
 	close(a.comm.outgoing)
 }

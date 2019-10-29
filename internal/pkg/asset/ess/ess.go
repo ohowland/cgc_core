@@ -45,7 +45,7 @@ type Control struct {
 }
 
 type MachineControl struct {
-	mux      sync.Mutex
+	mux      *sync.Mutex
 	Run      bool
 	KW       float64
 	KVAR     float64
