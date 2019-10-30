@@ -168,7 +168,7 @@ func mapSource(a VirtualESS) virtualacbus.Source {
 }
 
 // LinkVirtualDevice pulls the communication channels from the virtual bus and holds them in asset.observers
-func (a *VirtualESS) LinkVirtualDevice(b bus.Bus) error {
+func (a *VirtualESS) LinkToBus(b bus.Bus) error {
 	vrACbus, ok := b.(virtualacbus.VirtualACBus)
 	if !ok {
 		return errors.New("Bus cannot be cast to VirtualACBus")
