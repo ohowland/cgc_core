@@ -1,6 +1,7 @@
 package virtualess
 
 import (
+	"errors"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	a "google.golang.org/genproto"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/bus"
@@ -21,7 +21,7 @@ type VirtualESS struct {
 	status    Status
 	control   Control
 	comm      Comm
-	observers Observers
+	observers virtualacbus.Observers
 }
 
 // Status data structure for the VirtualESS
@@ -52,11 +52,6 @@ type Comm struct {
 	outgoing chan Control
 }
 
-type Observers struct {
-	assetObserver chan<- virtualacbus.Source
-	busObserver   <-chan virtualacbus.Source
-}
-
 // ReadDeviceStatus requests a physical device read over the communication interface
 func (a VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status)) {
 	a.status = a.read()
@@ -82,11 +77,11 @@ func (a VirtualESS) write() {
 	a.comm.outgoing <- a.control
 }
 
-func (a *VirtualESS) updateObservers(obs Observers) {
+func (a *VirtualESS) updateObservers(obs virtualacbus.Observers) {
 	source := mapSource(*a)
-	obs.assetObserver <- source
+	obs.AssetObserver <- source
 	if a.status.Gridforming {
-		gridformer := <-obs.busObserver
+		gridformer := <-obs.BusObserver
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR
 	}
@@ -172,29 +167,28 @@ func mapSource(a VirtualESS) virtualacbus.Source {
 	}
 }
 
-func getBusObservers(bus bus.Bus) Observers {
-	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
-	return Observers{
-		assetObserver: bus.AssetObserver(),
-		busObserver:   bus.BusObserver(),
+// LinkVirtualDevice pulls the communication channels from the virtual bus and holds them in asset.observers
+func (a *VirtualESS) LinkVirtualDevice(b bus.Bus) error {
+	vrACbus, ok := b.(virtualacbus.VirtualACBus)
+	if !ok {
+		return errors.New("Bus cannot be cast to VirtualACBus")
 	}
-}
-
-func (a *VirtualESS) LinkVirtualDevice(bus bus.Bus) error {
-	a.observers = getBusObservers(bus)
+	a.observers = vrACbus.GetBusObservers()
 	return nil
 }
 
+// StartVirualDevice launches the virtual machine loop.
 func (a *VirtualESS) StartVirualDevice() {
 	go virtualDeviceLoop(a.pid, a.comm, a.observers)
 }
 
-func (a VirtualESS) StopVirtualDeviceLoop() {
-	close(a.observers.assetObserver)
+// StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
+func (a VirtualESS) StopVirtualDevice() {
+	close(a.observers.AssetObserver)
 	close(a.comm.outgoing)
 }
 
-func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs Observers) {
+func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs virtualacbus.Observers) {
 	defer close(comm.incoming)
 	dev := &VirtualESS{pid: pid} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
@@ -245,19 +239,20 @@ func (s offState) transition(dev VirtualESS) state {
 	if dev.control.Run == true {
 		if dev.control.Gridform == true {
 			log.Printf("VirtualESS-Device: state: %v\n",
-				reflect.TypeOf(HzVState{}).String())
-			return HzVState{}
+				reflect.TypeOf(hzVState{}).String())
+			return hzVState{}
 		}
 		log.Printf("VirtualESS-Device: state: %v\n",
-			reflect.TypeOf(PQState{}).String())
-		return PQState{}
+			reflect.TypeOf(pQState{}).String())
+		return pQState{}
 	}
 	return offState{}
 }
 
-type PQState struct{}
+// pQState is the power control state
+type pQState struct{}
 
-func (s PQState) action(dev VirtualESS) Status {
+func (s pQState) action(dev VirtualESS) Status {
 	return Status{
 		KW:                   dev.control.KW,
 		KVAR:                 dev.control.KVAR,
@@ -269,7 +264,7 @@ func (s PQState) action(dev VirtualESS) Status {
 	}
 }
 
-func (s PQState) transition(dev VirtualESS) state {
+func (s pQState) transition(dev VirtualESS) state {
 	if dev.control.Run == false {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
@@ -277,15 +272,16 @@ func (s PQState) transition(dev VirtualESS) state {
 	}
 	if dev.control.Gridform == true {
 		log.Printf("VirtualESS-Device: state: %v\n",
-			reflect.TypeOf(HzVState{}).String())
-		return HzVState{}
+			reflect.TypeOf(hzVState{}).String())
+		return hzVState{}
 	}
-	return PQState{}
+	return pQState{}
 }
 
-type HzVState struct{}
+// hzVState is the gridforming state
+type hzVState struct{}
 
-func (s HzVState) action(dev VirtualESS) Status {
+func (s hzVState) action(dev VirtualESS) Status {
 	return Status{
 		KW:                   dev.status.KW,   // TODO: Link to virtual system model
 		KVAR:                 dev.status.KVAR, // TODO: Link to virtual system model
@@ -297,7 +293,7 @@ func (s HzVState) action(dev VirtualESS) Status {
 	}
 }
 
-func (s HzVState) transition(dev VirtualESS) state {
+func (s hzVState) transition(dev VirtualESS) state {
 	if dev.control.Run == false {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
@@ -305,8 +301,8 @@ func (s HzVState) transition(dev VirtualESS) state {
 	}
 	if dev.control.Gridform == false {
 		log.Printf("VirtualESS-Device: state: %v\n",
-			reflect.TypeOf(PQState{}).String())
-		return PQState{}
+			reflect.TypeOf(pQState{}).String())
+		return pQState{}
 	}
-	return HzVState{}
+	return hzVState{}
 }

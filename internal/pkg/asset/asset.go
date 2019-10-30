@@ -10,15 +10,17 @@ type Asset interface {
 	Name() string
 	UpdateStatus()
 	WriteControl()
-	DispatchControlHandle() MachineControl
-	OperatorControlHandle() MachineControl
+	DispatchControlHandle() MachineController
+	OperatorControlHandle() MachineController
 }
 
+// PowerReader interface for access to asset real and reactive power
 type PowerReader interface {
 	KW() float64
 	KVAR() float64
 }
 
+// CapacityReader inferface for access to asset real and reactive capacities
 type CapacityReader interface {
 	RealPositive() float64
 	RealNegative() float64
@@ -26,12 +28,14 @@ type CapacityReader interface {
 	ReactiveSinking() float64
 }
 
+// StateReader interface for access to boolean asset state
 type StateReader interface {
 	Dispatchable() bool // Capacity is offline, but can brought online.
 	Operative() bool    // Capacity is available to the system explicitly or implicitly.
 }
 
-type MachineControl interface {
+// MachineController interface for control of machine state
+type MachineController interface {
 	KWCmd(float64)
 	KVARCmd(float64)
 	RunCmd(bool)

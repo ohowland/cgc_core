@@ -38,12 +38,14 @@ type Status struct {
 	Online               bool
 }
 
+// Control holds the ESS asset control parameters
 type Control struct {
 	dispatch    MachineControl
 	operator    MachineControl
 	supervisory SupervisoryControl
 }
 
+// MachineControl defines the hardware control interface for the ESS Asset
 type MachineControl struct {
 	mux      *sync.Mutex
 	Run      bool
@@ -52,11 +54,13 @@ type MachineControl struct {
 	Gridform bool
 }
 
+// SupervisoryControl defines the software control interface for the ESS Asset
 type SupervisoryControl struct {
 	Enable bool
 	Manual bool
 }
 
+// Config holds the ESS asset configuration parameters
 type Config struct {
 	Name      string  `json:"Name"`
 	Bus       string  `json:"Bus"`
@@ -132,11 +136,13 @@ func (a Asset) KVAR() float64 {
 	return a.status.KVAR
 }
 
-func (a *Asset) DispatchControlHandle() asset.MachineControl {
+// DispatchControlHandle returns a pointer to the asset's dispatch control interface
+func (a *Asset) DispatchControlHandle() asset.MachineController {
 	return &a.control.dispatch
 }
 
-func (a *Asset) OperatorControlHandle() asset.MachineControl {
+// OperatorControlHandle returns a pointer to the asset's operator control interface
+func (a *Asset) OperatorControlHandle() asset.MachineController {
 	return &a.control.operator
 }
 

@@ -36,6 +36,12 @@ type Source struct {
 	Gridforming bool
 }
 
+// Observers contains the virtual system communication interface
+type Observers struct {
+	AssetObserver chan<- Source
+	BusObserver   <-chan Source
+}
+
 func (b VirtualACBus) Name() string {
 	return b.config.Name
 }
@@ -51,6 +57,13 @@ func (b VirtualACBus) Energized() bool {
 		return true
 	}
 	return false
+}
+
+func (b VirtualACBus) GetBusObservers() Observers {
+	return Observers{
+		AssetObserver: b.AssetObserver(),
+		BusObserver:   b.BusObserver(),
+	}
 }
 
 func (b VirtualACBus) Hz() float64 {
