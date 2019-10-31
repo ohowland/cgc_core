@@ -75,6 +75,55 @@ func TestStartStopVirtualLoop(t *testing.T) {
 	// TODO: What are the conditions for success and failure?
 }
 
+func TestRead(t *testing.T) {
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+
+	device.StartVirualDevice()
+	time.Sleep(1 * time.Second)
+	status := device.read()
+	time.Sleep(1 * time.Second)
+	timestamp := status.timestamp
+
+	assertedStatus := Status{
+		timestamp:            timestamp,
+		KW:                   0,
+		KVAR:                 0,
+		Hz:                   0,
+		Volt:                 0,
+		SOC:                  0,
+		PositiveRealCapacity: 0,
+		NegativeRealCapacity: 0,
+		Gridforming:          false,
+		Online:               false,
+	}
+
+	assert.Assert(t, assertedStatus == status)
+
+	device.StopVirtualDevice()
+}
+
+func TestWrite(t *testing.T) {
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+
+	device.StartVirualDevice()
+	device.control = Control{true, 10, 10, false}
+	device.write()
+}
+
+func TestReadDeviceStatus(t *testing.T) {}
+
+func TestWriteDeviceControl(t *testing.T) {}
+
+func TestUpdateObservers(t *testing.T) {}
+
+func TestMapStatus(t *testing.T) {}
+
+func TestMapControl(t *testing.T) {}
+
+func TestMapSource(t *testing.T) {}
+
 func TestTransitionOffToPQ(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
