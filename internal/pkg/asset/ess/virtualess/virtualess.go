@@ -53,7 +53,7 @@ type Comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status)) {
+func (a *VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status)) {
 	a.status = a.read()
 	setParentStatus(mapStatus(a.status)) // callback for to write parent status
 }
@@ -68,7 +68,11 @@ func (a VirtualESS) read() Status {
 	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus := <-a.comm.incoming
+	readStatus, ok := <-a.comm.incoming
+	if !ok {
+		log.Println("Read Error: VirtualESS, virtual channel is not open")
+		return Status{}
+	}
 	readStatus.timestamp = timestamp
 	return readStatus
 }
@@ -94,9 +98,6 @@ func New(configPath string) (ess.Asset, error) {
 		return ess.Asset{}, err
 	}
 
-	in := make(chan Status, 1)
-	out := make(chan Control, 1)
-
 	pid, err := uuid.NewUUID()
 
 	device := VirtualESS{
@@ -119,14 +120,11 @@ func New(configPath string) (ess.Asset, error) {
 			KVAR:     0,
 			Gridform: false,
 		},
-		comm: Comm{
-			incoming: in,
-			outgoing: out,
-		},
+		comm: Comm{},
 	}
 
 	//device.startVirtualDeviceLoop()
-	return ess.New(jsonConfig, device)
+	return ess.New(jsonConfig, &device)
 }
 
 // Status maps ess.DeviceStatus to ess.Status
@@ -179,6 +177,11 @@ func (a *VirtualESS) LinkToBus(b bus.Bus) error {
 
 // StartVirualDevice launches the virtual machine loop.
 func (a *VirtualESS) StartVirualDevice() {
+	in := make(chan Status, 1)
+	out := make(chan Control, 1)
+	a.comm.incoming = in
+	a.comm.outgoing = out
+
 	go virtualDeviceLoop(a.pid, a.comm, a.observers)
 }
 
@@ -205,7 +208,7 @@ loop:
 			dev.status = sm.run(*dev)
 		}
 	}
-	log.Println("[VirtualESS-Device] shutdown")
+	log.Println("VirtualESS-Device shutdown")
 }
 
 type stateMachine struct {

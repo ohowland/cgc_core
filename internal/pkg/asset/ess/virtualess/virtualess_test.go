@@ -9,13 +9,13 @@ import (
 	"gotest.tools/assert"
 )
 
-func newESS() ess.Asset {
+func newESS() *ess.Asset {
 	configPath := "../ess_test_config.json"
 	ess, err := New(configPath)
 	if err != nil {
 		panic(err)
 	}
-	return ess
+	return &ess
 }
 
 func newBus() virtualacbus.VirtualACBus {
@@ -31,9 +31,9 @@ func newLinkedESS() *ess.Asset {
 	ess := newESS()
 	bus := newBus()
 
-	device := ess.DeviceController().(VirtualESS)
+	device := ess.DeviceController().(*VirtualESS)
 	device.LinkToBus(bus)
-	return &ess
+	return ess
 }
 
 func TestNew(t *testing.T) {
@@ -51,36 +51,234 @@ func TestLinkToBus(t *testing.T) {
 	ess := newESS()
 	bus := newBus()
 
-	device := ess.DeviceController().(VirtualESS)
+	device := ess.DeviceController().(*VirtualESS)
 	device.LinkToBus(bus)
 
 	testObservers := bus.GetBusObservers()
+
+	assert.Assert(t, device.observers.AssetObserver != nil)
+	assert.Assert(t, device.observers.BusObserver != nil)
 
 	assert.Assert(t, device.observers.AssetObserver == testObservers.AssetObserver)
 	assert.Assert(t, device.observers.BusObserver == testObservers.BusObserver)
 }
 
-func TestStartVirtualLoop(t *testing.T) {
+func TestStartStopVirtualLoop(t *testing.T) {
 	ess := newLinkedESS()
-	device := ess.DeviceController().(VirtualESS)
+	device := ess.DeviceController().(*VirtualESS)
 
 	device.StartVirualDevice()
-	time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
+	device.StopVirtualDevice()
+	time.Sleep(100 * time.Millisecond)
+
+	// TODO: What are the conditions for success and failure?
+}
+
+func TestTransitionOffToPQ(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+	device.StartVirualDevice()
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	ctrl := ess.DispatchControlHandle()
+	ctrl.RunCmd(true)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == false)
+
 	device.StopVirtualDevice()
 }
 
-/*
-func TestTransitionOffToPQ(t *testing.T) {}
+func TestTransitionPQToOff(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
-func TestTransitionPQToOff(t *testing.T) {}
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+	device.StartVirualDevice()
 
-func TestTransitionOffToHzV(t *testing.T) {}
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
 
-func TestTransitionHzVToOff(t *testing.T) {}
+	ctrl := ess.DispatchControlHandle()
+	ctrl.RunCmd(true)
 
-func TestTransitionPQToHzV(t *testing.T) {}
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
 
-func TestTransitionHzVToPQ(t *testing.T) {}
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == false)
 
-func TestStopVirtualLoop(t *testing.T) {}
-*/
+	ctrl.RunCmd(false)
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	device.StopVirtualDevice()
+}
+
+func TestTransitionOffToHzV(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+	device.StartVirualDevice()
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	ctrl := ess.DispatchControlHandle()
+	ctrl.RunCmd(true)
+	ctrl.GridformCmd(true)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == true)
+
+	device.StopVirtualDevice()
+}
+
+func TestTransitionHzVToOff(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+	device.StartVirualDevice()
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	ctrl := ess.DispatchControlHandle()
+	ctrl.RunCmd(true)
+	ctrl.GridformCmd(true)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == true)
+
+	ctrl.RunCmd(false)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	device.StopVirtualDevice()
+}
+
+func TestTransitionPQToHzV(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+	device.StartVirualDevice()
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	ctrl := ess.DispatchControlHandle()
+	ctrl.RunCmd(true)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	ctrl.GridformCmd(true)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == true)
+
+	device.StopVirtualDevice()
+}
+
+func TestTransitionHzVToPQ(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	ess := newLinkedESS()
+	device := ess.DeviceController().(*VirtualESS)
+	device.StartVirualDevice()
+
+	assert.Assert(t, device.status.Online == false)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	ctrl := ess.DispatchControlHandle()
+	ctrl.RunCmd(true)
+	ctrl.GridformCmd(true)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == true)
+
+	ctrl.GridformCmd(false)
+
+	ess.WriteControl()
+	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
+	ess.UpdateStatus()
+	ess.UpdateStatus()
+	time.Sleep(6 * time.Second)
+
+	assert.Assert(t, device.status.Online == true)
+	assert.Assert(t, device.status.Gridforming == false)
+
+	device.StopVirtualDevice()
+}
