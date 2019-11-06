@@ -1,7 +1,7 @@
 package virtualfeeder
 
 import (
-	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -20,9 +20,8 @@ type VirtualFeeder struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
-	config    Config
-	comm      Comm
-	observers Observers
+	comm      comm
+	observers virtualacbus.Observers
 }
 
 // Status data structure for the VirtualFeeder
@@ -40,22 +39,10 @@ type Control struct {
 	closeFeeder bool
 }
 
-// StaticConfig is a data structure representing an architypical fixed feeder configuration
-type Config struct { // Should this get transfered over to the specific class?
-	Bus         bus.Bus
-	AverageKW   float64
-	AverageKVAR float64
-}
-
 // Comm data structure for the VirtualFeeder
-type Comm struct {
+type comm struct {
 	incoming chan Status
 	outgoing chan Control
-}
-
-type Observers struct {
-	assetObserver chan<- virtualacbus.Source
-	busObserver   <-chan virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -83,33 +70,17 @@ func (a VirtualFeeder) write() {
 	a.comm.outgoing <- a.control
 }
 
-func (a *VirtualFeeder) updateObservers(obs Observers) {
-	obs.assetObserver <- mapSource(*a)
+func (a *VirtualFeeder) updateObservers(obs virtualacbus.Observers) {
+	source := mapSource(*a)
+	obs.AssetObserver <- source
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
-func New(configPath string, buses map[string]bus.Bus) (feeder.Asset, error) {
+func New(configPath string) (feeder.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return feeder.Asset{}, err
 	}
-
-	config := struct {
-		Bus         string  `json:"Bus"`
-		AverageKW   float64 `json:"AverageKW"`
-		AverageKVAR float64 `json:"AverageKVAR"`
-	}{"", 0, 0}
-
-	err = json.Unmarshal(jsonConfig, &config)
-	if err != nil {
-		return feeder.Asset{}, err
-	}
-
-	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
-
-	// TODO: Troubleshoot why this cannot be set to 0 length
-	in := make(chan Status, 1)
-	out := make(chan Control, 1)
 
 	pid, err := uuid.NewUUID()
 
@@ -126,19 +97,10 @@ func New(configPath string, buses map[string]bus.Bus) (feeder.Asset, error) {
 		control: Control{
 			closeFeeder: false,
 		},
-		config: Config{
-			Bus:         bus,
-			AverageKW:   config.AverageKW,
-			AverageKVAR: config.AverageKVAR,
-		},
-		comm: Comm{
-			incoming: in,
-			outgoing: out,
-		},
+		comm: comm{},
 	}
 
-	device.startVirtualDeviceLoop()
-	return feeder.New(jsonConfig, device)
+	return feeder.New(jsonConfig, &device)
 }
 
 // Status maps feeder.DeviceStatus to feeder.Status
@@ -171,34 +133,46 @@ func mapSource(a VirtualFeeder) virtualacbus.Source {
 	}
 }
 
-func (a *VirtualFeeder) startVirtualDeviceLoop() {
-	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
-	observers := Observers{
-		assetObserver: bus.AssetObserver(),
+// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
+func (a *VirtualFeeder) LinkToBus(b bus.Bus) error {
+	vrACbus, ok := b.(virtualacbus.VirtualACBus)
+	if !ok {
+		return errors.New("Bus cannot be cast to VirtualACBus")
 	}
-
-	go virtualDeviceLoop(*a, observers)
+	a.observers = vrACbus.GetBusObservers()
+	return nil
 }
 
-func (a VirtualFeeder) stopVirtualDeviceLoop() {
-	close(a.observers.assetObserver)
+// StartVirtualDevice launches the virtual machine loop
+func (a *VirtualFeeder) StartVirtualDevice() {
+	in := make(chan Status, 1)
+	out := make(chan Control, 1)
+	a.comm.incoming = in
+	a.comm.outgoing = out
+	go virtualDeviceLoop(a.pid, a.comm, a.observers)
+}
+
+// StopVirtualDevice stops the virutal machine loop
+func (a VirtualFeeder) StopVirtualDevice() {
+	close(a.observers.AssetObserver)
 	close(a.comm.outgoing)
 }
 
-func virtualDeviceLoop(dev VirtualFeeder, obs Observers) {
-	defer close(dev.comm.incoming)
+func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
+	defer close(comm.incoming)
+	dev := &VirtualFeeder{pid: pid} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
 	var ok bool
 loop:
 	for {
 		select {
-		case dev.control, ok = <-dev.comm.outgoing:
+		case dev.control, ok = <-comm.outgoing:
 			if !ok {
 				break loop
 			}
-		case dev.comm.incoming <- dev.status:
+		case comm.incoming <- dev.status:
 			dev.updateObservers(obs)
-			dev.status = sm.run(dev)
+			dev.status = sm.run(*dev)
 		}
 	}
 	log.Println("VirtualFeeder-Device: shutdown")
@@ -224,8 +198,8 @@ func (s offState) action(dev VirtualFeeder) Status {
 	return Status{
 		KW:     0,
 		KVAR:   0,
-		Hz:     dev.config.Bus.Hz(),
-		Volt:   dev.config.Bus.Volt(),
+		Hz:     0,
+		Volt:   0,
 		Online: false,
 	}
 }
@@ -241,19 +215,17 @@ func (s offState) transition(dev VirtualFeeder) state {
 type onState struct{}
 
 func (s onState) action(dev VirtualFeeder) Status {
-	// TODO: determine why bus pointer isn't working here.
-	// unable to successfully call dev.config.Bus.Energized()
 	var kw float64
 	var kvar float64
 	if true {
-		kw = dev.config.AverageKW
-		kvar = dev.config.AverageKVAR
+		kw = 456 //TODO: Link to a virtual load?
+		kvar = 123
 	}
 	return Status{
-		KW:     kw,   // TODO: Link to virtual system model
-		KVAR:   kvar, // TODO: Link to virtual system model
-		Hz:     dev.config.Bus.Hz(),
-		Volt:   dev.config.Bus.Volt(),
+		KW:     kw,
+		KVAR:   kvar,
+		Hz:     60.0, // TODO: Link to virtual system model
+		Volt:   480,
 		Online: true,
 	}
 }

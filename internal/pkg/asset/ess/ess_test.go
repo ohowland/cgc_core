@@ -21,6 +21,6 @@ func TestReadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertConfig := Config{"ESS", 20, 10, 50}
+	assertConfig := Config{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
 	assert.Assert(t, testConfig == assertConfig)
 }

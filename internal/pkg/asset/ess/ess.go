@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // Asset is a data structure for an ESS Asset
@@ -40,14 +39,12 @@ type Status struct {
 
 // Control holds the ESS asset control parameters
 type Control struct {
-	dispatch    MachineControl
-	operator    MachineControl
-	supervisory SupervisoryControl
+	machine     MachineControl
+	supervisory supervisoryControl
 }
 
 // MachineControl defines the hardware control interface for the ESS Asset
 type MachineControl struct {
-	mux      *sync.Mutex
 	Run      bool
 	KW       float64
 	KVAR     float64
@@ -55,8 +52,7 @@ type MachineControl struct {
 }
 
 // SupervisoryControl defines the software control interface for the ESS Asset
-type SupervisoryControl struct {
-	mux    *sync.Mutex
+type supervisoryControl struct {
 	Enable bool
 	Manual bool
 }
@@ -85,9 +81,8 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 	status := Status{}
 	control := Control{
-		MachineControl{&sync.Mutex{}, false, 0, 0, false},
-		MachineControl{&sync.Mutex{}, false, 0, 0, false},
-		SupervisoryControl{&sync.Mutex{}, false, false},
+		MachineControl{false, 0, 0, false},
+		supervisoryControl{false, false},
 	}
 	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
@@ -108,16 +103,9 @@ func (a *Asset) setStatus(s Status) {
 
 // WriteControl requests a physical device write of the data held in the GridAsset control field.
 func (a Asset) WriteControl() {
-	var control MachineControl
-	if a.control.supervisory.Manual {
-		a.control.operator.mux.Lock()
-		defer a.control.operator.mux.Unlock()
-		control = a.control.operator
-	} else {
-		a.control.dispatch.mux.Lock()
-		defer a.control.dispatch.mux.Unlock()
-		control = a.control.dispatch
-	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	control := a.control.machine
 	go a.device.WriteDeviceControl(control)
 }
 
@@ -146,40 +134,30 @@ func (a Asset) KVAR() float64 {
 	return a.status.KVAR
 }
 
-// DispatchControlHandle returns a pointer to the asset's dispatch control interface
-func (a *Asset) DispatchControlHandle() asset.MachineController {
-	return &a.control.dispatch
-}
-
-// OperatorControlHandle returns a pointer to the asset's operator control interface
-func (a *Asset) OperatorControlHandle() asset.MachineController {
-	return &a.control.operator
-}
-
 // KWCmd sets the asset's real power setpoint
-func (a *MachineControl) KWCmd(kw float64) {
+func (a *Asset) KWCmd(kw float64) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.KW = kw
+	a.control.machine.KW = kw
 }
 
 // KVARCmd sets the asset's reactive power setpoint
-func (a *MachineControl) KVARCmd(kvar float64) {
+func (a *Asset) KVARCmd(kvar float64) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.KVAR = kvar
+	a.control.machine.KVAR = kvar
 }
 
 // RunCmd sets the asset's run request state
-func (a *MachineControl) RunCmd(run bool) {
+func (a *Asset) RunCmd(run bool) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.Run = run
+	a.control.machine.Run = run
 }
 
 // GridformCmd sets the asset's gridform request state
-func (a *MachineControl) GridformCmd(gridform bool) {
+func (a *Asset) GridformCmd(gridform bool) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.Gridform = gridform
+	a.control.machine.Gridform = gridform
 }

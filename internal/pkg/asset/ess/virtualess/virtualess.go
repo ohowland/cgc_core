@@ -20,7 +20,7 @@ type VirtualESS struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
-	comm      Comm
+	comm      comm
 	observers virtualacbus.Observers
 }
 
@@ -47,7 +47,7 @@ type Control struct {
 }
 
 // Comm data structure for the VirtualESS
-type Comm struct {
+type comm struct {
 	incoming chan Status
 	outgoing chan Control
 }
@@ -120,10 +120,9 @@ func New(configPath string) (ess.Asset, error) {
 			KVAR:     0,
 			Gridform: false,
 		},
-		comm: Comm{},
+		comm: comm{},
 	}
 
-	//device.startVirtualDeviceLoop()
 	return ess.New(jsonConfig, &device)
 }
 
@@ -165,7 +164,7 @@ func mapSource(a VirtualESS) virtualacbus.Source {
 	}
 }
 
-// LinkVirtualDevice pulls the communication channels from the virtual bus and holds them in asset.observers
+// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
 func (a *VirtualESS) LinkToBus(b bus.Bus) error {
 	vrACbus, ok := b.(virtualacbus.VirtualACBus)
 	if !ok {
@@ -191,7 +190,7 @@ func (a VirtualESS) StopVirtualDevice() {
 	close(a.comm.outgoing)
 }
 
-func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs virtualacbus.Observers) {
+func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
 	defer close(comm.incoming)
 	dev := &VirtualESS{pid: pid} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
