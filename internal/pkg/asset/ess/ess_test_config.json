@@ -1,8 +1,7 @@
 {
-  "Config": {
-    "Name": "TEST_Virtual ESS",
-    "RatedKW": 20,
-    "RatedKVAR": 10,
-    "RatedKWH": 50
-  }
+  "Name": "TEST_Virtual ESS",
+  "Bus": "Virtual Bus",
+  "RatedKW": 20,
+  "RatedKVAR": 10,
+  "RatedKWH": 50
 }

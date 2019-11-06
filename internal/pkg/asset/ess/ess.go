@@ -10,7 +10,7 @@ import (
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
-	mux     sync.Mutex
+	mux     *sync.Mutex
 	pid     uuid.UUID
 	device  DeviceController
 	status  Status
@@ -56,6 +56,7 @@ type MachineControl struct {
 
 // SupervisoryControl defines the software control interface for the ESS Asset
 type SupervisoryControl struct {
+	mux    *sync.Mutex
 	Enable bool
 	Manual bool
 }
@@ -83,8 +84,12 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	}
 
 	status := Status{}
-	control := Control{}
-	return Asset{sync.Mutex{}, PID, device, status, control, config}, err
+	control := Control{
+		MachineControl{&sync.Mutex{}, false, 0, 0, false},
+		MachineControl{&sync.Mutex{}, false, 0, 0, false},
+		SupervisoryControl{&sync.Mutex{}, false, false},
+	}
+	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 
 }
 
@@ -114,6 +119,11 @@ func (a Asset) WriteControl() {
 		control = a.control.dispatch
 	}
 	go a.device.WriteDeviceControl(control)
+}
+
+// DeviceController returns the hardware abstraction layer struct
+func (a Asset) DeviceController() DeviceController {
+	return a.device
 }
 
 // PID is a getter for the asset PID
