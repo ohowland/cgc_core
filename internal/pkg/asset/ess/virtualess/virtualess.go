@@ -53,9 +53,9 @@ type comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a *VirtualESS) ReadDeviceStatus(setParentStatus func(ess.Status)) {
+func (a *VirtualESS) ReadDeviceStatus(setAssetStatus func(ess.Status)) {
 	a.status = a.read()
-	setParentStatus(mapStatus(a.status)) // callback for to write parent status
+	setAssetStatus(mapStatus(a.status)) // callback for to write archetype status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
@@ -128,7 +128,6 @@ func New(configPath string) (ess.Asset, error) {
 
 // Status maps ess.DeviceStatus to ess.Status
 func mapStatus(s Status) ess.Status {
-	// map deviceStatus to GridStatus
 	return ess.Status{
 		Timestamp:            s.timestamp,
 		KW:                   s.KW,
@@ -174,8 +173,8 @@ func (a *VirtualESS) LinkToBus(b bus.Bus) error {
 	return nil
 }
 
-// StartVirualDevice launches the virtual machine loop.
-func (a *VirtualESS) StartVirualDevice() {
+// StartVirtualDevice launches the virtual machine loop.
+func (a *VirtualESS) StartVirtualDevice() {
 	in := make(chan Status, 1)
 	out := make(chan Control, 1)
 	a.comm.incoming = in

@@ -51,7 +51,7 @@ type MachineControl struct {
 	Gridform bool
 }
 
-// SupervisoryControl defines the software control interface for the ESS Asset
+// supervisoryControl defines the software control interface for the ESS Asset
 type supervisoryControl struct {
 	Enable bool
 	Manual bool
@@ -155,8 +155,8 @@ func (a *Asset) RunCmd(run bool) {
 	a.control.machine.Run = run
 }
 
-// GridformCmd sets the asset's gridform request state
-func (a *Asset) GridformCmd(gridform bool) {
+// Gridform sets the asset's gridform request state
+func (a *Asset) Gridform(gridform bool) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.control.machine.Gridform = gridform

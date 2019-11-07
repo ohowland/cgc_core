@@ -20,7 +20,7 @@ type Asset struct {
 // DeviceController is the hardware abstraction layer
 type DeviceController interface {
 	ReadDeviceStatus(func(Status))
-	WriteDeviceControl(Control)
+	WriteDeviceControl(MachineControl)
 }
 
 // Status is a data structure representing an architypical PV status
@@ -35,10 +35,21 @@ type Status struct {
 
 // Control is a data structure representing an architypical PV control
 type Control struct {
+	machine     MachineControl
+	supervisory supervisoryControl
+}
+
+// MachineControl defines the hardware control interface for the ESS Asset
+type MachineControl struct {
 	Run     bool
-	Enable  bool
 	KWLimit float64
 	KVAR    float64
+}
+
+// supervisoryControl defines the software control interface for the ESS Asset
+type supervisoryControl struct {
+	Enable bool
+	Manual bool
 }
 
 type Config struct {
@@ -48,14 +59,25 @@ type Config struct {
 	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
-// PID is a getter for the unique identifier field
-func (a Asset) PID() uuid.UUID {
-	return a.pid
-}
+// New returns a configured PV Asset
+func New(jsonConfig []byte, device DeviceController) (Asset, error) {
+	config := Config{}
+	err := json.Unmarshal(jsonConfig, &config)
+	if err != nil {
+		return Asset{}, err
+	}
 
-// Status is a getter for the pv.Asset status field
-func (a Asset) Status() Status {
-	return a.status
+	PID, err := uuid.NewUUID()
+	if err != nil {
+		return Asset{}, err
+	}
+
+	status := Status{}
+	control := Control{
+		MachineControl{false, 0, 0},
+		supervisoryControl{false, false},
+	}
+	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
 }
 
 // UpdateStatus requests a physical device read and updates the ess.Asset status field
@@ -64,7 +86,7 @@ func (a *Asset) UpdateStatus() {
 }
 
 func (a *Asset) setStatus(s Status) {
-	if a.filterTimestamp(s.Timestamp) {
+	if s.Timestamp > a.status.Timestamp { // mux before?
 		a.mux.Lock()
 		defer a.mux.Unlock()
 		a.status = s
@@ -73,65 +95,57 @@ func (a *Asset) setStatus(s Status) {
 
 // WriteControl requests a physical device write of the data held in the PV control field.
 func (a Asset) WriteControl() {
-	go a.device.WriteDeviceControl(a.control)
-}
-
-// SetControl is a setter for the PV control field
-func (a *Asset) SetControl(c Control) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control = c
+	control := a.control.machine
+	go a.device.WriteDeviceControl(control)
 }
 
-// New returns a configured pv.Asset
-func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	PID, err := uuid.NewUUID()
-	if err != nil {
-		return Asset{}, err
-	}
-
-	config := Config{}
-	err = json.Unmarshal(jsonConfig, &config)
-	if err != nil {
-		return Asset{}, err
-	}
-
-	status := Status{}
-	control := Control{}
-
-	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
+// DeviceController returns the hardware abstraction layer struct
+func (a Asset) DeviceController() DeviceController {
+	return a.device
 }
 
-func (a *Asset) filterTimestamp(timestamp int64) bool {
-	return timestamp > a.status.Timestamp
+// PID is a getter for the unique identifier field
+func (a Asset) PID() uuid.UUID {
+	return a.pid
 }
 
+// Name is a getter for the asset Name
 func (a Asset) Name() string {
 	return a.config.Name
 }
 
+// KW returns the asset's measured real power
 func (a Asset) KW() float64 {
-	return a.Status().KW
+	return a.status.KW
 }
 
+// KVAR returns the asset's measured reactive power
 func (a Asset) KVAR() float64 {
-	return a.Status().KVAR
+	return a.status.KVAR
 }
 
+// KWCmd sets the asset's real power setpoint
 func (a *Asset) KWCmd(kw float64) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control.KWLimit = kw
+	a.control.machine.KWLimit = kw
 }
 
+// KVARCmd sets the asset's reactive power setpoint
 func (a *Asset) KVARCmd(kvar float64) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control.KVAR = kvar
+	a.control.machine.KVAR = kvar
 }
 
+// RunCmd sets the asset's run request state
 func (a *Asset) RunCmd(run bool) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control.Run = run
+	a.control.machine.Run = run
 }
+
+// GridformCmd is unused by PV Inverters
+func (a *Asset) GridformCmd(gridform bool) {}

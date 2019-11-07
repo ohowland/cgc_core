@@ -1,7 +1,7 @@
 package virtualgrid
 
 import (
-	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -19,9 +19,8 @@ type VirtualGrid struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
-	config    Config
-	comm      Comm
-	observers Observers
+	comm      comm
+	observers virtualacbus.Observers
 }
 
 // Status data structure for the VirtualGrid
@@ -42,20 +41,10 @@ type Control struct {
 	closeIntertie bool
 }
 
-// Config differentiates between two types of configurations, static and dynamic
-type Config struct {
-	Bus bus.Bus
-}
-
 // Comm data structure for the VirtualGrid
-type Comm struct {
+type comm struct {
 	incoming chan Status
 	outgoing chan Control
-}
-
-type Observers struct {
-	assetObserver chan<- virtualacbus.Source
-	busObserver   <-chan virtualacbus.Source
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -74,7 +63,11 @@ func (a VirtualGrid) read() Status {
 	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus := <-a.comm.incoming
+	readStatus, ok := <-a.comm.incoming
+	if !ok {
+		log.Println("Read Error: VirtualGrid, virtual channel is not open")
+		return Status{}
+	}
 	readStatus.timestamp = timestamp
 	return readStatus
 }
@@ -84,7 +77,8 @@ func (a VirtualGrid) write() {
 }
 
 func (a *VirtualGrid) updateObservers(obs Observers) {
-	obs.assetObserver <- mapSource(*a)
+	source := mapSource(*a)
+	obs.AssetObserver <- source
 	if a.status.Online {
 		gridformer := <-obs.busObserver
 		a.status.KW = gridformer.KW
@@ -93,26 +87,11 @@ func (a *VirtualGrid) updateObservers(obs Observers) {
 }
 
 // New returns an initalized virtualbus Asset; this is part of the Asset interface.
-func New(configPath string, buses map[string]bus.Bus) (grid.Asset, error) {
+func New(configPath string) (grid.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return grid.Asset{}, err
 	}
-
-	config := struct {
-		Bus string `json:"Bus"`
-	}{""}
-
-	err = json.Unmarshal(jsonConfig, &config)
-	if err != nil {
-		return grid.Asset{}, err
-	}
-
-	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
-
-	// TODO: Troubleshoot why this cannot be set to 0 length
-	in := make(chan Status, 1)
-	out := make(chan Control, 1)
 
 	pid, _ := uuid.NewUUID()
 
@@ -129,17 +108,10 @@ func New(configPath string, buses map[string]bus.Bus) (grid.Asset, error) {
 		control: Control{
 			closeIntertie: false,
 		},
-		config: Config{
-			Bus: bus,
-		},
-		comm: Comm{
-			incoming: in,
-			outgoing: out,
-		},
+		comm: comm{},
 	}
 
-	device.startVirtualDeviceLoop()
-	return grid.New(jsonConfig, device)
+	return grid.New(jsonConfig, &device)
 }
 
 // Status maps grid.DeviceStatus to grid.Status
@@ -175,24 +147,35 @@ func mapSource(a VirtualGrid) virtualacbus.Source {
 	}
 }
 
-func (a *VirtualGrid) startVirtualDeviceLoop() {
-	bus := a.config.Bus.(*virtualacbus.VirtualACBus)
-	observers := Observers{
-		assetObserver: bus.AssetObserver(),
-		busObserver:   bus.BusObserver(),
+// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
+func (a *VirtualGrid) LinkToBus(b bus.Bus) error {
+	vrACbus, ok := b.(virtualacbus.VirtualACBus)
+	if !ok {
+		return errors.New("Bus cannot be cast to VirtualACBus")
 	}
+	a.observers = vrACbus.GetBusObservers()
+	return nil
+}
+
+// StartVirtualDevice launches the virtual machine loop.
+func (a *VirtualGrid) StartVirtualDevice() {
+	in := make(chan Status, 1)
+	out := make(chan Control, 1)
+	a.comm.incoming = in
+	a.comm.outgoing = out
 
 	go virtualDeviceLoop(a.pid, a.comm, observers)
 }
 
-func (a VirtualGrid) stopVirtualDeviceLoop() {
+// StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
+func (a VirtualGrid) StopVirtualDevice() {
 	close(a.observers.assetObserver)
 	close(a.comm.outgoing)
 }
 
 func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs Observers) {
 	defer close(comm.incoming)
-	dev := &VirtualGrid{pid: pid}
+	dev := &VirtualGrid{pid: pid} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
 	var ok bool
 loop:

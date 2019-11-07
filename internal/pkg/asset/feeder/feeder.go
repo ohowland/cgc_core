@@ -132,10 +132,3 @@ func (a *Asset) RunCmd(run bool) {
 	defer a.mux.Unlock()
 	a.control.machine.CloseFeeder = run
 }
-
-// GridformCmd sets the asset's gridform request state
-func (a *Asset) GridformCmd(gridform bool) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.control.machine.CloseFeeder = gridform
-}

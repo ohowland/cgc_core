@@ -67,7 +67,7 @@ func TestStartStopVirtualLoop(t *testing.T) {
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
 
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 	time.Sleep(100 * time.Millisecond)
 	device.StopVirtualDevice()
 	time.Sleep(100 * time.Millisecond)
@@ -79,7 +79,7 @@ func TestRead(t *testing.T) {
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
 
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 	time.Sleep(1 * time.Second)
 	status := device.read()
 	time.Sleep(1 * time.Second)
@@ -107,7 +107,7 @@ func TestWrite(t *testing.T) {
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
 
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 	device.control = Control{true, 10, 10, false}
 	device.write()
 }
@@ -131,7 +131,7 @@ func TestTransitionOffToPQ(t *testing.T) {
 
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 
 	assert.Assert(t, device.status.Online == false)
 	assert.Assert(t, device.status.Gridforming == false)
@@ -157,7 +157,7 @@ func TestTransitionPQToOff(t *testing.T) {
 
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 
 	assert.Assert(t, device.status.Online == false)
 	assert.Assert(t, device.status.Gridforming == false)
@@ -193,7 +193,7 @@ func TestTransitionOffToHzV(t *testing.T) {
 
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 
 	assert.Assert(t, device.status.Online == false)
 	assert.Assert(t, device.status.Gridforming == false)
@@ -220,7 +220,7 @@ func TestTransitionHzVToOff(t *testing.T) {
 
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 
 	assert.Assert(t, device.status.Online == false)
 	assert.Assert(t, device.status.Gridforming == false)
@@ -258,7 +258,7 @@ func TestTransitionPQToHzV(t *testing.T) {
 
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 
 	assert.Assert(t, device.status.Online == false)
 	assert.Assert(t, device.status.Gridforming == false)
@@ -295,7 +295,7 @@ func TestTransitionHzVToPQ(t *testing.T) {
 
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirualDevice()
+	device.StartVirtualDevice()
 
 	assert.Assert(t, device.status.Online == false)
 	assert.Assert(t, device.status.Gridforming == false)

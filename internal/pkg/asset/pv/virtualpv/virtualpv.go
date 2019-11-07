@@ -1,10 +1,11 @@
 package virtualpv
 
 import (
-	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,9 +19,8 @@ type VirtualPV struct {
 	pid       uuid.UUID
 	status    Status
 	control   Control
-	config    Config
-	comm      Comm
-	observers Observers
+	comm      comm
+	observers virtualacbus.Observers
 }
 
 // Status data structure for the VirtualPV
@@ -35,7 +35,7 @@ type Status struct {
 
 // Control data structure for the VirtualPV
 type Control struct {
-	run bool
+	Run bool `json:"Run"`
 }
 
 // Config is a data structure representing an architypical fixed PV configuration
@@ -44,23 +44,19 @@ type Config struct {
 }
 
 // Comm data structure for the VirtualPV
-type Comm struct {
+type comm struct {
 	incoming chan Status
 	outgoing chan Control
 }
 
-type Observers struct {
-	assetObserver chan<- virtualacbus.Source
-}
-
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualPV) ReadDeviceStatus(setParentStatus func(pv.Status)) {
+func (a *VirtualPV) ReadDeviceStatus(setAssetStatus func(pv.Status)) {
 	a.status = a.read()
-	setParentStatus(mapStatus(a.status)) // callback for to write parent status
+	setAssetStatus(mapStatus(a.status)) // callback for to write archetype status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualPV) WriteDeviceControl(c pv.Control) {
+func (a VirtualPV) WriteDeviceControl(c pv.MachineControl) {
 	a.control = mapControl(c)
 	a.write()
 }
@@ -69,38 +65,30 @@ func (a VirtualPV) read() Status {
 	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus := <-a.comm.incoming
+	readStatus, ok := <-a.comm.incoming
+	if !ok {
+		log.Println("Read Error: VirtualESS, virtual channel is not open")
+		return Status{}
+	}
 	readStatus.timestamp = timestamp
 	return readStatus
 }
 
 func (a VirtualPV) write() {
-	fuzzing := rand.Intn(2000)
-	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	a.comm.outgoing <- a.control
 }
 
-func (a *VirtualPV) updateObservers(obs Observers) {
-	obs.assetObserver <- mapSource(*a)
+func (a *VirtualPV) updateObservers(obs virtualacbus.Observers) {
+	source := mapSource(*a)
+	obs.AssetObserver <- source
 }
 
 // New returns an initalized VirtualPV Asset; this is part of the Asset interface.
-func New(configPath string, buses map[string]bus.Bus) (pv.Asset, error) {
+func New(configPath string) (pv.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return pv.Asset{}, err
 	}
-
-	config := Config{}
-	err = json.Unmarshal(jsonConfig, &config)
-	if err != nil {
-		return pv.Asset{}, err
-	}
-
-	bus := buses[config.Bus].(*virtualacbus.VirtualACBus)
-
-	in := make(chan Status, 1)
-	out := make(chan Control, 1)
 
 	pid, err := uuid.NewUUID()
 
@@ -114,30 +102,12 @@ func New(configPath string, buses map[string]bus.Bus) (pv.Asset, error) {
 			Online: false,
 		},
 		control: Control{
-			run: false,
+			Run: false,
 		},
-		comm: Comm{
-			incoming: in,
-			outgoing: out,
-		},
-		observers: Observers{
-			assetObserver: bus.AssetObserver(),
-		},
+		comm: comm{},
 	}
 
-	go virtualDeviceLoop(device.comm, device.observers)
-	return pv.New(jsonConfig, device)
-}
-
-func mapSource(a VirtualPV) virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         a.pid,
-		Hz:          a.status.Hz,
-		Volt:        a.status.Volt,
-		KW:          a.status.KW,
-		KVAR:        a.status.KVAR,
-		Gridforming: false,
-	}
+	return pv.New(jsonConfig, &device)
 }
 
 // Status maps grid.DeviceStatus to grid.Status
@@ -154,16 +124,54 @@ func mapStatus(s Status) pv.Status {
 }
 
 // Control maps grid.Control to grid.DeviceControl
-func mapControl(c pv.Control) Control {
+func mapControl(c pv.MachineControl) Control {
 	// map GridControl params to deviceControl
 	return Control{
-		run: c.Run,
+		Run: c.Run,
 	}
 }
 
-func virtualDeviceLoop(comm Comm, obs Observers) {
+func mapSource(a VirtualPV) virtualacbus.Source {
+	return virtualacbus.Source{
+		PID:         a.pid,
+		Hz:          a.status.Hz,
+		Volt:        a.status.Volt,
+		KW:          a.status.KW,
+		KVAR:        a.status.KVAR,
+		Gridforming: false,
+	}
+}
+
+// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
+func (a *VirtualPV) LinkToBus(b bus.Bus) error {
+	vrACbus, ok := b.(virtualacbus.VirtualACBus)
+	if !ok {
+		return errors.New("Bus cannot be cast to VirtualACBus")
+	}
+	a.observers = vrACbus.GetBusObservers()
+	return nil
+}
+
+// StartVirtualDevice launches the virtual machine loop.
+func (a *VirtualPV) StartVirtualDevice() {
+	in := make(chan Status, 1)
+	out := make(chan Control, 1)
+	a.comm.incoming = in
+	a.comm.outgoing = out
+
+	go virtualDeviceLoop(a.pid, a.comm, a.observers)
+}
+
+// StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
+func (a VirtualPV) StopVirtualDevice() {
+	close(a.observers.AssetObserver)
+	close(a.comm.outgoing)
+}
+
+func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
+	defer close(comm.incoming)
 	dev := &VirtualPV{} // The virtual 'hardware' device
-	//sm := &stateMachine{offState{}}
+	sm := &stateMachine{offState{}}
 	var ok bool
 loop:
 	for {
@@ -174,11 +182,65 @@ loop:
 			}
 		case comm.incoming <- dev.status: // read from 'hardware'
 			dev.updateObservers(obs)
-			//dev.status = sm.run(*dev)
-			//log.Printf("[VirtualPV-Device: state: %v]\n",
-			//reflect.TypeOf(sm.currentState).String())
+			dev.status = sm.run(*dev)
 		}
 	}
 	log.Println("[VirtualPV-Device] shutdown")
 
+}
+
+type stateMachine struct {
+	currentState state
+}
+
+func (s *stateMachine) run(dev VirtualPV) Status {
+	s.currentState = s.currentState.transition(dev)
+	return s.currentState.action(dev)
+}
+
+type state interface {
+	action(VirtualPV) Status
+	transition(VirtualPV) state
+}
+
+type offState struct{}
+
+func (s offState) action(dev VirtualPV) Status {
+	return Status{
+		KW:     0,
+		KVAR:   0,
+		Hz:     0,
+		Volt:   0,
+		Online: false,
+	}
+}
+
+func (s offState) transition(dev VirtualPV) state {
+	if dev.control.Run == true {
+		log.Printf("VirtualPV-Device: state: %v\n",
+			reflect.TypeOf(onState{}).String())
+		return onState{}
+	}
+	return offState{}
+}
+
+type onState struct{}
+
+func (s onState) action(dev VirtualPV) Status {
+	return Status{
+		KW:     0,
+		KVAR:   0,
+		Hz:     0,
+		Volt:   0,
+		Online: false,
+	}
+}
+
+func (s onState) transition(dev VirtualPV) state {
+	if dev.control.Run == false {
+		log.Printf("VirtualPV-Device: state: %v\n",
+			reflect.TypeOf(offState{}).String())
+		return offState{}
+	}
+	return onState{}
 }
