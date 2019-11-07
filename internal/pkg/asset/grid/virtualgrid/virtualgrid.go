@@ -76,11 +76,11 @@ func (a VirtualGrid) write() {
 	a.comm.outgoing <- a.control
 }
 
-func (a *VirtualGrid) updateObservers(obs Observers) {
+func (a *VirtualGrid) updateObservers(obs virtualacbus.Observers) {
 	source := mapSource(*a)
 	obs.AssetObserver <- source
 	if a.status.Online {
-		gridformer := <-obs.busObserver
+		gridformer := <-obs.BusObserver
 		a.status.KW = gridformer.KW
 		a.status.KVAR = gridformer.KVAR
 	}
@@ -164,16 +164,16 @@ func (a *VirtualGrid) StartVirtualDevice() {
 	a.comm.incoming = in
 	a.comm.outgoing = out
 
-	go virtualDeviceLoop(a.pid, a.comm, observers)
+	go virtualDeviceLoop(a.pid, a.comm, a.observers)
 }
 
 // StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
 func (a VirtualGrid) StopVirtualDevice() {
-	close(a.observers.assetObserver)
+	close(a.observers.AssetObserver)
 	close(a.comm.outgoing)
 }
 
-func virtualDeviceLoop(pid uuid.UUID, comm Comm, obs Observers) {
+func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
 	defer close(comm.incoming)
 	dev := &VirtualGrid{pid: pid} // The virtual 'hardware' device
 	sm := &stateMachine{offState{}}
