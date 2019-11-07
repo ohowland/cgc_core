@@ -7,7 +7,6 @@ import (
 // Asset is the interface for all physical devices that make up dispatchable sources/sinks in the power system.
 type Asset interface {
 	PID() uuid.UUID
-	Name() string
 	UpdateStatus()
 	WriteControl()
 }
@@ -20,9 +19,9 @@ type PowerReporter interface {
 
 // MachineController interface for control of machine state
 type MachineController interface {
-	KWCmd(float64)
-	KVARCmd(float64)
-	RunCmd(bool)
+	KW(float64)
+	KVAR(float64)
+	Run(bool)
 }
 
 // Gridformer interface for control of gridforming state

@@ -26,7 +26,6 @@ type VirtualESS struct {
 
 // Status data structure for the VirtualESS
 type Status struct {
-	timestamp            int64
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
@@ -53,9 +52,10 @@ type comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a *VirtualESS) ReadDeviceStatus(setAssetStatus func(ess.Status)) {
+func (a *VirtualESS) ReadDeviceStatus(setAssetStatus func(int64, ess.MachineStatus)) {
+	timestamp := time.Now().UnixNano()
 	a.status = a.read()
-	setAssetStatus(mapStatus(a.status)) // callback for to write archetype status
+	setAssetStatus(timestamp, mapStatus(a.status)) // callback for to write archetype status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
@@ -65,7 +65,6 @@ func (a VirtualESS) WriteDeviceControl(c ess.MachineControl) {
 }
 
 func (a VirtualESS) read() Status {
-	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus, ok := <-a.comm.incoming
@@ -73,7 +72,6 @@ func (a VirtualESS) read() Status {
 		log.Println("Read Error: VirtualESS, virtual channel is not open")
 		return Status{}
 	}
-	readStatus.timestamp = timestamp
 	return readStatus
 }
 
@@ -103,7 +101,6 @@ func New(configPath string) (ess.Asset, error) {
 	device := VirtualESS{
 		pid: pid,
 		status: Status{
-			timestamp:            0,
 			KW:                   0,
 			KVAR:                 0,
 			Hz:                   0,
@@ -127,9 +124,8 @@ func New(configPath string) (ess.Asset, error) {
 }
 
 // Status maps ess.DeviceStatus to ess.Status
-func mapStatus(s Status) ess.Status {
-	return ess.Status{
-		Timestamp:            s.timestamp,
+func mapStatus(s Status) ess.MachineStatus {
+	return ess.MachineStatus{
 		KW:                   s.KW,
 		KVAR:                 s.KVAR,
 		Hz:                   s.Hz,
