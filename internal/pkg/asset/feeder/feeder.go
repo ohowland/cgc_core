@@ -7,9 +7,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// DeviceController is the hardware abstraction layer
+type DeviceController interface {
+	ReadDeviceStatus(func(int64, MachineStatus))
+	WriteDeviceControl(MachineControl)
+}
+
 // Asset is a data structure for an Feeder Asset
 type Asset struct {
-	mux     *sync.Mutex
 	pid     uuid.UUID
 	device  DeviceController
 	status  Status
@@ -17,49 +22,132 @@ type Asset struct {
 	config  Config
 }
 
-// DeviceController is the hardware abstraction layer
-type DeviceController interface {
-	ReadDeviceStatus(func(Status))
-	WriteDeviceControl(MachineControl)
+// PID is a getter for the ess.Asset status field
+func (a Asset) PID() uuid.UUID {
+	return a.pid
+}
+
+// UpdateStatus requests a physical device read and updates the ess.Asset status field
+func (a *Asset) UpdateStatus() {
+	go a.device.ReadDeviceStatus(a.status.setStatus)
+}
+
+// WriteControl requests a physical device write of the data held in the GridAsset control field.
+func (a Asset) WriteControl() {
+	a.control.mux.Lock()
+	defer a.control.mux.Unlock()
+	control := a.control.machine
+	go a.device.WriteDeviceControl(control)
+}
+
+// DeviceController returns the hardware abstraction layer struct
+func (a Asset) DeviceController() DeviceController {
+	return a.device
+}
+
+// Status returns the archetypical status for the feeder asset.
+// This takes the form of the ess.MachineStatus struct
+func (a Asset) Status() Status {
+	return a.status
+}
+
+// Control returns a pointer to the machine control struct.
+func (a *Asset) Control() *Control {
+	return &a.control
+}
+
+//Config returns the archetypical configuration for the feeder asset.
+func (a Asset) Config() Config {
+	return a.config
 }
 
 // Status is a data structure representing an architypical Feeder status
 type Status struct {
-	Timestamp int64
-	KW        float64
-	KVAR      float64
-	Hz        float64
-	Volt      float64
-	Online    bool
+	mux       *sync.Mutex
+	timestamp int64
+	machine   MachineStatus
+}
+
+// MachineStatus is a data structure representing an architypical feeder status
+type MachineStatus struct {
+	KW     float64
+	KVAR   float64
+	Hz     float64
+	Volt   float64
+	Online bool
+}
+
+// KW reported by asset
+func (s Status) KW() float64 {
+	return s.machine.KW
+}
+
+// KVAR reported by asset
+func (s Status) KVAR() float64 {
+	return s.machine.KVAR
+}
+
+func (s *Status) setStatus(timestamp int64, ms MachineStatus) {
+	if timestamp > s.timestamp {
+		s.mux.Lock()
+		defer s.mux.Unlock()
+		s.machine = ms
+	}
 }
 
 // Control is a data structure representing an architypical Feeder control
 type Control struct {
+	mux         *sync.Mutex
 	machine     MachineControl
-	supervisory supervisoryControl
+	supervisory SupervisoryControl
 }
 
+// MachineControl defines the hardware control interface for the feeder Asset
 type MachineControl struct {
 	CloseFeeder bool
 }
 
-type supervisoryControl struct {
+type SupervisoryControl struct {
 	Enable bool
 	Manual bool
 }
 
-// Config differentiates between two types of configurations, static and dynamic
+// KW sets the asset's real power setpoint
+func (c *Control) KW(kw float64) {}
+
+// KVAR sets the asset's reactive power setpoint
+func (c *Control) KVAR(kvar float64) {}
+
+// Run sets the asset's run request state
+func (c *Control) Run(run bool) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	c.machine.CloseFeeder = run
+}
+
+// Config wraps the machine configuration with a mutex and hides internal state
 type Config struct {
+	mux     *sync.Mutex
+	machine MachineConfig
+}
+
+// MachineConfig holds the ESS asset configuration parameters
+type MachineConfig struct {
 	Name      string  `json:"Name"`
 	Bus       string  `json:"Bus"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
+// Name of asset
+func (c Config) Name() string {
+	return c.machine.Name
+}
+
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	config := Config{}
-	err := json.Unmarshal(jsonConfig, &config)
+	machineConfig := MachineConfig{}
+	err := json.Unmarshal(jsonConfig, &machineConfig)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -69,66 +157,12 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	status := Status{}
-	control := Control{}
-
-	return Asset{&sync.Mutex{}, PID, device, status, control, config}, err
-}
-
-// UpdateStatus requests a physical device read and updates the ess.Asset status field
-func (a *Asset) UpdateStatus() {
-	go a.device.ReadDeviceStatus(a.setStatus)
-}
-
-func (a *Asset) setStatus(s Status) {
-	if s.Timestamp > a.status.Timestamp {
-		a.mux.Lock()
-		defer a.mux.Unlock()
-		a.status = s
+	status := Status{&sync.Mutex{}, 0, MachineStatus{}}
+	control := Control{
+		&sync.Mutex{},
+		MachineControl{false},
+		SupervisoryControl{false, false},
 	}
-}
-
-// WriteControl requests a physical device write of the data held in the GridAsset control field.
-func (a Asset) WriteControl() {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	control := a.control.machine
-	go a.device.WriteDeviceControl(control)
-}
-
-func (a Asset) DeviceController() DeviceController {
-	return a.device
-}
-
-// PID is a getter for the ess.Asset status field
-func (a Asset) PID() uuid.UUID {
-	return a.pid
-}
-
-// Name of asset
-func (a Asset) Name() string {
-	return a.config.Name
-}
-
-// KW reported by asset
-func (a Asset) KW() float64 {
-	return a.status.KW
-}
-
-// KVAR reported by asset
-func (a Asset) KVAR() float64 {
-	return a.status.KVAR
-}
-
-// KWCmd sets the asset's real power setpoint
-func (a *Asset) KWCmd(kw float64) {}
-
-// KVARCmd sets the asset's reactive power setpoint
-func (a *Asset) KVARCmd(kvar float64) {}
-
-// RunCmd sets the asset's run request state
-func (a *Asset) RunCmd(run bool) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.control.machine.CloseFeeder = run
+	config := Config{&sync.Mutex{}, machineConfig}
+	return Asset{PID, device, status, control, config}, err
 }

@@ -25,7 +25,6 @@ type VirtualGrid struct {
 
 // Status data structure for the VirtualGrid
 type Status struct {
-	timestamp            int64
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
@@ -48,9 +47,10 @@ type comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualGrid) ReadDeviceStatus(setAssetStatus func(grid.Status)) {
+func (a VirtualGrid) ReadDeviceStatus(setAssetStatus func(int64, grid.MachineStatus)) {
+	timestamp := time.Now().UnixNano()
 	a.status = a.read()
-	setAssetStatus(mapStatus(a.status))
+	setAssetStatus(timestamp, mapStatus(a.status))
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
@@ -60,7 +60,6 @@ func (a VirtualGrid) WriteDeviceControl(c grid.MachineControl) {
 }
 
 func (a VirtualGrid) read() Status {
-	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus, ok := <-a.comm.incoming
@@ -68,7 +67,6 @@ func (a VirtualGrid) read() Status {
 		log.Println("Read Error: VirtualGrid, virtual channel is not open")
 		return Status{}
 	}
-	readStatus.timestamp = timestamp
 	return readStatus
 }
 
@@ -115,10 +113,9 @@ func New(configPath string) (grid.Asset, error) {
 }
 
 // Status maps grid.DeviceStatus to grid.Status
-func mapStatus(s Status) grid.Status {
+func mapStatus(s Status) grid.MachineStatus {
 	// map deviceStatus to GridStatus
-	return grid.Status{
-		Timestamp:            s.timestamp,
+	return grid.MachineStatus{
 		KW:                   s.KW,
 		KVAR:                 s.KVAR,
 		PositiveRealCapacity: s.PositiveRealCapacity,

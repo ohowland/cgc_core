@@ -7,6 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// DeviceController is the hardware abstraction layer
+type DeviceController interface {
+	ReadDeviceStatus(func(int64, MachineStatus))
+	WriteDeviceControl(MachineControl)
+}
+
 // Asset is a data structure for an ESS Asset
 type Asset struct {
 	pid     uuid.UUID
@@ -16,20 +22,9 @@ type Asset struct {
 	config  Config
 }
 
-// DeviceController is the hardware abstraction layer
-type DeviceController interface {
-	ReadDeviceStatus(func(int64, MachineStatus))
-	WriteDeviceControl(MachineControl)
-}
-
 // PID is a getter for the asset PID
 func (a Asset) PID() uuid.UUID {
 	return a.pid
-}
-
-// DeviceController returns the hardware abstraction layer struct
-func (a Asset) DeviceController() DeviceController {
-	return a.device
 }
 
 // UpdateStatus requests a physical device read, then updates MachineStatus field.
@@ -45,8 +40,12 @@ func (a Asset) WriteControl() {
 	go a.device.WriteDeviceControl(control)
 }
 
+// DeviceController returns the hardware abstraction layer struct
+func (a Asset) DeviceController() DeviceController {
+	return a.device
+}
+
 // Status returns the archetypical status for the energy storage system asset.
-// This takes the form of the ess.MachineStatus struct
 func (a Asset) Status() Status {
 	return a.status
 }
@@ -81,6 +80,14 @@ type MachineStatus struct {
 	Online               bool
 }
 
+func (s *Status) setStatus(timestamp int64, ms MachineStatus) {
+	if timestamp > s.timestamp { // mux before?
+		s.mux.Lock()
+		defer s.mux.Unlock()
+		s.machine = ms
+	}
+}
+
 // KW returns the asset's measured real power
 func (s Status) KW() float64 {
 	return s.machine.KW
@@ -89,14 +96,6 @@ func (s Status) KW() float64 {
 // KVAR returns the asset's measured reactive power
 func (s Status) KVAR() float64 {
 	return s.machine.KVAR
-}
-
-func (s *Status) setStatus(timestamp int64, updatedStatus MachineStatus) {
-	if timestamp > s.timestamp { // mux before?
-		s.mux.Lock()
-		defer s.mux.Unlock()
-		s.machine = updatedStatus
-	}
 }
 
 // Control wraps MachineControl and SupervisoryControl with mutex

@@ -25,22 +25,18 @@ type VirtualPV struct {
 
 // Status data structure for the VirtualPV
 type Status struct {
-	timestamp int64
-	KW        float64 `json:"KW"`
-	KVAR      float64 `json:"KVAR"`
-	Hz        float64 `json:"Hz"`
-	Volt      float64 `json:"Volt"`
-	Online    bool    `json:"Online"`
+	KW     float64 `json:"KW"`
+	KVAR   float64 `json:"KVAR"`
+	Hz     float64 `json:"Hz"`
+	Volt   float64 `json:"Volt"`
+	Online bool    `json:"Online"`
 }
 
 // Control data structure for the VirtualPV
 type Control struct {
-	Run bool `json:"Run"`
-}
-
-// Config is a data structure representing an architypical fixed PV configuration
-type Config struct {
-	Bus string `json:"Bus"`
+	Run     bool    `json:"Run"`
+	KWLimit float64 `json:"KWLimit`
+	KVAR    float64 `json:"KVAR"`
 }
 
 // Comm data structure for the VirtualPV
@@ -50,9 +46,10 @@ type comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a *VirtualPV) ReadDeviceStatus(setAssetStatus func(pv.Status)) {
+func (a *VirtualPV) ReadDeviceStatus(setAssetStatus func(int64, pv.MachineStatus)) {
+	timestamp := time.Now().UnixNano()
 	a.status = a.read()
-	setAssetStatus(mapStatus(a.status)) // callback for to write archetype status
+	setAssetStatus(timestamp, mapStatus(a.status)) // callback for to write archetype status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
@@ -62,7 +59,6 @@ func (a VirtualPV) WriteDeviceControl(c pv.MachineControl) {
 }
 
 func (a VirtualPV) read() Status {
-	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus, ok := <-a.comm.incoming
@@ -70,7 +66,6 @@ func (a VirtualPV) read() Status {
 		log.Println("Read Error: VirtualESS, virtual channel is not open")
 		return Status{}
 	}
-	readStatus.timestamp = timestamp
 	return readStatus
 }
 
@@ -111,15 +106,14 @@ func New(configPath string) (pv.Asset, error) {
 }
 
 // Status maps grid.DeviceStatus to grid.Status
-func mapStatus(s Status) pv.Status {
+func mapStatus(s Status) pv.MachineStatus {
 	// map deviceStatus to GridStatus
-	return pv.Status{
-		Timestamp: s.timestamp,
-		KW:        s.KW,
-		KVAR:      s.KVAR,
-		Volt:      s.Volt,
-		Hz:        s.Hz,
-		Online:    s.Online,
+	return pv.MachineStatus{
+		KW:     s.KW,
+		KVAR:   s.KVAR,
+		Volt:   s.Volt,
+		Hz:     s.Hz,
+		Online: s.Online,
 	}
 }
 

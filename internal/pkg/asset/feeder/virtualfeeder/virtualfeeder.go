@@ -26,12 +26,11 @@ type VirtualFeeder struct {
 
 // Status data structure for the VirtualFeeder
 type Status struct {
-	timestamp int64
-	KW        float64 `json:"KW"`
-	KVAR      float64 `json:"KVAR"`
-	Hz        float64 `json:"Hz"`
-	Volt      float64 `json:"Volts"`
-	Online    bool    `json:"Online"`
+	KW     float64 `json:"KW"`
+	KVAR   float64 `json:"KVAR"`
+	Hz     float64 `json:"Hz"`
+	Volt   float64 `json:"Volts"`
+	Online bool    `json:"Online"`
 }
 
 // Control data structure for the VirtualFeeder
@@ -46,9 +45,10 @@ type comm struct {
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualFeeder) ReadDeviceStatus(setAssetStatus func(feeder.Status)) {
+func (a VirtualFeeder) ReadDeviceStatus(setAssetStatus func(int64, feeder.MachineStatus)) {
+	timestamp := time.Now().UnixNano()
 	a.status = a.read()
-	setAssetStatus(mapStatus(a.status)) // callback for to write parent status
+	setAssetStatus(timestamp, mapStatus(a.status)) // callback for to write parent status
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
@@ -58,11 +58,9 @@ func (a VirtualFeeder) WriteDeviceControl(c feeder.MachineControl) {
 }
 
 func (a *VirtualFeeder) read() Status {
-	timestamp := time.Now().UnixNano()
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus := <-a.comm.incoming
-	readStatus.timestamp = timestamp
 	return readStatus
 }
 
@@ -87,12 +85,11 @@ func New(configPath string) (feeder.Asset, error) {
 	device := VirtualFeeder{
 		pid: pid,
 		status: Status{
-			timestamp: 0,
-			KW:        0,
-			KVAR:      0,
-			Hz:        0,
-			Volt:      0,
-			Online:    false,
+			KW:     0,
+			KVAR:   0,
+			Hz:     0,
+			Volt:   0,
+			Online: false,
 		},
 		control: Control{
 			closeFeeder: false,
@@ -104,14 +101,13 @@ func New(configPath string) (feeder.Asset, error) {
 }
 
 // Status maps feeder.DeviceStatus to feeder.Status
-func mapStatus(s Status) feeder.Status {
-	return feeder.Status{
-		Timestamp: s.timestamp,
-		KW:        s.KW,
-		KVAR:      s.KVAR,
-		Hz:        s.Hz,
-		Volt:      s.Volt,
-		Online:    s.Online,
+func mapStatus(s Status) feeder.MachineStatus {
+	return feeder.MachineStatus{
+		KW:     s.KW,
+		KVAR:   s.KVAR,
+		Hz:     s.Hz,
+		Volt:   s.Volt,
+		Online: s.Online,
 	}
 }
 
