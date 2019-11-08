@@ -1,10 +1,11 @@
 package virtualacbus
 
 import (
+	"io/ioutil"
 	"log"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 )
 
 const (
@@ -101,11 +102,16 @@ func (b VirtualACBus) gridformerCalcs() Source {
 	return gridformer
 }
 
-func New(configPath string) (VirtualACBus, error) {
+// New returns an initalized VirtualESS Asset; this is part of the Asset interface.
+func New(configPath string) (acbus.AcBus, error) {
+	jsonConfig, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		return ess.Asset{}, err
+	}
+
 	id, _ := uuid.NewUUID()
-	bus := VirtualACBus{
+	virtualsystem := VirtualACBus{
 		pid:              id,
-		members:          make(map[uuid.UUID]asset.Asset),
 		busObserver:      make(chan Source, 1),
 		assetObserver:    make(chan Source, queueSize),
 		connectedSources: make(map[uuid.UUID]Source),
@@ -117,18 +123,13 @@ func New(configPath string) (VirtualACBus, error) {
 			KVAR:        0.0,
 			Gridforming: true,
 		},
-		config: Config{
-			Name:      "Virtual Bus",
-			RatedVolt: 480.0, // Get from config
-			RatedHz:   60.0,  // Get from config
-		},
 	}
 
-	go bus.runVirtualSystem()
-	return bus, nil
+	go virtualsystem.StartProcess()
+	return acbus.New(jsonConfig, &virtualsystem)
 }
 
-func (b *VirtualACBus) runVirtualSystem() {
+func (b *VirtualACBus) StartProcess() {
 	log.Println("[VirtualACBus: Running]")
 	for {
 		select {
