@@ -13,18 +13,10 @@ const (
 
 type VirtualACBus struct {
 	pid              uuid.UUID
-	members          map[uuid.UUID]asset.Asset
 	busObserver      chan Source
 	assetObserver    chan Source
 	connectedSources map[uuid.UUID]Source
 	gridformer       Source
-	config           Config
-}
-
-type Config struct {
-	Name      string  `json:"Name"`
-	RatedVolt float64 `json:"RatedVolt"`
-	RatedHz   float64 `json:"RatedHz"`
 }
 
 type Source struct {

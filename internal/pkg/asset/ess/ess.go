@@ -2,9 +2,11 @@ package ess
 
 import (
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // DeviceController is the hardware abstraction layer
@@ -18,7 +20,7 @@ type Asset struct {
 	mux         *sync.Mutex
 	pid         uuid.UUID
 	device      DeviceController
-	broadcast   map[uuid.UUID]chan<- Status
+	broadcast   map[uuid.UUID]chan<- asset.AssetStatus
 	supervisory SupervisoryControl
 	config      Config
 }
@@ -33,8 +35,8 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan Status {
-	ch := make(chan Status, 1)
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.AssetStatus {
+	ch := make(chan asset.AssetStatus, 1)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
@@ -75,7 +77,11 @@ func transform(machineStatus MachineStatus) Status {
 }
 
 // WriteControl requests a physical device write of the data held in the asset machine control field.
-func (a Asset) WriteControl(control MachineControl) {
+func (a Asset) WriteControl(c interface{}) {
+	control, ok := c.(MachineControl)
+	if !ok {
+		panic(errors.New("bad cast to write control"))
+	}
 	err := a.device.WriteDeviceControl(control)
 	if err != nil {
 		// comm fail handling path
@@ -86,7 +92,6 @@ func (a Asset) WriteControl(control MachineControl) {
 func (a Asset) Config() Config {
 	return a.config
 }
-
 func (a Asset) Enable(b bool) {
 	a.supervisory.enable = b
 }
@@ -105,8 +110,8 @@ type MachineStatus struct {
 	KVAR                 float64
 	Hz                   float64
 	Volt                 float64
-	PositiveRealCapacity float64
-	NegativeRealCapacity float64
+	RealPositiveCapacity float64
+	RealNegativeCapacity float64
 	SOC                  float64
 	Gridforming          bool
 	Online               bool
@@ -120,6 +125,16 @@ func (s Status) KW() float64 {
 // KVAR returns the asset's measured reactive power
 func (s Status) KVAR() float64 {
 	return s.machine.KVAR
+}
+
+// RealPositiveCapacity returns the asset's operative real positive capacity
+func (s Status) RealPositiveCapacity() float64 {
+	return s.machine.RealPositiveCapacity
+}
+
+// RealNegativeCapacity returns the asset's operative real negative capacity
+func (s Status) RealNegativeCapacity() float64 {
+	return s.machine.RealNegativeCapacity
 }
 
 // MachineControl defines the hardware control interface for the ESS Asset
@@ -156,6 +171,11 @@ func (c Config) Name() string {
 	return c.machine.Name
 }
 
+// Bus is a getter for the asset's connected Bus
+func (c Config) Bus() string {
+	return c.machine.Bus
+}
+
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	machineConfig := MachineConfig{}
@@ -169,7 +189,7 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- Status)
+	broadcast := make(map[uuid.UUID]chan<- asset.AssetStatus)
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}

@@ -12,7 +12,7 @@ import (
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/bus"
-	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
 )
 
 // VirtualESS target
@@ -36,8 +36,8 @@ type Status struct {
 	Hz                   float64 `json:"Hz"`
 	Volt                 float64 `json:"Volt"`
 	SOC                  float64 `json:"SOC"`
-	PositiveRealCapacity float64 `json:"PositiveRealCapacity"`
-	NegativeRealCapacity float64 `json:"NegativeRealCapacity"`
+	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
+	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
 	Gridforming          bool    `json:"Gridforming"`
 	Online               bool    `json:"Online"`
 }
