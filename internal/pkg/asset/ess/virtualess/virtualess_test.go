@@ -80,9 +80,10 @@ func TestRead(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 
 	device.StartVirtualDevice()
-	time.Sleep(1 * time.Second)
-	status := device.read()
-	time.Sleep(1 * time.Second)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	assertedStatus := Status{
 		KW:                   0,
@@ -104,10 +105,20 @@ func TestRead(t *testing.T) {
 func TestWrite(t *testing.T) {
 	ess := newLinkedESS()
 	device := ess.DeviceController().(*VirtualESS)
+	intercept := make(chan Control)
+	device.comm.outgoing = intercept
 
-	device.StartVirtualDevice()
-	device.control = Control{true, 10, 10, false}
-	device.write()
+	control := Control{true, 10, 10, false}
+
+	go func() {
+		err := device.write(control)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	testControl := <-intercept
+	assert.Assert(t, testControl == control)
 }
 
 func TestReadDeviceStatus(t *testing.T) {}
@@ -131,19 +142,32 @@ func TestTransitionOffToPQ(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 	device.StartVirtualDevice()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	ess.Control().Run(true)
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	control := Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: false,
+	}
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == false)
+	err = device.write(control)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
+
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == false)
 
 	device.StopVirtualDevice()
 }
@@ -157,31 +181,50 @@ func TestTransitionPQToOff(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 	device.StartVirtualDevice()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
-	control := ess.Control()
-	control.Run(true)
+	control := Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: false,
+	}
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	err = device.write(control)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	control.Run(false)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == false)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	control = Control{
+		Run:      false,
+		KW:       0,
+		KVAR:     0,
+		Gridform: false,
+	}
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	err = device.write(control)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
+
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
 	device.StopVirtualDevice()
 }
@@ -195,21 +238,27 @@ func TestTransitionOffToHzV(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 	device.StartVirtualDevice()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
-	control := ess.Control()
-	control.Run(true)
-	control.Gridform(true)
+	control := Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: true,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == true)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == true)
 
 	device.StopVirtualDevice()
 }
@@ -223,32 +272,42 @@ func TestTransitionHzVToOff(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 	device.StartVirtualDevice()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
-	control := ess.Control()
-	control.Run(true)
-	control.Gridform(true)
+	control := Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: true,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == true)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == true)
 
-	control.Run(false)
+	control = Control{
+		Run:      false,
+		KW:       0,
+		KVAR:     0,
+		Gridform: true,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
 	device.StopVirtualDevice()
 }
@@ -262,31 +321,42 @@ func TestTransitionPQToHzV(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 	device.StartVirtualDevice()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
-	control := ess.Control()
-	control.Run(true)
+	control := Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: false,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == false)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == false)
 
-	control.Gridform(true)
+	control = Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: true,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == true)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == true)
 
 	device.StopVirtualDevice()
 }
@@ -300,32 +370,42 @@ func TestTransitionHzVToPQ(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 	device.StartVirtualDevice()
 
-	assert.Assert(t, device.status.Online == false)
-	assert.Assert(t, device.status.Gridforming == false)
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Assert(t, status.Online == false)
+	assert.Assert(t, status.Gridforming == false)
 
-	control := ess.Control()
-	control.Run(true)
-	control.Gridform(true)
+	control := Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: true,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == true)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == true)
 
-	control.Gridform(false)
+	control = Control{
+		Run:      true,
+		KW:       0,
+		KVAR:     0,
+		Gridform: false,
+	}
+	err = device.write(control)
 
-	ess.WriteControl()
-	ess.UpdateStatus() // virtual device fuzzing requires multiple reads
-	ess.UpdateStatus()
-	ess.UpdateStatus()
-	time.Sleep(6 * time.Second)
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
 
-	assert.Assert(t, device.status.Online == true)
-	assert.Assert(t, device.status.Gridforming == false)
+	assert.Assert(t, status.Online == true)
+	assert.Assert(t, status.Gridforming == false)
 
 	device.StopVirtualDevice()
 }
