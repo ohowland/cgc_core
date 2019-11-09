@@ -1,3 +1,8 @@
+/*
+acbus.go Representation of a single AC bus. Data structures that implement the Asset interface
+may join as members. Members report asset.AssetStatus, which is aggregated by the bus.
+*/
+
 package acbus
 
 import (
@@ -40,23 +45,30 @@ type RelayStatus struct {
 }
 
 type Config struct {
-	name      string
-	ratedVolt float64
-	ratedHz   float64
+	Name      string  `json:"Name"`
+	RatedVolt float64 `json:"RatedVolt"`
+	RatedHz   float64 `json:"RatedHz"`
 }
 
 func (b ACBus) Name() string {
-	return b.config.name
+	return b.config.Name
 }
 
 func (b ACBus) PID() uuid.UUID {
 	return b.pid
 }
 
+func (b ACBus) Relayer() Relayer {
+	return b.relay
+}
+
 func (b *ACBus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	b.members[a.PID()] = a.Subscribe(b.pid)
+	if len(b.members) == 1 { // if this is the first member, start the bus process.
+		go b.Process()
+	}
 }
 
 func (b *ACBus) RemoveMember(pid uuid.UUID) {
@@ -65,8 +77,10 @@ func (b *ACBus) RemoveMember(pid uuid.UUID) {
 	delete(b.members, pid)
 }
 
+// Process aggregates information from members, while members exist.
 func (b *ACBus) Process() {
 	var agg map[uuid.UUID]asset.AssetStatus
+loop:
 	for {
 		for pid, member := range b.members {
 			select {
@@ -78,10 +92,13 @@ func (b *ACBus) Process() {
 				}
 				agg[pid] = assetStatus
 			default:
+				if len(b.members) == 0 { // if there are no members, end the bus process.
+					break loop
+				}
 			}
 			b.status.aggregateCapacity = aggregateCapacity(agg)
 			time.Sleep(1000 * time.Millisecond)
-			log.Printf("Bus %v, Capacity: %v\n", b.config.name, b.status.aggregateCapacity)
+			log.Printf("Bus %v, Capacity: %v\n", b.config.Name, b.status.aggregateCapacity)
 		}
 	}
 }

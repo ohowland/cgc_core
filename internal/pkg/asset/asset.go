@@ -7,8 +7,8 @@ import (
 // Asset is the interface for all physical devices that make up dispatchable sources/sinks in the power system.
 type Asset interface {
 	PID() uuid.UUID
-	UpdateStatus()
-	WriteControl(interface{})
+	//UpdateStatus()
+	//WriteControl(interface{})
 	Subscribe(uuid.UUID) <-chan AssetStatus
 	Unsubscribe(uuid.UUID)
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 	"gotest.tools/assert"
 )
 
@@ -48,27 +49,35 @@ func (a DummyAsset) asSource() Source {
 	}
 }
 
-func TestNewVirtualACBus(t *testing.T) {
+func newVirtualBus() *VirtualACBus {
+	configpath := "../acbus_test_config.json"
+	bus, err := New(configpath)
+	if err != nil {
+		panic(err)
+	}
+	return bus.(*acbus.ACBus).Relayer().(*VirtualACBus)
+}
 
-	bus := New()
-	time.Sleep(time.Duration(200) * time.Millisecond)
-	close(bus.observer)
-	time.Sleep(time.Duration(100) * time.Millisecond)
+func TestNewVirtualACBus(t *testing.T) {
+	configpath := "../acbus_test_config.json"
+	bus, err := New(configpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acbus := bus.(acbus.ACBus)
+	assert.Assert(t, acbus.Name() == "TEST_Virtual Bus")
 }
 
 func TestCalcSwingLoad(t *testing.T) {
-	bus := New()
+	bus := newVirtualBus()
 
 	asset1 := NewDummyAsset()
-	time.Sleep(time.Duration(1) * time.Millisecond)
 	asset2 := NewDummyAsset()
 
-	bus.observer <- asset1.asSource()
-	bus.observer <- asset2.asSource()
+	bus.assetObserver <- asset1.asSource()
+	bus.assetObserver <- asset2.asSource()
 
-	time.Sleep(time.Duration(200) * time.Millisecond)
-
-	gridformer := bus.Gridformer()
+	gridformer := bus.gridformer
 
 	assertKwSum := asset1.status.kW + asset2.status.kW
 	assertKvarSum := asset1.status.kVAR + asset2.status.kVAR
@@ -76,42 +85,39 @@ func TestCalcSwingLoad(t *testing.T) {
 	assert.Assert(t, gridformer.KW == assertKwSum)
 	assert.Assert(t, gridformer.KVAR == assertKvarSum)
 
-	close(bus.observer)
+	close(bus.assetObserver)
 }
 
 func TestCalcSwingLoadChange(t *testing.T) {
-	bus := New()
+	bus := newVirtualBus()
 
 	gridfollowingAsset1 := NewDummyAsset()
-	time.Sleep(time.Duration(1) * time.Millisecond)
 	gridfollowingAsset2 := NewDummyAsset()
-	time.Sleep(time.Duration(1) * time.Millisecond)
 	gridformingAsset := NewDummyAsset()
 
 	gridformingAsset.status.gridforming = true
 
-	bus.observer <- gridfollowingAsset1.asSource()
-	bus.observer <- gridformingAsset.asSource()
-	bus.observer <- gridfollowingAsset2.asSource()
+	bus.assetObserver <- gridfollowingAsset1.asSource()
+	bus.assetObserver <- gridformingAsset.asSource()
+	bus.assetObserver <- gridfollowingAsset2.asSource()
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 1; i <= 5; i++ {
 		gridfollowingAsset1.status.kW = r.Float64() * 1000
-		time.Sleep(time.Duration(10) * time.Millisecond)
 		gridfollowingAsset2.status.kW = r.Float64() * 1000
 
-		bus.observer <- gridfollowingAsset2.asSource()
-		bus.observer <- gridformingAsset.asSource()
-		bus.observer <- gridfollowingAsset1.asSource()
+		bus.assetObserver <- gridfollowingAsset2.asSource()
+		bus.assetObserver <- gridformingAsset.asSource()
+		bus.assetObserver <- gridfollowingAsset1.asSource()
 	}
 
 	time.Sleep(time.Duration(200) * time.Millisecond)
 
-	gridformer := bus.Gridformer()
+	gridformer := bus.gridformer
 	assertKwSum := gridfollowingAsset1.status.kW + gridfollowingAsset2.status.kW
 	assertKvarSum := gridfollowingAsset1.status.kVAR + gridfollowingAsset2.status.kVAR
 	assert.Assert(t, gridformer.KW == assertKwSum)
 	assert.Assert(t, gridformer.KVAR == assertKvarSum)
 
-	close(bus.observer)
+	close(bus.assetObserver)
 }

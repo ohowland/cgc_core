@@ -5,11 +5,8 @@ import (
 	"log"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-)
-
-const (
-	queueSize = 50
+	"github.com/ohowland/cgc/internal/pkg/bus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 )
 
 type VirtualACBus struct {
@@ -35,21 +32,15 @@ type Observers struct {
 	BusObserver   <-chan Source
 }
 
-func (b VirtualACBus) Name() string {
-	return b.config.Name
+func (b VirtualACBus) ReadDeviceStatus() (acbus.RelayStatus, error) {
+	return acbus.RelayStatus{
+		Hz:   b.gridformer.Hz,
+		Volt: b.gridformer.Volt,
+	}, nil
 }
 
 func (b VirtualACBus) PID() uuid.UUID {
 	return b.pid
-}
-
-func (b VirtualACBus) Energized() bool {
-	voltThreshold := b.config.RatedVolt * 0.5
-	hzThreshold := b.config.RatedHz * 0.5
-	if b.gridformer.Hz > hzThreshold && b.gridformer.Volt > voltThreshold {
-		return true
-	}
-	return false
 }
 
 func (b VirtualACBus) GetBusObservers() Observers {
@@ -66,16 +57,6 @@ func (b VirtualACBus) Hz() float64 {
 func (b VirtualACBus) Volt() float64 {
 	return b.gridformer.Volt
 }
-
-/*
-func (b *VirtualACBus) AddMember(a asset.Asset) {
-	b.members[a.PID()] = a
-}
-
-func (b *VirtualACBus) RemoveMember(a asset.Asset) {
-	delete(b.members, a.PID())
-}
-*/
 
 func (b VirtualACBus) AssetObserver() chan<- Source {
 	return b.assetObserver
@@ -102,40 +83,26 @@ func (b VirtualACBus) gridformerCalcs() Source {
 	return gridformer
 }
 
-// New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string) (acbus.AcBus, error) {
-	jsonConfig, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		return ess.Asset{}, err
-	}
-
-	id, _ := uuid.NewUUID()
-	virtualsystem := VirtualACBus{
-		pid:              id,
-		busObserver:      make(chan Source, 1),
-		assetObserver:    make(chan Source, queueSize),
-		connectedSources: make(map[uuid.UUID]Source),
-		gridformer: Source{
-			PID:         id,
-			Hz:          0.0,
-			Volt:        0.0,
-			KW:          0.0,
-			KVAR:        0.0,
-			Gridforming: true,
-		},
-	}
-
-	go virtualsystem.StartProcess()
-	return acbus.New(jsonConfig, &virtualsystem)
+func (b *VirtualACBus) StartProcess() {
+	assetObs := make(chan Source)
+	busObs := make(chan Source)
+	b.assetObserver = assetObs
+	b.busObserver = busObs
+	go b.Process()
 }
 
-func (b *VirtualACBus) StartProcess() {
+func (b *VirtualACBus) StopProcess() {
+	close(b.busObserver)
+}
+
+func (b *VirtualACBus) Process() {
 	log.Println("[VirtualACBus: Running]")
+loop:
 	for {
 		select {
 		case source, ok := <-b.assetObserver:
 			if !ok {
-				break
+				break loop
 			}
 			b.connectedSources[source.PID] = source
 
@@ -155,4 +122,31 @@ func (b *VirtualACBus) StartProcess() {
 			}
 		}
 	}
+}
+
+// New returns an initalized VirtualESS Asset; this is part of the Asset interface.
+func New(configPath string) (bus.Bus, error) {
+	jsonConfig, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		return acbus.ACBus{}, err
+	}
+
+	id, _ := uuid.NewUUID()
+	virtualsystem := VirtualACBus{
+		pid:              id,
+		busObserver:      nil,
+		assetObserver:    nil,
+		connectedSources: make(map[uuid.UUID]Source),
+		gridformer: Source{
+			PID:         id,
+			Hz:          0.0,
+			Volt:        0.0,
+			KW:          0.0,
+			KVAR:        0.0,
+			Gridforming: true,
+		},
+	}
+
+	go virtualsystem.StartProcess()
+	return acbus.New(jsonConfig, &virtualsystem)
 }
