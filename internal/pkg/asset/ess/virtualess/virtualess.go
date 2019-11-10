@@ -10,16 +10,20 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/bus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
 )
 
 // VirtualESS target
 type VirtualESS struct {
-	pid       uuid.UUID
-	comm      comm
-	observers virtualacbus.Observers
+	pid  uuid.UUID
+	comm comm
+	bus  virtualBus
+}
+
+type virtualBus struct {
+	send    chan<- asset.VirtualAssetStatus
+	recieve <-chan asset.VirtualAssetStatus
 }
 
 // Target is a virtual representation of the hardware
@@ -27,6 +31,25 @@ type Target struct {
 	pid     uuid.UUID
 	status  Status
 	control Control
+}
+
+func (t Target) KW() float64 {
+	return t.status.KW
+}
+func (t Target) KVAR() float64 {
+	return t.status.KVAR
+
+}
+func (t Target) Hz() float64 {
+	return t.status.Hz
+}
+
+func (t Target) Volt() float64 {
+	return t.status.Volt
+}
+
+func (t Target) Gridforming() bool {
+	return t.status.Gridforming
 }
 
 // Status data structure for the VirtualESS
@@ -54,6 +77,10 @@ type Control struct {
 type comm struct {
 	incoming chan Status
 	outgoing chan Control
+}
+
+func (a VirtualESS) PID() uuid.UUID {
+	return a.pid
 }
 
 // ReadDeviceStatus requests a physical device read over the communication interface
@@ -84,16 +111,6 @@ func (a VirtualESS) write(control Control) error {
 	return nil
 }
 
-func (t *Target) updateObservers(obs virtualacbus.Observers) {
-	source := mapSource(*t)
-	obs.AssetObserver <- source
-	if t.status.Gridforming {
-		gridformer := <-obs.BusObserver
-		t.status.KW = gridformer.KW
-		t.status.KVAR = gridformer.KVAR
-	}
-}
-
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
 func New(configPath string) (ess.Asset, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
@@ -119,8 +136,8 @@ func mapStatus(s Status) ess.MachineStatus {
 		Hz:                   s.Hz,
 		Volt:                 s.Volt,
 		SOC:                  s.SOC,
-		PositiveRealCapacity: s.PositiveRealCapacity,
-		NegativeRealCapacity: s.NegativeRealCapacity,
+		RealPositiveCapacity: s.RealPositiveCapacity,
+		RealNegativeCapacity: s.RealNegativeCapacity,
 		Gridforming:          s.Gridforming,
 		Online:               s.Online,
 	}
@@ -136,47 +153,38 @@ func mapControl(c ess.MachineControl) Control {
 	}
 }
 
-func mapSource(t Target) virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         t.pid,
-		Hz:          t.status.Hz,
-		Volt:        t.status.Volt,
-		KW:          t.status.KW,
-		KVAR:        t.status.KVAR,
-		Gridforming: t.status.Gridforming,
-	}
+func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualAssetStatus) <-chan asset.VirtualAssetStatus {
+	busOut := make(chan asset.VirtualAssetStatus)
+	a.bus.send = busOut
+	a.bus.recieve = busIn
+
+	a.StopProcess()
+	a.StartProcess()
+	return busOut
 }
 
-// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
-func (a *VirtualESS) LinkToBus(b bus.Bus) error {
-	vrACbus, ok := b.(virtualacbus.VirtualACBus)
-	if !ok {
-		return errors.New("Bus cannot be cast to VirtualACBus")
-	}
-	a.observers = vrACbus.GetBusObservers()
-	return nil
-}
-
-// StartVirtualDevice launches the virtual machine loop.
-func (a *VirtualESS) StartVirtualDevice() {
+func (a *VirtualESS) StartProcess() {
 	in := make(chan Status)
 	out := make(chan Control)
 	a.comm.incoming = in
 	a.comm.outgoing = out
-	go virtualDeviceLoop(a.pid, a.comm, a.observers)
+
+	go Process(a.pid, a.comm, a.bus)
 }
 
 // StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
-func (a VirtualESS) StopVirtualDevice() {
-	close(a.observers.AssetObserver)
-	close(a.comm.outgoing)
+func (a *VirtualESS) StopProcess() {
+	if a.comm.outgoing != nil {
+		close(a.comm.outgoing)
+	}
 }
 
-func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
+func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 	defer close(comm.incoming)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
+
 loop:
 	for {
 		select {
@@ -185,8 +193,9 @@ loop:
 				break loop
 			}
 		case comm.incoming <- target.status:
-			target.updateObservers(obs)
 			target.status = sm.run(*target)
+		case _, ok = <-bus.recieve:
+		case bus.send <- target:
 		}
 	}
 	log.Println("VirtualESS-Device shutdown")
@@ -213,8 +222,8 @@ func (s offState) action(target Target) Status {
 		KW:                   0,
 		KVAR:                 0,
 		SOC:                  target.status.SOC,
-		PositiveRealCapacity: 0, // TODO: Get Config into VirtualESS
-		NegativeRealCapacity: 0, // TODO: Get Config into VirtualESS
+		RealPositiveCapacity: 0, // TODO: Get Config into VirtualESS
+		RealNegativeCapacity: 0, // TODO: Get Config into VirtualESS
 		Gridforming:          false,
 		Online:               false,
 	}
@@ -241,8 +250,8 @@ func (s pQState) action(target Target) Status {
 		KW:                   target.control.KW,
 		KVAR:                 target.control.KVAR,
 		SOC:                  target.status.SOC,
-		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
-		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
+		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
+		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
 		Gridforming:          false,
 		Online:               true,
 	}
@@ -270,8 +279,8 @@ func (s hzVState) action(target Target) Status {
 		KW:                   target.status.KW,   // TODO: Link to virtual system model
 		KVAR:                 target.status.KVAR, // TODO: Link to virtual system model
 		SOC:                  target.status.SOC,
-		PositiveRealCapacity: 10, // TODO: Get Config into VirtualESS
-		NegativeRealCapacity: 10, // TODO: Get Config into VirtualESS
+		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
+		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
 		Gridforming:          true,
 		Online:               true,
 	}

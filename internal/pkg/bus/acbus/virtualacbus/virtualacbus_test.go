@@ -6,16 +6,43 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 	"gotest.tools/assert"
 )
 
-type DummyAsset struct {
-	pid    uuid.UUID
-	status Status
+// randDummyStatus returns a closure for random DummyAsset Status
+func randDummyStatus() func() DummyStatus {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	status := DummyStatus{r.Float64(), r.Float64(), r.Float64(), r.Float64(), false}
+	return func() DummyStatus {
+		return status
+	}
 }
 
-type Status struct {
+var assertedStatus = randDummyStatus()
+
+type DummyAsset struct {
+	pid     uuid.UUID
+	status  DummyStatus
+	send    chan<- asset.VirtualAssetStatus
+	recieve <-chan asset.VirtualAssetStatus
+}
+
+func (d DummyAsset) PID() uuid.UUID {
+	return d.pid
+}
+
+func (d *DummyAsset) LinkToBus(busIn <-chan asset.VirtualAssetStatus) <-chan asset.VirtualAssetStatus {
+	d.recieve = busIn
+
+	busOut := make(chan asset.VirtualAssetStatus)
+	d.send = busOut
+
+	return busOut
+}
+
+type DummyStatus struct {
 	kW          float64
 	kVAR        float64
 	hz          float64
@@ -23,29 +50,30 @@ type Status struct {
 	gridforming bool
 }
 
-func NewDummyAsset() DummyAsset {
-	pid, _ := uuid.NewUUID()
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	return DummyAsset{
-		pid: pid,
-		status: Status{
-			kW:          r.Float64() * 10000,
-			kVAR:        r.Float64() * 10000,
-			hz:          60,
-			volt:        480,
-			gridforming: false,
-		},
-	}
+func (v DummyStatus) KW() float64 {
+	return v.kW
+}
+func (v DummyStatus) KVAR() float64 {
+	return v.kVAR
+
+}
+func (v DummyStatus) Hz() float64 {
+	return v.hz
 }
 
-func (a DummyAsset) asSource() Source {
-	return Source{
-		PID:         a.pid,
-		Hz:          a.status.hz,
-		Volt:        a.status.volt,
-		KW:          a.status.kW,
-		KVAR:        a.status.kVAR,
-		Gridforming: a.status.gridforming,
+func (v DummyStatus) Volt() float64 {
+	return v.volt
+}
+
+func (v DummyStatus) Gridforming() bool {
+	return v.gridforming
+}
+
+func newDummyAsset() *DummyAsset {
+	pid, _ := uuid.NewUUID()
+	return &DummyAsset{
+		pid:    pid,
+		status: assertedStatus(),
 	}
 }
 
@@ -70,7 +98,126 @@ func TestNewVirtualACBus(t *testing.T) {
 	assert.Assert(t, acbus.Name() == "TEST_Virtual Bus")
 }
 
-func TestCalcSwingLoad(t *testing.T) {
+func TestAddMember(t *testing.T) {
+	bus := newVirtualBus()
+
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
+
+	bus.AddMember(asset1)
+	bus.AddMember(asset2)
+
+	assert.Assert(t, len(bus.members) == 2)
+	for pid := range bus.members {
+		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
+	}
+
+}
+
+func TestRemoveMember(t *testing.T) {
+	bus := newVirtualBus()
+
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
+	asset3 := newDummyAsset()
+
+	bus.AddMember(asset1)
+	bus.AddMember(asset2)
+	bus.AddMember(asset3)
+
+	assert.Assert(t, len(bus.members) == 3)
+	for pid := range bus.members {
+		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID() || pid == asset3.PID())
+	}
+
+	bus.RemoveMember(asset2.PID())
+
+	assert.Assert(t, len(bus.members) == 2)
+	for pid := range bus.members {
+		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
+		assert.Assert(t, pid != asset2.PID())
+	}
+}
+
+func TestProcessOneGridformer(t *testing.T) {
+	bus := newVirtualBus()
+
+	asset1 := newDummyAsset()
+	asset1.status.gridforming = true
+
+	bus.AddMember(asset1)
+
+	asset1.send <- asset1.status
+	gridformer := <-asset1.recieve
+
+	assertStatus := assertedStatus()
+	assert.Assert(t, gridformer.KW() == 0)
+	assert.Assert(t, gridformer.KVAR() == 0)
+	assert.Assert(t, gridformer.Hz() == assertStatus.Hz())
+	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
+
+	bus.StopProcess()
+}
+
+func TestProcessOneNongridformer(t *testing.T) {
+	bus := newVirtualBus()
+	asset1 := newDummyAsset()
+	asset1.status.gridforming = false
+	bus.AddMember(asset1)
+
+	asset1.send <- asset1.status
+
+	gridformer := <-asset1.recieve
+	assertStatus := assertedStatus()
+	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
+	assert.Assert(t, gridformer.KVAR() == assertStatus.KVAR())
+	assert.Assert(t, gridformer.Hz() == 0)
+	assert.Assert(t, gridformer.Volt() == 0)
+
+	bus.StopProcess()
+}
+
+func TestProcessTwoAssets(t *testing.T) {
+	bus := newVirtualBus()
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
+	asset1.status.gridforming = false
+	asset2.status.gridforming = true
+	bus.AddMember(asset1)
+	bus.AddMember(asset2)
+
+	asset1.send <- asset1.status
+	asset2.send <- asset2.status
+
+	gridformer := <-asset2.recieve
+
+	assertStatus := assertedStatus()
+	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
+	assert.Assert(t, gridformer.KVAR() == assertStatus.KVAR())
+	assert.Assert(t, gridformer.Hz() == assertStatus.Hz())
+	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
+
+	bus.StopProcess()
+}
+
+func TestReadDeviceStatus(t *testing.T) {
+	bus := newVirtualBus()
+	asset1 := newDummyAsset()
+	asset1.status.gridforming = true
+	bus.AddMember(asset1)
+
+	asset1.send <- asset1.status
+
+	relayStatus, _ := bus.ReadRelayStatus()
+
+	assertStatus := assertedStatus()
+	assert.Assert(t, relayStatus.Hz() == assertStatus.Hz())
+	assert.Assert(t, relayStatus.Volt() == assertStatus.Volt())
+	bus.StopProcess()
+}
+
+/*
+func TestBusPowerBalance(t *testing.T) {
 	bus := newVirtualBus()
 
 	asset1 := NewDummyAsset()
@@ -89,7 +236,7 @@ func TestCalcSwingLoad(t *testing.T) {
 	close(bus.assetObserver)
 }
 
-func TestCalcSwingLoadChange(t *testing.T) {
+func TestBusPowerBalanceChange(t *testing.T) {
 	bus := newVirtualBus()
 
 	gridfollowingAsset1 := NewDummyAsset()
@@ -122,3 +269,4 @@ func TestCalcSwingLoadChange(t *testing.T) {
 
 	close(bus.assetObserver)
 }
+*/

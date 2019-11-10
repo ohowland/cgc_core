@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"gotest.tools/assert"
 )
 
@@ -53,7 +54,7 @@ func newESS() (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- Status)
+	broadcast := make(map[uuid.UUID]chan<- asset.AssetStatus)
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
@@ -85,7 +86,7 @@ func TestWriteControl(t *testing.T) {
 
 type subscriber struct {
 	pid uuid.UUID
-	ch  <-chan Status
+	ch  <-chan asset.AssetStatus
 }
 
 func TestUpdateStatus(t *testing.T) {

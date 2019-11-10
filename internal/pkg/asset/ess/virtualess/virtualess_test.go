@@ -1,39 +1,49 @@
 package virtualess
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
 	"gotest.tools/assert"
 )
 
-func newESS() *ess.Asset {
+// randStatus returns a closure for random DummyAsset Status
+func randStatus() func() Status {
+	status := Status{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false, false}
+	return func() Status {
+		return status
+	}
+}
+
+var assertedStatus = randStatus()
+
+func newESS() ess.Asset {
 	configPath := "../ess_test_config.json"
 	ess, err := New(configPath)
 	if err != nil {
 		panic(err)
 	}
-	return &ess
+	return ess
 }
 
-func newBus() virtualacbus.VirtualACBus {
-	configPath := "../../../bus/virtualacbus/virtualacbus_test_config.json"
+func newBus() acbus.ACBus {
+	configPath := "../../../bus/acbus/acbus_test_config.json"
 	bus, err := virtualacbus.New(configPath)
 	if err != nil {
 		panic(err)
 	}
-	return bus
+	return bus.(acbus.ACBus)
 }
 
-func newLinkedESS() *ess.Asset {
+func newLinkedESS(bus *virtualacbus.VirtualACBus) *ess.Asset {
 	ess := newESS()
-	bus := newBus()
-
 	device := ess.DeviceController().(*VirtualESS)
-	device.LinkToBus(bus)
-	return ess
+	bus.AddMember(device)
+	return &ess
 }
 
 func TestNew(t *testing.T) {
@@ -49,37 +59,58 @@ func TestNew(t *testing.T) {
 func TestLinkToBus(t *testing.T) {
 
 	ess := newESS()
-	bus := newBus()
-
 	device := ess.DeviceController().(*VirtualESS)
-	device.LinkToBus(bus)
 
-	testObservers := bus.GetBusObservers()
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-	assert.Assert(t, device.observers.AssetObserver != nil)
-	assert.Assert(t, device.observers.BusObserver != nil)
+	relay.AddMember(device)
 
-	assert.Assert(t, device.observers.AssetObserver == testObservers.AssetObserver)
-	assert.Assert(t, device.observers.BusObserver == testObservers.BusObserver)
+	assert.Assert(t, device.bus.send != nil)
+	assert.Assert(t, device.bus.recieve != nil)
+
+	targetSend := Target{
+		pid: device.PID(),
+		status: Status{
+			KW:   1,
+			KVAR: 2,
+			Hz:   60,
+			Volt: 480,
+		},
+	}
+
+	device.bus.send <- targetSend
+	targetRecieve := <-device.bus.recieve
+
+	assert.Assert(t, targetSend.KW() == -1*targetRecieve.KW())
+	assert.Assert(t, targetSend.KVAR() == targetRecieve.KVAR())
+
+	relay.RemoveMember(device.PID())
 }
 
-func TestStartStopVirtualLoop(t *testing.T) {
-	ess := newLinkedESS()
+func TestStartStopProcess(t *testing.T) {
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
 
-	device.StartVirtualDevice()
-	time.Sleep(100 * time.Millisecond)
-	device.StopVirtualDevice()
-	time.Sleep(100 * time.Millisecond)
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-	// TODO: What are the conditions for success and failure?
+	relay.AddMember(device)
+	device.StopProcess()
+
+	_, ok := <-device.comm.outgoing
+	assert.Assert(t, !ok)
 }
 
 func TestRead(t *testing.T) {
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
 
-	device.StartVirtualDevice()
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
 	status, err := device.read()
 	if err != nil {
 		t.Fatal(err)
@@ -91,20 +122,26 @@ func TestRead(t *testing.T) {
 		Hz:                   0,
 		Volt:                 0,
 		SOC:                  0,
-		PositiveRealCapacity: 0,
-		NegativeRealCapacity: 0,
+		RealPositiveCapacity: 0,
+		RealNegativeCapacity: 0,
 		Gridforming:          false,
 		Online:               false,
 	}
 
 	assert.Assert(t, assertedStatus == status)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }
 
 func TestWrite(t *testing.T) {
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
 	intercept := make(chan Control)
 	device.comm.outgoing = intercept
 
@@ -121,26 +158,120 @@ func TestWrite(t *testing.T) {
 	assert.Assert(t, testControl == control)
 }
 
-func TestReadDeviceStatus(t *testing.T) {}
+func TestReadDeviceStatus(t *testing.T) {
+	newESS := newESS()
+	device := newESS.DeviceController().(*VirtualESS)
 
-func TestWriteDeviceControl(t *testing.T) {}
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-func TestUpdateObservers(t *testing.T) {}
+	relay.AddMember(device)
 
-func TestMapStatus(t *testing.T) {}
+	machineStatus, _ := device.ReadDeviceStatus()
 
-func TestMapControl(t *testing.T) {}
+	assertedStatus := ess.MachineStatus{
+		KW:                   0,
+		KVAR:                 0,
+		Hz:                   0,
+		Volt:                 0,
+		SOC:                  0,
+		RealPositiveCapacity: 0,
+		RealNegativeCapacity: 0,
+		Gridforming:          false,
+		Online:               false,
+	}
 
-func TestMapSource(t *testing.T) {}
+	assert.Assert(t, machineStatus == assertedStatus)
+
+}
+
+func TestWriteDeviceControl(t *testing.T) {
+	newESS := newESS()
+	device := newESS.DeviceController().(*VirtualESS)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	intercept := make(chan Control)
+	device.comm.outgoing = intercept
+
+	machineControl := ess.MachineControl{true, 10, 10, false}
+
+	go func() {
+		err := device.WriteDeviceControl(machineControl)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	testControl := <-intercept
+	assert.Assert(t, testControl == mapControl(machineControl))
+}
+
+func TestMapStatus(t *testing.T) {
+	status := Status{
+		KW:                   1,
+		KVAR:                 2,
+		Hz:                   3,
+		Volt:                 4,
+		SOC:                  5,
+		RealPositiveCapacity: 6,
+		RealNegativeCapacity: 7,
+		Gridforming:          true,
+		Online:               true,
+	}
+
+	machineStatus := mapStatus(status)
+
+	assertedStatus := ess.MachineStatus{
+		KW:                   1,
+		KVAR:                 2,
+		Hz:                   3,
+		Volt:                 4,
+		SOC:                  5,
+		RealPositiveCapacity: 6,
+		RealNegativeCapacity: 7,
+		Gridforming:          true,
+		Online:               true,
+	}
+
+	assert.Assert(t, machineStatus == assertedStatus)
+
+}
+
+func TestMapControl(t *testing.T) {
+
+	machineControl := ess.MachineControl{
+		Run:      true,
+		KW:       10,
+		KVAR:     11,
+		Gridform: false,
+	}
+
+	Control := Control{
+		Run:      true,
+		KW:       10,
+		KVAR:     11,
+		Gridform: false,
+	}
+
+	assert.Assert(t, mapControl(machineControl) == Control)
+}
 
 func TestTransitionOffToPQ(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
 
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirtualDevice()
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
 
 	status, err := device.read()
 	if err != nil {
@@ -169,7 +300,7 @@ func TestTransitionOffToPQ(t *testing.T) {
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == false)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }
 
 func TestTransitionPQToOff(t *testing.T) {
@@ -177,9 +308,13 @@ func TestTransitionPQToOff(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirtualDevice()
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
 
 	status, err := device.read()
 	if err != nil {
@@ -226,7 +361,7 @@ func TestTransitionPQToOff(t *testing.T) {
 	assert.Assert(t, status.Online == false)
 	assert.Assert(t, status.Gridforming == false)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }
 
 func TestTransitionOffToHzV(t *testing.T) {
@@ -234,9 +369,13 @@ func TestTransitionOffToHzV(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirtualDevice()
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
 
 	status, err := device.read()
 	if err != nil {
@@ -260,7 +399,7 @@ func TestTransitionOffToHzV(t *testing.T) {
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == true)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }
 
 func TestTransitionHzVToOff(t *testing.T) {
@@ -268,9 +407,13 @@ func TestTransitionHzVToOff(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirtualDevice()
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
 
 	status, err := device.read()
 	if err != nil {
@@ -309,7 +452,7 @@ func TestTransitionHzVToOff(t *testing.T) {
 	assert.Assert(t, status.Online == false)
 	assert.Assert(t, status.Gridforming == false)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }
 
 func TestTransitionPQToHzV(t *testing.T) {
@@ -317,9 +460,13 @@ func TestTransitionPQToHzV(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirtualDevice()
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
 
 	status, err := device.read()
 	if err != nil {
@@ -358,7 +505,7 @@ func TestTransitionPQToHzV(t *testing.T) {
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == true)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }
 
 func TestTransitionHzVToPQ(t *testing.T) {
@@ -366,9 +513,13 @@ func TestTransitionHzVToPQ(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	ess := newLinkedESS()
+	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	device.StartVirtualDevice()
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
 
 	status, err := device.read()
 	if err != nil {
@@ -407,5 +558,5 @@ func TestTransitionHzVToPQ(t *testing.T) {
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == false)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
 }

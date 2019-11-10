@@ -67,6 +67,8 @@ func (b *ACBus) RemoveMember(pid uuid.UUID) {
 }
 
 func (b *ACBus) StopProcess() {
+	b.mux.Lock()
+	defer b.mux.Unlock()
 	for pid := range b.members {
 		delete(b.members, pid)
 	}
@@ -127,7 +129,7 @@ func New(jsonConfig []byte, relay Relayer) (bus.Bus, error) {
 }
 
 type Relayer interface {
-	ReadDeviceStatus() (RelayStatus, error)
+	ReadRelayStatus() (RelayStatus, error)
 }
 
 type RelayStatus struct {
@@ -143,9 +145,13 @@ func (s RelayStatus) Volt() float64 {
 	return s.volt
 }
 
+func NewRelayStatus(hz float64, volt float64) RelayStatus {
+	return RelayStatus{hz: hz, volt: volt}
+}
+
 // UpdateRelayer requests a physical device read, then updates MachineStatus field.
 func (b *ACBus) UpdateRelayer() (RelayStatus, error) {
-	relayStatus, err := b.relay.ReadDeviceStatus()
+	relayStatus, err := b.relay.ReadRelayStatus()
 	if err != nil {
 		// comm fail handling path
 		return RelayStatus{}, nil

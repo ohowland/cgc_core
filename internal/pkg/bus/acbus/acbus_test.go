@@ -12,7 +12,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
-// randMachineStatus returns a closure for random DummyAsset Status
+// randDummyStatus returns a closure for random DummyAsset Status
 func randDummyStatus() func() DummyStatus {
 	status := DummyStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}
 	return func() DummyStatus {
@@ -188,7 +188,7 @@ func (d DummyRelay) Volt() float64 {
 	return d.volt
 }
 
-func (d DummyRelay) ReadDeviceStatus() (RelayStatus, error) {
+func (d DummyRelay) ReadRelayStatus() (RelayStatus, error) {
 	return RelayStatus{
 		d.Hz(),
 		d.Volt(),
