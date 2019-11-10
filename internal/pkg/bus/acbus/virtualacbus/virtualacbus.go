@@ -105,21 +105,10 @@ loop:
 				break loop
 			}
 			b.connectedSources[source.PID] = source
-
 			if source.Gridforming == true {
 				b.gridformer = source
 			}
 		case b.busObserver <- b.gridformerCalcs():
-		default:
-			var gridformerFound bool
-			for _, s := range b.connectedSources {
-				if s.Gridforming {
-					gridformerFound = true
-				}
-			}
-			if !gridformerFound {
-				b.gridformer = Source{}
-			}
 		}
 	}
 }

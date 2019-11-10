@@ -50,17 +50,19 @@ func (a DummyAsset) asSource() Source {
 }
 
 func newVirtualBus() *VirtualACBus {
-	configpath := "../acbus_test_config.json"
-	bus, err := New(configpath)
+	configPath := "../acbus_test_config.json"
+	bus, err := New(configPath)
 	if err != nil {
 		panic(err)
 	}
-	return bus.(*acbus.ACBus).Relayer().(*VirtualACBus)
+	acbus := bus.(acbus.ACBus)
+	vrbus := acbus.Relayer().(*VirtualACBus)
+	return vrbus
 }
 
 func TestNewVirtualACBus(t *testing.T) {
-	configpath := "../acbus_test_config.json"
-	bus, err := New(configpath)
+	configPath := "../acbus_test_config.json"
+	bus, err := New(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,10 +78,9 @@ func TestCalcSwingLoad(t *testing.T) {
 
 	bus.assetObserver <- asset1.asSource()
 	bus.assetObserver <- asset2.asSource()
+	gridformer := <-bus.busObserver
 
-	gridformer := bus.gridformer
-
-	assertKwSum := asset1.status.kW + asset2.status.kW
+	assertKwSum := -1 * (asset1.status.kW + asset2.status.kW)
 	assertKvarSum := asset1.status.kVAR + asset2.status.kVAR
 
 	assert.Assert(t, gridformer.KW == assertKwSum)
@@ -113,8 +114,8 @@ func TestCalcSwingLoadChange(t *testing.T) {
 
 	time.Sleep(time.Duration(200) * time.Millisecond)
 
-	gridformer := bus.gridformer
-	assertKwSum := gridfollowingAsset1.status.kW + gridfollowingAsset2.status.kW
+	gridformer := <-bus.busObserver
+	assertKwSum := -1 * (gridfollowingAsset1.status.kW + gridfollowingAsset2.status.kW)
 	assertKvarSum := gridfollowingAsset1.status.kVAR + gridfollowingAsset2.status.kVAR
 	assert.Assert(t, gridformer.KW == assertKwSum)
 	assert.Assert(t, gridformer.KVAR == assertKvarSum)
