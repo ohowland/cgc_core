@@ -7,11 +7,11 @@ package acbus
 
 import (
 	"encoding/json"
+	"log"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus"
 )
 
 type ACBus struct {
@@ -93,6 +93,7 @@ loop:
 				}
 			}
 			b.status.aggregateCapacity = aggregateCapacity(agg)
+			log.Println("BUS:", b.status.aggregateCapacity)
 		}
 	}
 }
@@ -110,7 +111,7 @@ func aggregateCapacity(agg map[uuid.UUID]asset.AssetStatus) AggregateCapacity {
 	}
 }
 
-func New(jsonConfig []byte, relay Relayer) (bus.Bus, error) {
+func New(jsonConfig []byte, relay Relayer) (ACBus, error) {
 
 	config := Config{}
 	err := json.Unmarshal(jsonConfig, &config)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 )
 
@@ -19,7 +18,7 @@ type VirtualACBus struct {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string) (bus.Bus, error) {
+func New(configPath string) (acbus.ACBus, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return acbus.ACBus{}, err
