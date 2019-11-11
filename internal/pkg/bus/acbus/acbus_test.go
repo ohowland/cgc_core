@@ -83,7 +83,7 @@ func newACBus() ACBus {
 	if err != nil {
 		panic(err)
 	}
-	return bus.(ACBus)
+	return bus
 }
 
 func TestNewAcBus(t *testing.T) {
@@ -96,7 +96,7 @@ func TestNewAcBus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	acbus := bus.(ACBus)
+	acbus := bus
 	assert.Assert(t, acbus.Name() == "TEST_Virtual Bus")
 }
 

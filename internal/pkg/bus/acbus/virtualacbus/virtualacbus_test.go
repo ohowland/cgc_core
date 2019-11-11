@@ -1,13 +1,13 @@
 package virtualacbus
 
 import (
+	"log"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 	"gotest.tools/assert"
 )
 
@@ -83,7 +83,7 @@ func newVirtualBus() *VirtualACBus {
 	if err != nil {
 		panic(err)
 	}
-	acbus := bus.(acbus.ACBus)
+	acbus := bus
 	vrbus := acbus.Relayer().(*VirtualACBus)
 	return vrbus
 }
@@ -94,7 +94,7 @@ func TestNewVirtualACBus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	acbus := bus.(acbus.ACBus)
+	acbus := bus
 	assert.Assert(t, acbus.Name() == "TEST_Virtual Bus")
 }
 
@@ -112,6 +112,7 @@ func TestAddMember(t *testing.T) {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
 	}
 
+	bus.StopProcess()
 }
 
 func TestRemoveMember(t *testing.T) {
@@ -137,6 +138,8 @@ func TestRemoveMember(t *testing.T) {
 		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
 		assert.Assert(t, pid != asset2.PID())
 	}
+
+	bus.StopProcess()
 }
 
 func TestProcessOneGridformer(t *testing.T) {
@@ -186,10 +189,14 @@ func TestProcessTwoAssets(t *testing.T) {
 	bus.AddMember(asset1)
 	bus.AddMember(asset2)
 
+	log.Println("SEND1: BEGIN")
 	asset1.send <- asset1.status
+	log.Println("SEND2: BEGIN")
 	asset2.send <- asset2.status
 
+	log.Println("RECIEVE2: BEGIN")
 	gridformer := <-asset2.recieve
+	log.Println("RECIEVE2: FINISH")
 
 	assertStatus := assertedStatus()
 	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
@@ -213,6 +220,7 @@ func TestReadDeviceStatus(t *testing.T) {
 	assertStatus := assertedStatus()
 	assert.Assert(t, relayStatus.Hz() == assertStatus.Hz())
 	assert.Assert(t, relayStatus.Volt() == assertStatus.Volt())
+
 	bus.StopProcess()
 }
 

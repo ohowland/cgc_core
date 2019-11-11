@@ -65,19 +65,24 @@ func (b *VirtualACBus) RemoveMember(pid uuid.UUID) {
 func (b *VirtualACBus) StopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
+	allPIDs := make([]uuid.UUID, len(b.members))
+
 	for pid := range b.members {
+		allPIDs = append(allPIDs, pid)
+	}
+
+	for _, pid := range allPIDs {
 		delete(b.members, pid)
 	}
 }
 
 func (b *VirtualACBus) Process() {
 	defer close(b.busObserver)
+	log.Println("VirtualBus: Process Loop Started")
 	agg := make(map[uuid.UUID]asset.VirtualAssetStatus)
 loop:
 	for {
-		b.mux.Lock()
-		members := b.members
-		b.mux.Unlock()
+		members := b.getMembers()
 		if len(members) == 0 { // if there are no members, end the bus process.
 			break loop
 		}
@@ -92,9 +97,17 @@ loop:
 					agg[pid] = assetStatus
 				}
 			case b.busObserver <- busPowerBalance(agg):
+			default:
 			}
 		}
 	}
+	log.Println("VirtualBus: Process Loop Stopped")
+}
+
+func (b *VirtualACBus) getMembers() map[uuid.UUID]<-chan asset.VirtualAssetStatus {
+	b.mux.Lock()
+	defer b.mux.Unlock()
+	return b.members
 }
 
 type virtualGridFormer struct {

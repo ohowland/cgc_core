@@ -69,7 +69,13 @@ func (b *ACBus) RemoveMember(pid uuid.UUID) {
 func (b *ACBus) StopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
+	allPIDs := make([]uuid.UUID, len(b.members))
+
 	for pid := range b.members {
+		allPIDs = append(allPIDs, pid)
+	}
+
+	for _, pid := range allPIDs {
 		delete(b.members, pid)
 	}
 }
