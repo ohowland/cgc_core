@@ -9,11 +9,11 @@ type Asset interface {
 	PID() uuid.UUID
 	//UpdateStatus()
 	//WriteControl(interface{})
-	Subscribe(uuid.UUID) <-chan AssetStatus
+	Subscribe(uuid.UUID) <-chan Status
 	Unsubscribe(uuid.UUID)
 }
 
-type AssetStatus interface {
+type Status interface {
 	KW() float64
 	KVAR() float64
 	RealPositiveCapacity() float64

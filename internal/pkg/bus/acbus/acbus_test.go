@@ -24,10 +24,10 @@ var assertedStatus = randDummyStatus()
 
 type DummyAsset struct {
 	pid       uuid.UUID
-	broadcast chan asset.AssetStatus
+	broadcast chan asset.Status
 }
 
-func (d DummyAsset) Subscribe(uuid.UUID) <-chan asset.AssetStatus {
+func (d DummyAsset) Subscribe(uuid.UUID) <-chan asset.Status {
 	return d.broadcast
 }
 
@@ -68,7 +68,7 @@ func (s DummyStatus) RealNegativeCapacity() float64 {
 }
 
 func newDummyAsset() DummyAsset {
-	ch := make(chan asset.AssetStatus, 1)
+	ch := make(chan asset.Status, 1)
 	return DummyAsset{pid: uuid.New(), broadcast: ch}
 }
 
@@ -113,6 +113,8 @@ func TestAddMember(t *testing.T) {
 	for pid := range bus.members {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
 	}
+
+	bus.StopProcess()
 }
 
 func TestRemoveMember(t *testing.T) {
@@ -138,6 +140,9 @@ func TestRemoveMember(t *testing.T) {
 		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
 		assert.Assert(t, pid != asset2.PID())
 	}
+
+	bus.StopProcess()
+
 }
 
 func TestProcess(t *testing.T) {
@@ -220,7 +225,4 @@ func TestUpdateRelayer(t *testing.T) {
 
 	assert.Assert(t, relayStatus.Hz() == assertStatus.Hz())
 	assert.Assert(t, relayStatus.Volt() == assertStatus.Volt())
-
-	bus.StopProcess()
-
 }

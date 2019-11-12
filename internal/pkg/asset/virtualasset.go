@@ -7,10 +7,10 @@ import (
 // VirtualAsset defines the interface to the virtual assets.
 type VirtualAsset interface {
 	PID() uuid.UUID
-	LinkToBus(<-chan VirtualAssetStatus) <-chan VirtualAssetStatus
+	LinkToBus(<-chan VirtualStatus) <-chan VirtualStatus
 }
 
-type VirtualAssetStatus interface {
+type VirtualStatus interface {
 	KW() float64
 	KVAR() float64
 	Hz() float64

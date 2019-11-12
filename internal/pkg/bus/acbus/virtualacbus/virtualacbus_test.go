@@ -1,7 +1,6 @@
 package virtualacbus
 
 import (
-	"log"
 	"math/rand"
 	"testing"
 	"time"
@@ -25,18 +24,18 @@ var assertedStatus = randDummyStatus()
 type DummyAsset struct {
 	pid     uuid.UUID
 	status  DummyStatus
-	send    chan<- asset.VirtualAssetStatus
-	recieve <-chan asset.VirtualAssetStatus
+	send    chan<- asset.VirtualStatus
+	recieve <-chan asset.VirtualStatus
 }
 
 func (d DummyAsset) PID() uuid.UUID {
 	return d.pid
 }
 
-func (d *DummyAsset) LinkToBus(busIn <-chan asset.VirtualAssetStatus) <-chan asset.VirtualAssetStatus {
+func (d *DummyAsset) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
 	d.recieve = busIn
 
-	busOut := make(chan asset.VirtualAssetStatus)
+	busOut := make(chan asset.VirtualStatus)
 	d.send = busOut
 
 	return busOut
@@ -149,8 +148,9 @@ func TestProcessOneGridformer(t *testing.T) {
 	asset1.status.gridforming = true
 
 	bus.AddMember(asset1)
-
 	asset1.send <- asset1.status
+
+	time.Sleep(100 * time.Millisecond)
 	gridformer := <-asset1.recieve
 
 	assertStatus := assertedStatus()
@@ -160,6 +160,7 @@ func TestProcessOneGridformer(t *testing.T) {
 	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
 
 	bus.StopProcess()
+	time.Sleep(1000 * time.Millisecond)
 }
 
 func TestProcessOneNongridformer(t *testing.T) {
@@ -170,6 +171,7 @@ func TestProcessOneNongridformer(t *testing.T) {
 
 	asset1.send <- asset1.status
 
+	time.Sleep(100 * time.Millisecond)
 	gridformer := <-asset1.recieve
 	assertStatus := assertedStatus()
 	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
@@ -189,14 +191,11 @@ func TestProcessTwoAssets(t *testing.T) {
 	bus.AddMember(asset1)
 	bus.AddMember(asset2)
 
-	log.Println("SEND1: BEGIN")
 	asset1.send <- asset1.status
-	log.Println("SEND2: BEGIN")
 	asset2.send <- asset2.status
 
-	log.Println("RECIEVE2: BEGIN")
+	time.Sleep(100 * time.Millisecond)
 	gridformer := <-asset2.recieve
-	log.Println("RECIEVE2: FINISH")
 
 	assertStatus := assertedStatus()
 	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
@@ -215,6 +214,7 @@ func TestReadDeviceStatus(t *testing.T) {
 
 	asset1.send <- asset1.status
 
+	time.Sleep(100 * time.Millisecond)
 	relayStatus, _ := bus.ReadRelayStatus()
 
 	assertStatus := assertedStatus()
