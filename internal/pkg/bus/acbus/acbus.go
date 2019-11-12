@@ -77,6 +77,11 @@ func (b ACBus) PID() uuid.UUID {
 	return b.pid
 }
 
+func (b ACBus) Energized() bool {
+	return b.status.relay.Hz() > 0.1*b.config.RatedHz &&
+		b.status.relay.Volt() > 0.1*b.config.RatedVolt
+}
+
 func (b ACBus) Relayer() Relayer {
 	return b.relay
 }
@@ -136,6 +141,7 @@ loop:
 				delete(agg, msg.PID())
 			} else {
 				agg = b.updateAggregates(msg, agg)
+				b.status.aggregateCapacity = aggregateCapacity(agg)
 			}
 		case <-b.stopProcess:
 			break loop
@@ -148,9 +154,6 @@ func (b *ACBus) updateAggregates(msg Msg, agg map[uuid.UUID]asset.Status) map[uu
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	agg[msg.PID()] = msg.Status()
-
-	b.status.aggregateCapacity = aggregateCapacity(agg)
-
 	return agg
 }
 
@@ -169,13 +172,14 @@ func aggregateCapacity(agg map[uuid.UUID]asset.Status) AggregateCapacity {
 }
 
 // UpdateRelayer requests a physical device read, then updates MachineStatus field.
-func (b *ACBus) UpdateRelayer() (RelayStatus, error) {
+func (b *ACBus) UpdateRelayer() error {
 	relayStatus, err := b.relay.ReadRelayStatus()
+	log.Println("update relay:", relayStatus)
 	if err != nil {
-		// comm fail handling path
-		return RelayStatus{}, nil
+		return err
 	}
-	return relayStatus, nil
+	b.status.relay = relayStatus
+	return nil
 }
 
 type Msg struct {

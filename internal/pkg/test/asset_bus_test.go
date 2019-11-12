@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"gotest.tools/assert"
+
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
@@ -50,5 +52,7 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 	ess2.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
 
 	time.Sleep(10 * time.Second)
+
+	assert.Assert(t, bus1.Energized() == true)
 
 }

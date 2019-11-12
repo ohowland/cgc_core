@@ -36,7 +36,7 @@ func newBus() acbus.ACBus {
 	if err != nil {
 		panic(err)
 	}
-	return bus.(acbus.ACBus)
+	return bus
 }
 
 func newLinkedESS(bus *virtualacbus.VirtualACBus) *ess.Asset {

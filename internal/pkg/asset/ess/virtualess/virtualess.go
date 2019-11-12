@@ -22,8 +22,8 @@ type VirtualESS struct {
 }
 
 type virtualBus struct {
-	send    chan<- asset.VirtualAssetStatus
-	recieve <-chan asset.VirtualAssetStatus
+	send    chan<- asset.VirtualStatus
+	recieve <-chan asset.VirtualStatus
 }
 
 // Target is a virtual representation of the hardware
@@ -153,8 +153,8 @@ func mapControl(c ess.MachineControl) Control {
 	}
 }
 
-func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualAssetStatus) <-chan asset.VirtualAssetStatus {
-	busOut := make(chan asset.VirtualAssetStatus)
+func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
+	busOut := make(chan asset.VirtualStatus)
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
@@ -193,9 +193,11 @@ loop:
 				break loop
 			}
 		case comm.incoming <- target.status:
-			target.status = sm.run(*target)
-		case _, ok = <-bus.recieve:
+		case busStatus := <-bus.recieve:
+			target.status = sm.run(*target, busStatus)
 		case bus.send <- target:
+		default:
+			time.Sleep(200 * time.Millisecond)
 		}
 	}
 	log.Println("VirtualESS-Device shutdown")
@@ -205,22 +207,24 @@ type stateMachine struct {
 	currentState state
 }
 
-func (s *stateMachine) run(target Target) Status {
-	s.currentState = s.currentState.transition(target)
-	return s.currentState.action(target)
+func (s *stateMachine) run(target Target, bus asset.VirtualStatus) Status {
+	s.currentState = s.currentState.transition(target, bus)
+	return s.currentState.action(target, bus)
 }
 
 type state interface {
-	action(Target) Status
-	transition(Target) state
+	action(Target, asset.VirtualStatus) Status
+	transition(Target, asset.VirtualStatus) state
 }
 
 type offState struct{}
 
-func (s offState) action(target Target) Status {
+func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:                   0,
 		KVAR:                 0,
+		Hz:                   bus.Hz(),
+		Volt:                 bus.Volt(),
 		SOC:                  target.status.SOC,
 		RealPositiveCapacity: 0, // TODO: Get Config into VirtualESS
 		RealNegativeCapacity: 0, // TODO: Get Config into VirtualESS
@@ -228,16 +232,24 @@ func (s offState) action(target Target) Status {
 		Online:               false,
 	}
 }
-func (s offState) transition(target Target) state {
+
+func energized(bus asset.VirtualStatus) bool {
+	return bus.Hz() > 1 && bus.Volt() > 1
+}
+
+func (s offState) transition(target Target, bus asset.VirtualStatus) state {
 	if target.control.Run == true {
 		if target.control.Gridform == true {
 			log.Printf("VirtualESS-Device: state: %v\n",
 				reflect.TypeOf(hzVState{}).String())
 			return hzVState{}
 		}
-		log.Printf("VirtualESS-Device: state: %v\n",
-			reflect.TypeOf(pQState{}).String())
-		return pQState{}
+
+		if energized(bus) {
+			log.Printf("VirtualESS-Device: state: %v\n",
+				reflect.TypeOf(pQState{}).String())
+			return pQState{}
+		}
 	}
 	return offState{}
 }
@@ -245,10 +257,12 @@ func (s offState) transition(target Target) state {
 // pQState is the power control state
 type pQState struct{}
 
-func (s pQState) action(target Target) Status {
+func (s pQState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:                   target.control.KW,
 		KVAR:                 target.control.KVAR,
+		Hz:                   bus.Hz(),
+		Volt:                 bus.Volt(),
 		SOC:                  target.status.SOC,
 		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
 		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
@@ -257,8 +271,8 @@ func (s pQState) action(target Target) Status {
 	}
 }
 
-func (s pQState) transition(target Target) state {
-	if target.control.Run == false {
+func (s pQState) transition(target Target, bus asset.VirtualStatus) state {
+	if target.control.Run == false || !energized(bus) {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}
@@ -274,10 +288,12 @@ func (s pQState) transition(target Target) state {
 // hzVState is the gridforming state
 type hzVState struct{}
 
-func (s hzVState) action(target Target) Status {
+func (s hzVState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
-		KW:                   target.status.KW,   // TODO: Link to virtual system model
-		KVAR:                 target.status.KVAR, // TODO: Link to virtual system model
+		KW:                   bus.KW(),
+		KVAR:                 bus.KVAR(),
+		Hz:                   60,  // TODO: Get Config into VirtualESS
+		Volt:                 480, // TODO: Get Config into VirtualESS
 		SOC:                  target.status.SOC,
 		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
 		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
@@ -286,7 +302,7 @@ func (s hzVState) action(target Target) Status {
 	}
 }
 
-func (s hzVState) transition(target Target) state {
+func (s hzVState) transition(target Target, bus asset.VirtualStatus) state {
 	if target.control.Run == false {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())

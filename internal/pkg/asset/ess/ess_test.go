@@ -54,7 +54,7 @@ func newESS() (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.AssetStatus)
+	broadcast := make(map[uuid.UUID]chan<- asset.Status)
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
@@ -86,7 +86,7 @@ func TestWriteControl(t *testing.T) {
 
 type subscriber struct {
 	pid uuid.UUID
-	ch  <-chan asset.AssetStatus
+	ch  <-chan asset.Status
 }
 
 func TestUpdateStatus(t *testing.T) {
