@@ -29,29 +29,70 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ess3, err := virtualess.New("../../../config/asset/virtualESS.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ess4, err := virtualess.New("../../../config/asset/virtualESS.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ess5, err := virtualess.New("../../../config/asset/virtualESS.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ess6, err := virtualess.New("../../../config/asset/virtualESS.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	bus1.AddMember(&ess1)
+	bus1.AddMember(&ess2)
+	bus1.AddMember(&ess3)
+	bus1.AddMember(&ess4)
+	bus1.AddMember(&ess5)
+	bus1.AddMember(&ess6)
 
 	relay1 := bus1.Relayer().(*virtualacbus.VirtualACBus)       // How to make ths interface explicit?
 	device1 := ess1.DeviceController().(*virtualess.VirtualESS) // How to make this interface expicit?
 	device2 := ess2.DeviceController().(*virtualess.VirtualESS) // How to make this interface expicit?
+	device3 := ess3.DeviceController().(*virtualess.VirtualESS) // How to make this interface expicit?
+	device4 := ess4.DeviceController().(*virtualess.VirtualESS) // How to make this interface expicit?
+	device5 := ess5.DeviceController().(*virtualess.VirtualESS) // How to make this interface expicit?
+	device6 := ess6.DeviceController().(*virtualess.VirtualESS) // How to make this interface expicit?
 
 	relay1.AddMember(device1)
 	relay1.AddMember(device2)
+	relay1.AddMember(device3)
+	relay1.AddMember(device4)
+	relay1.AddMember(device5)
+	relay1.AddMember(device6)
 
-	go func(*ess.Asset, *ess.Asset, *acbus.ACBus) {
+	go func(*ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *acbus.ACBus) {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
 			<-ticker.C
-			ess1.UpdateStatus()
-			ess2.UpdateStatus()
-			bus1.UpdateRelayer()
+			go ess1.UpdateStatus()
+			go ess2.UpdateStatus()
+			go ess3.UpdateStatus()
+			go ess4.UpdateStatus()
+			go ess5.UpdateStatus()
+			go ess6.UpdateStatus()
+			go bus1.UpdateRelayer()
 		}
-	}(&ess1, &ess2, &bus1)
+	}(&ess1, &ess2, &ess3, &ess4, &ess5, &ess6, &bus1)
 
 	ess1.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true})
 	ess2.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	ess3.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	ess4.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	ess5.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	ess6.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	assert.Assert(t, bus1.Energized() == true)
 
