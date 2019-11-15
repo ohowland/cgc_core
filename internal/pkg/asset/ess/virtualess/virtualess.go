@@ -172,7 +172,7 @@ func (a *VirtualESS) StartProcess() {
 	go Process(a.pid, a.comm, a.bus)
 }
 
-// StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
+// StopProcess stops the virtual machine loop by closing it's communication channels.
 func (a *VirtualESS) StopProcess() {
 	if a.comm.outgoing != nil {
 		close(a.comm.outgoing)
@@ -217,6 +217,10 @@ type state interface {
 	transition(Target, asset.VirtualStatus) state
 }
 
+func energized(bus asset.VirtualStatus) bool {
+	return bus.Hz() > 1 && bus.Volt() > 1
+}
+
 type offState struct{}
 
 func (s offState) action(target Target, bus asset.VirtualStatus) Status {
@@ -231,10 +235,6 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 		Gridforming:          false,
 		Online:               false,
 	}
-}
-
-func energized(bus asset.VirtualStatus) bool {
-	return bus.Hz() > 1 && bus.Volt() > 1
 }
 
 func (s offState) transition(target Target, bus asset.VirtualStatus) state {

@@ -1,25 +1,37 @@
 package virtualfeeder
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
 	"gotest.tools/assert"
 )
 
-func newFeeder() *feeder.Asset {
+// randStatus returns a closure for random DummyAsset Status
+func randStatus() func() Status {
+	status := Status{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}
+	return func() Status {
+		return status
+	}
+}
+
+var assertedStatus = randStatus()
+
+func newFeeder() feeder.Asset {
 	configPath := "../feeder_test_config.json"
 	feeder, err := New(configPath)
 	if err != nil {
 		panic(err)
 	}
-	return &feeder
+	return feeder
 }
 
-func newBus() virtualacbus.VirtualACBus {
-	configPath := "../../../bus/virtualacbus/virtualacbus_test_config.json"
+func newBus() acbus.ACBus {
+	configPath := "../../../bus/acbus/acbus_test_config.json"
 	bus, err := virtualacbus.New(configPath)
 	if err != nil {
 		panic(err)
@@ -27,13 +39,11 @@ func newBus() virtualacbus.VirtualACBus {
 	return bus
 }
 
-func newLinkedFeeder() *feeder.Asset {
+func newLinkedFeeder(bus *virtualacbus.VirtualACBus) *feeder.Asset {
 	feeder := newFeeder()
-	bus := newBus()
-
 	device := feeder.DeviceController().(*VirtualFeeder)
-	device.LinkToBus(bus)
-	return feeder
+	bus.AddMember(device)
+	return &feeder
 }
 
 func TestNew(t *testing.T) {
@@ -42,57 +52,278 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Assert(t, feeder.Name() == "TEST_Virtual Feeder")
+
+	assert.Assert(t, feeder.Config().Name() == "TEST_Virtual Feeder")
 }
 
 func TestLinkToBus(t *testing.T) {
+
 	feeder := newFeeder()
-	bus := newBus()
-
 	device := feeder.DeviceController().(*VirtualFeeder)
-	device.LinkToBus(bus)
 
-	testObservers := bus.GetBusObservers()
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-	assert.Assert(t, device.observers.AssetObserver != nil)
-	assert.Assert(t, device.observers.BusObserver != nil)
+	relay.AddMember(device)
 
-	assert.Assert(t, device.observers.AssetObserver == testObservers.AssetObserver)
-	assert.Assert(t, device.observers.BusObserver == testObservers.BusObserver)
+	assert.Assert(t, device.bus.send != nil)
+	assert.Assert(t, device.bus.recieve != nil)
+
+	targetSend := Target{
+		pid: device.PID(),
+		status: Status{
+			KW:   1,
+			KVAR: 2,
+			Hz:   60,
+			Volt: 480,
+		},
+	}
+
+	device.bus.send <- targetSend
+	targetRecieve := <-device.bus.recieve
+
+	assert.Assert(t, targetSend.KW() == -1*targetRecieve.KW())
+	assert.Assert(t, targetSend.KVAR() == targetRecieve.KVAR())
+
+	relay.RemoveMember(device.PID())
 }
 
-func TestStartStopVirtualLoop(t *testing.T) {
-	feeder := newLinkedFeeder()
+func TestStartStopProcess(t *testing.T) {
+	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
 
-	device.StartVirtualDevice()
-	time.Sleep(100 * time.Millisecond)
-	device.StopVirtualDevice()
-	time.Sleep(100 * time.Millisecond)
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-	//TODO: What are the conditions for success and failure?
+	relay.AddMember(device)
+	device.StopProcess()
+
+	_, ok := <-device.comm.outgoing
+	assert.Assert(t, !ok)
 }
 
 func TestRead(t *testing.T) {
-	feeder := newLinkedFeeder()
+	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
 
-	device.StartVirtualDevice()
-	time.Sleep(1 * time.Second)
-	status := device.read()
-	time.Sleep(1 * time.Second)
-	timestamp := status.timestamp
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	assertedStatus := Status{
-		timestamp: timestamp,
-		KW:        0,
-		KVAR:      0,
-		Hz:        0,
-		Volt:      0,
-		Online:    false,
+		KW:     0,
+		KVAR:   0,
+		Hz:     0,
+		Volt:   0,
+		Online: false,
 	}
 
 	assert.Assert(t, assertedStatus == status)
 
-	device.StopVirtualDevice()
+	relay.RemoveMember(device.PID())
+}
+
+func TestWrite(t *testing.T) {
+	feeder := newFeeder()
+	device := feeder.DeviceController().(*VirtualFeeder)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	intercept := make(chan Control)
+	device.comm.outgoing = intercept
+
+	control := Control{true}
+
+	go func() {
+		err := device.write(control)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	testControl := <-intercept
+	assert.Assert(t, testControl == control)
+}
+
+func TestReadDeviceStatus(t *testing.T) {
+	newfeeder := newFeeder()
+	device := newfeeder.DeviceController().(*VirtualFeeder)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	machineStatus, _ := device.ReadDeviceStatus()
+
+	assertedStatus := feeder.MachineStatus{
+		KW:     0,
+		KVAR:   0,
+		Hz:     0,
+		Volt:   0,
+		Online: false,
+	}
+
+	assert.Assert(t, machineStatus == assertedStatus)
+
+}
+
+func TestWriteDeviceControl(t *testing.T) {
+	newfeeder := newFeeder()
+	device := newfeeder.DeviceController().(*VirtualFeeder)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	intercept := make(chan Control)
+	device.comm.outgoing = intercept
+
+	machineControl := feeder.MachineControl{true}
+
+	go func() {
+		err := device.WriteDeviceControl(machineControl)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	testControl := <-intercept
+	assert.Assert(t, testControl == mapControl(machineControl))
+}
+
+func TestMapStatus(t *testing.T) {
+	status := Status{
+		KW:     1,
+		KVAR:   2,
+		Hz:     3,
+		Volt:   4,
+		Online: true,
+	}
+
+	machineStatus := mapStatus(status)
+
+	assertedStatus := feeder.MachineStatus{
+		KW:     1,
+		KVAR:   2,
+		Hz:     3,
+		Volt:   4,
+		Online: true,
+	}
+
+	assert.Assert(t, machineStatus == assertedStatus)
+
+}
+
+func TestMapControl(t *testing.T) {
+
+	machineControl := feeder.MachineControl{
+		CloseFeeder: true,
+	}
+
+	Control := Control{
+		CloseFeeder: true,
+	}
+
+	assert.Assert(t, mapControl(machineControl) == Control)
+}
+
+func TestTransitionOffToOn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	newFeeder := newFeeder()
+	device := newFeeder.DeviceController().(*VirtualFeeder)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Assert(t, status.Online == false)
+
+	control := Control{
+		CloseFeeder: true,
+	}
+
+	err = device.write(control)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
+
+	assert.Assert(t, status.Online == true)
+
+	relay.RemoveMember(device.PID())
+}
+
+func TestTransitionOnToOff(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	newFeeder := newFeeder()
+	device := newFeeder.DeviceController().(*VirtualFeeder)
+
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	relay.AddMember(device)
+
+	status, err := device.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Assert(t, status.Online == false)
+
+	control := Control{
+		CloseFeeder: true,
+	}
+
+	err = device.write(control)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
+
+	assert.Assert(t, status.Online == true)
+
+	control = Control{
+		CloseFeeder: false,
+	}
+
+	err = device.write(control)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err = device.read()
+	time.Sleep(2 * time.Second)
+	status, err = device.read()
+
+	assert.Assert(t, status.Online == false)
+
+	relay.RemoveMember(device.PID())
 }
