@@ -2,24 +2,27 @@ package feeder
 
 import (
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // DeviceController is the hardware abstraction layer
 type DeviceController interface {
-	ReadDeviceStatus(func(int64, MachineStatus))
-	WriteDeviceControl(MachineControl)
+	ReadDeviceStatus() (MachineStatus, error)
+	WriteDeviceControl(MachineControl) error
 }
 
 // Asset is a data structure for an Feeder Asset
 type Asset struct {
-	pid     uuid.UUID
-	device  DeviceController
-	status  Status
-	control Control
-	config  Config
+	mux         *sync.Mutex
+	pid         uuid.UUID
+	device      DeviceController
+	broadcast   map[uuid.UUID]chan<- asset.Status
+	supervisory SupervisoryControl
+	config      Config
 }
 
 // PID is a getter for the ess.Asset status field
@@ -27,33 +30,62 @@ func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
-// UpdateStatus requests a physical device read and updates the ess.Asset status field
-func (a *Asset) UpdateStatus() {
-	go a.device.ReadDeviceStatus(a.status.setStatus)
-}
-
-// WriteControl requests a physical device write of the data held in the GridAsset control field.
-func (a Asset) WriteControl() {
-	a.control.mux.Lock()
-	defer a.control.mux.Unlock()
-	control := a.control.machine
-	go a.device.WriteDeviceControl(control)
-}
-
 // DeviceController returns the hardware abstraction layer struct
 func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-// Status returns the archetypical status for the feeder asset.
-// This takes the form of the ess.MachineStatus struct
-func (a Asset) Status() Status {
-	return a.status
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Status {
+	ch := make(chan asset.Status, 1)
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.broadcast[pid] = ch
+	return ch
 }
 
-// Control returns a pointer to the machine control struct.
-func (a *Asset) Control() *Control {
-	return &a.control
+func (a *Asset) Unsubscribe(pid uuid.UUID) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	ch := a.broadcast[pid]
+	delete(a.broadcast, pid)
+	close(ch)
+}
+
+// UpdateStatus requests a physical device read, then updates MachineStatus field.
+func (a Asset) UpdateStatus() {
+	machineStatus, err := a.device.ReadDeviceStatus()
+	if err != nil {
+		// comm fail handling path
+		return
+	}
+	status := transform(machineStatus)
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	for _, ch := range a.broadcast {
+		select {
+		case ch <- status:
+		default:
+		}
+	}
+}
+
+func transform(machineStatus MachineStatus) Status {
+	return Status{
+		CalculatedStatus{},
+		machineStatus,
+	}
+}
+
+// WriteControl requests a physical device write of the data held in the asset machine control field.
+func (a Asset) WriteControl(c interface{}) {
+	control, ok := c.(MachineControl)
+	if !ok {
+		panic(errors.New("bad cast to write control"))
+	}
+	err := a.device.WriteDeviceControl(control)
+	if err != nil {
+		// comm fail handling path
+	}
 }
 
 //Config returns the archetypical configuration for the feeder asset.
@@ -61,12 +93,17 @@ func (a Asset) Config() Config {
 	return a.config
 }
 
+func (a Asset) Enable(b bool) {
+	a.supervisory.enable = b
+}
+
 // Status is a data structure representing an architypical Feeder status
 type Status struct {
-	mux       *sync.Mutex
-	timestamp int64
-	machine   MachineStatus
+	calc    CalculatedStatus
+	machine MachineStatus
 }
+
+type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical feeder status
 type MachineStatus struct {
@@ -87,19 +124,14 @@ func (s Status) KVAR() float64 {
 	return s.machine.KVAR
 }
 
-func (s *Status) setStatus(timestamp int64, ms MachineStatus) {
-	if timestamp > s.timestamp {
-		s.mux.Lock()
-		defer s.mux.Unlock()
-		s.machine = ms
-	}
+// RealPositiveCapacity returns the asset's operative real positive capacity
+func (s Status) RealPositiveCapacity() float64 {
+	return 0.0
 }
 
-// Control is a data structure representing an architypical Feeder control
-type Control struct {
-	mux         *sync.Mutex
-	machine     MachineControl
-	supervisory SupervisoryControl
+// RealNegativeCapacity returns the asset's operative real negative capacity
+func (s Status) RealNegativeCapacity() float64 {
+	return 0.0
 }
 
 // MachineControl defines the hardware control interface for the feeder Asset
@@ -107,22 +139,10 @@ type MachineControl struct {
 	CloseFeeder bool
 }
 
+// SupervisoryControl defines the software control interface for the ESS Asset
 type SupervisoryControl struct {
-	Enable bool
-	Manual bool
-}
-
-// KW sets the asset's real power setpoint
-func (c *Control) KW(kw float64) {}
-
-// KVAR sets the asset's reactive power setpoint
-func (c *Control) KVAR(kvar float64) {}
-
-// Run sets the asset's run request state
-func (c *Control) Run(run bool) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	c.machine.CloseFeeder = run
+	mux    *sync.Mutex
+	enable bool
 }
 
 // Config wraps the machine configuration with a mutex and hides internal state
@@ -144,6 +164,10 @@ func (c Config) Name() string {
 	return c.machine.Name
 }
 
+func (c Config) Bus() string {
+	return c.machine.Bus
+}
+
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	machineConfig := MachineConfig{}
@@ -157,12 +181,9 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	status := Status{&sync.Mutex{}, 0, MachineStatus{}}
-	control := Control{
-		&sync.Mutex{},
-		MachineControl{false},
-		SupervisoryControl{false, false},
-	}
+	broadcast := make(map[uuid.UUID]chan<- asset.Status)
+
+	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
-	return Asset{PID, device, status, control, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
 }

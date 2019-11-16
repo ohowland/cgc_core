@@ -10,18 +10,46 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/bus"
-	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualFeeder target
 type VirtualFeeder struct {
-	pid       uuid.UUID
-	status    Status
-	control   Control
-	comm      comm
-	observers virtualacbus.Observers
+	pid  uuid.UUID
+	comm comm
+	bus  virtualBus
+}
+
+type virtualBus struct {
+	send    chan<- asset.VirtualStatus
+	recieve <-chan asset.VirtualStatus
+}
+
+// Target is a virtual representation of the hardware
+type Target struct {
+	pid     uuid.UUID
+	status  Status
+	control Control
+}
+
+func (t Target) KW() float64 {
+	return t.status.KW
+}
+func (t Target) KVAR() float64 {
+	return t.status.KVAR
+
+}
+func (t Target) Hz() float64 {
+	return t.status.Hz
+}
+
+func (t Target) Volt() float64 {
+	return t.status.Volt
+}
+
+func (t Target) Gridforming() bool {
+	return false
 }
 
 // Status data structure for the VirtualFeeder
@@ -35,7 +63,7 @@ type Status struct {
 
 // Control data structure for the VirtualFeeder
 type Control struct {
-	closeFeeder bool
+	CloseFeeder bool
 }
 
 // Comm data structure for the VirtualFeeder
@@ -44,33 +72,36 @@ type comm struct {
 	outgoing chan Control
 }
 
+func (a VirtualFeeder) PID() uuid.UUID {
+	return a.pid
+}
+
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a VirtualFeeder) ReadDeviceStatus(setAssetStatus func(int64, feeder.MachineStatus)) {
-	timestamp := time.Now().UnixNano()
-	a.status = a.read()
-	setAssetStatus(timestamp, mapStatus(a.status)) // callback for to write parent status
+func (a VirtualFeeder) ReadDeviceStatus() (feeder.MachineStatus, error) {
+	status, err := a.read()
+	return mapStatus(status), err
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualFeeder) WriteDeviceControl(c feeder.MachineControl) {
-	a.control = mapControl(c)
-	a.write()
+func (a VirtualFeeder) WriteDeviceControl(machineControl feeder.MachineControl) error {
+	control := mapControl(machineControl)
+	err := a.write(control)
+	return err
 }
 
-func (a *VirtualFeeder) read() Status {
+func (a VirtualFeeder) read() (Status, error) {
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus := <-a.comm.incoming
-	return readStatus
+	readStatus, ok := <-a.comm.incoming
+	if !ok {
+		return Status{}, errors.New("Read Error")
+	}
+	return readStatus, nil
 }
 
-func (a VirtualFeeder) write() {
-	a.comm.outgoing <- a.control
-}
-
-func (a *VirtualFeeder) updateObservers(obs virtualacbus.Observers) {
-	source := mapSource(*a)
-	obs.AssetObserver <- source
+func (a VirtualFeeder) write(control Control) error {
+	a.comm.outgoing <- control
+	return nil
 }
 
 // New returns an initalized VirtualFeeder Asset; this is part of the Asset interface.
@@ -83,17 +114,7 @@ func New(configPath string) (feeder.Asset, error) {
 	pid, err := uuid.NewUUID()
 
 	device := VirtualFeeder{
-		pid: pid,
-		status: Status{
-			KW:     0,
-			KVAR:   0,
-			Hz:     0,
-			Volt:   0,
-			Online: false,
-		},
-		control: Control{
-			closeFeeder: false,
-		},
+		pid:  pid,
 		comm: comm{},
 	}
 
@@ -114,93 +135,91 @@ func mapStatus(s Status) feeder.MachineStatus {
 // Control maps feeder.Control to feeder.DeviceControl
 func mapControl(c feeder.MachineControl) Control {
 	return Control{
-		closeFeeder: c.CloseFeeder,
+		CloseFeeder: c.CloseFeeder,
 	}
 }
 
-func mapSource(a VirtualFeeder) virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         a.pid,
-		Hz:          a.status.Hz,
-		Volt:        a.status.Volt,
-		KW:          a.status.KW * -1,
-		KVAR:        a.status.KVAR,
-		Gridforming: false,
-	}
+func (a *VirtualFeeder) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
+	busOut := make(chan asset.VirtualStatus)
+	a.bus.send = busOut
+	a.bus.recieve = busIn
+
+	a.StopProcess()
+	a.StartProcess()
+	return busOut
 }
 
-// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
-func (a *VirtualFeeder) LinkToBus(b bus.Bus) error {
-	vrACbus, ok := b.(virtualacbus.VirtualACBus)
-	if !ok {
-		return errors.New("Bus cannot be cast to VirtualACBus")
-	}
-	a.observers = vrACbus.GetBusObservers()
-	return nil
-}
-
-// StartVirtualDevice launches the virtual machine loop
-func (a *VirtualFeeder) StartVirtualDevice() {
-	in := make(chan Status, 1)
-	out := make(chan Control, 1)
+func (a *VirtualFeeder) StartProcess() {
+	in := make(chan Status)
+	out := make(chan Control)
 	a.comm.incoming = in
 	a.comm.outgoing = out
-	go virtualDeviceLoop(a.pid, a.comm, a.observers)
+
+	go Process(a.pid, a.comm, a.bus)
 }
 
-// StopVirtualDevice stops the virutal machine loop
-func (a VirtualFeeder) StopVirtualDevice() {
-	close(a.observers.AssetObserver)
-	close(a.comm.outgoing)
+// StopProcess stops the virtual machine loop by closing it's communication channels.
+func (a *VirtualFeeder) StopProcess() {
+	if a.comm.outgoing != nil {
+		close(a.comm.outgoing)
+	}
 }
 
-func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
+func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 	defer close(comm.incoming)
-	dev := &VirtualFeeder{pid: pid} // The virtual 'hardware' device
+	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
+
 loop:
 	for {
 		select {
-		case dev.control, ok = <-comm.outgoing:
+		case target.control, ok = <-comm.outgoing: // write to 'hardware'
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- dev.status:
-			dev.updateObservers(obs)
-			dev.status = sm.run(*dev)
+		case comm.incoming <- target.status:
+		case busStatus := <-bus.recieve:
+			target.status = sm.run(*target, busStatus)
+		case bus.send <- target:
+		default:
+			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("VirtualFeeder-Device: shutdown")
+	log.Println("VirtualFeeder-Device shutdown")
 }
 
 type stateMachine struct {
 	currentState state
 }
 
-func (s *stateMachine) run(dev VirtualFeeder) Status {
-	s.currentState = s.currentState.transition(dev)
-	return s.currentState.action(dev)
+func (s *stateMachine) run(target Target, bus asset.VirtualStatus) Status {
+	s.currentState = s.currentState.transition(target, bus)
+	return s.currentState.action(target, bus)
 }
 
 type state interface {
-	action(VirtualFeeder) Status
-	transition(VirtualFeeder) state
+	action(Target, asset.VirtualStatus) Status
+	transition(Target, asset.VirtualStatus) state
+}
+
+func energized(bus asset.VirtualStatus) bool {
+	return bus.Hz() > 1 && bus.Volt() > 1
 }
 
 type offState struct{}
 
-func (s offState) action(dev VirtualFeeder) Status {
+func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:     0,
 		KVAR:   0,
-		Hz:     0,
-		Volt:   0,
+		Hz:     bus.Hz(),
+		Volt:   bus.Volt(),
 		Online: false,
 	}
 }
-func (s offState) transition(dev VirtualFeeder) state {
-	if dev.control.closeFeeder == true {
+func (s offState) transition(target Target, bus asset.VirtualStatus) state {
+	if target.control.CloseFeeder == true {
 		log.Printf("VirtualFeeder-Device: state: %v\n",
 			reflect.TypeOf(onState{}).String())
 		return onState{}
@@ -210,12 +229,12 @@ func (s offState) transition(dev VirtualFeeder) state {
 
 type onState struct{}
 
-func (s onState) action(dev VirtualFeeder) Status {
+func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 	var kw float64
 	var kvar float64
 	if true {
-		kw = 456 //TODO: Link to a virtual load?
-		kvar = 123
+		kw = 0   //TODO: Link to a virtual load?
+		kvar = 0 //TODO: Link to a virtual load?
 	}
 	return Status{
 		KW:     kw,
@@ -226,8 +245,8 @@ func (s onState) action(dev VirtualFeeder) Status {
 	}
 }
 
-func (s onState) transition(dev VirtualFeeder) state {
-	if dev.control.closeFeeder == false {
+func (s onState) transition(target Target, bus asset.VirtualStatus) state {
+	if target.control.CloseFeeder == false {
 		log.Printf("VirtualFeeder-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}

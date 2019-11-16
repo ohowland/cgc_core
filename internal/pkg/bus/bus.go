@@ -6,10 +6,8 @@ import (
 
 // Bus is the interface for power system connectivity graph.
 type Bus interface {
-	Name() string
 	PID() uuid.UUID
-	Hz() float64
-	Volt() float64
+	Name() string
 }
 
 type BusGraph struct {

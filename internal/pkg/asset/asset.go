@@ -8,37 +8,21 @@ import (
 type Asset interface {
 	PID() uuid.UUID
 	UpdateStatus()
-	WriteControl()
+	Subscribe(uuid.UUID) <-chan Status
+	Unsubscribe(uuid.UUID)
 }
 
-// PowerReporter interface for access to asset real and reactive power
-type PowerReporter interface {
+type Status interface {
 	KW() float64
 	KVAR() float64
 }
 
-// MachineController interface for control of machine state
-type MachineController interface {
-	KW(float64)
-	KVAR(float64)
-	Run(bool)
+type Capacity interface {
+	RealPositiveCapacity() float64
+	RealNegativeCapacity() float64
 }
 
-// Gridformer interface for control of gridforming state
-type Gridformer interface {
-	Gridform(bool)
-}
-
-// CapacityProvider inferface for access to asset real and reactive capacities
-type CapacityProvider interface {
-	RealPositive() float64
-	RealNegative() float64
-	ReactiveSourcing() float64
-	ReactiveSinking() float64
-}
-
-// StateReader interface for access to boolean asset state
-type StateReader interface {
-	Dispatchable() bool // Capacity is offline, but can brought online.
-	Operative() bool    // Capacity is available to the system explicitly or implicitly.
+type Renewable interface {
+	RE_KW() float64
+	RE_KVAR() float64
 }

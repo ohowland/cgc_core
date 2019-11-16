@@ -9,18 +9,46 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/pv"
-	"github.com/ohowland/cgc/internal/pkg/bus"
-	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
 )
 
 // VirtualPV target
 type VirtualPV struct {
-	pid       uuid.UUID
-	status    Status
-	control   Control
-	comm      comm
-	observers virtualacbus.Observers
+	pid  uuid.UUID
+	comm comm
+	bus  virtualBus
+}
+
+type virtualBus struct {
+	send    chan<- asset.VirtualStatus
+	recieve <-chan asset.VirtualStatus
+}
+
+// Target is a virtual representation of the hardware
+type Target struct {
+	pid     uuid.UUID
+	status  Status
+	control Control
+}
+
+func (t Target) KW() float64 {
+	return t.status.KW
+}
+func (t Target) KVAR() float64 {
+	return t.status.KVAR
+
+}
+func (t Target) Hz() float64 {
+	return t.status.Hz
+}
+
+func (t Target) Volt() float64 {
+	return t.status.Volt
+}
+
+func (t Target) Gridforming() bool {
+	return false
 }
 
 // Status data structure for the VirtualPV
@@ -45,37 +73,36 @@ type comm struct {
 	outgoing chan Control
 }
 
+func (a VirtualPV) PID() uuid.UUID {
+	return a.pid
+}
+
 // ReadDeviceStatus requests a physical device read over the communication interface
-func (a *VirtualPV) ReadDeviceStatus(setAssetStatus func(int64, pv.MachineStatus)) {
-	timestamp := time.Now().UnixNano()
-	a.status = a.read()
-	setAssetStatus(timestamp, mapStatus(a.status)) // callback for to write archetype status
+func (a VirtualPV) ReadDeviceStatus() (pv.MachineStatus, error) {
+	status, err := a.read()
+	return mapStatus(status), err
 }
 
 // WriteDeviceControl prequests a physical device write over the communication interface
-func (a VirtualPV) WriteDeviceControl(c pv.MachineControl) {
-	a.control = mapControl(c)
-	a.write()
+func (a VirtualPV) WriteDeviceControl(machineControl pv.MachineControl) error {
+	control := mapControl(machineControl)
+	err := a.write(control)
+	return err
 }
 
-func (a VirtualPV) read() Status {
+func (a VirtualPV) read() (Status, error) {
 	fuzzing := rand.Intn(2000)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus, ok := <-a.comm.incoming
 	if !ok {
-		log.Println("Read Error: VirtualESS, virtual channel is not open")
-		return Status{}
+		return Status{}, errors.New("Read Error")
 	}
-	return readStatus
+	return readStatus, nil
 }
 
-func (a VirtualPV) write() {
-	a.comm.outgoing <- a.control
-}
-
-func (a *VirtualPV) updateObservers(obs virtualacbus.Observers) {
-	source := mapSource(*a)
-	obs.AssetObserver <- source
+func (a VirtualPV) write(control Control) error {
+	a.comm.outgoing <- control
+	return nil
 }
 
 // New returns an initalized VirtualPV Asset; this is part of the Asset interface.
@@ -88,17 +115,7 @@ func New(configPath string) (pv.Asset, error) {
 	pid, err := uuid.NewUUID()
 
 	device := VirtualPV{
-		pid: pid,
-		status: Status{
-			KW:     0,
-			KVAR:   0,
-			Hz:     0,
-			Volt:   0,
-			Online: false,
-		},
-		control: Control{
-			Run: false,
-		},
+		pid:  pid,
 		comm: comm{},
 	}
 
@@ -121,96 +138,94 @@ func mapStatus(s Status) pv.MachineStatus {
 func mapControl(c pv.MachineControl) Control {
 	// map GridControl params to deviceControl
 	return Control{
-		Run: c.Run,
+		Run:     c.Run,
+		KWLimit: c.KWLimit,
+		KVAR:    c.KVAR,
 	}
 }
 
-func mapSource(a VirtualPV) virtualacbus.Source {
-	return virtualacbus.Source{
-		PID:         a.pid,
-		Hz:          a.status.Hz,
-		Volt:        a.status.Volt,
-		KW:          a.status.KW,
-		KVAR:        a.status.KVAR,
-		Gridforming: false,
-	}
+func (a *VirtualPV) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
+	busOut := make(chan asset.VirtualStatus)
+	a.bus.send = busOut
+	a.bus.recieve = busIn
+
+	a.StopProcess()
+	a.StartProcess()
+	return busOut
 }
 
-// LinkToBus pulls the communication channels from the virtual bus and holds them in asset.observers
-func (a *VirtualPV) LinkToBus(b bus.Bus) error {
-	vrACbus, ok := b.(virtualacbus.VirtualACBus)
-	if !ok {
-		return errors.New("Bus cannot be cast to VirtualACBus")
-	}
-	a.observers = vrACbus.GetBusObservers()
-	return nil
-}
-
-// StartVirtualDevice launches the virtual machine loop.
-func (a *VirtualPV) StartVirtualDevice() {
-	in := make(chan Status, 1)
-	out := make(chan Control, 1)
+func (a *VirtualPV) StartProcess() {
+	in := make(chan Status)
+	out := make(chan Control)
 	a.comm.incoming = in
 	a.comm.outgoing = out
 
-	go virtualDeviceLoop(a.pid, a.comm, a.observers)
+	go Process(a.pid, a.comm, a.bus)
 }
 
-// StopVirtualDevice stops the virtual machine loop by closing it's communication channels.
-func (a VirtualPV) StopVirtualDevice() {
-	close(a.observers.AssetObserver)
-	close(a.comm.outgoing)
+// StopProcess stops the virtual machine loop by closing it's communication channels.
+func (a *VirtualPV) StopProcess() {
+	if a.comm.outgoing != nil {
+		close(a.comm.outgoing)
+	}
 }
 
-func virtualDeviceLoop(pid uuid.UUID, comm comm, obs virtualacbus.Observers) {
+func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 	defer close(comm.incoming)
-	dev := &VirtualPV{} // The virtual 'hardware' device
+	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
+
 loop:
 	for {
 		select {
-		case dev.control, ok = <-comm.outgoing: // write to 'hardware'
+		case target.control, ok = <-comm.outgoing: // write to 'hardware'
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- dev.status: // read from 'hardware'
-			dev.updateObservers(obs)
-			dev.status = sm.run(*dev)
+		case comm.incoming <- target.status:
+		case busStatus := <-bus.recieve:
+			target.status = sm.run(*target, busStatus)
+		case bus.send <- target:
+		default:
+			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("[VirtualPV-Device] shutdown")
-
+	log.Println("VirtualPV-Device shutdown")
 }
 
 type stateMachine struct {
 	currentState state
 }
 
-func (s *stateMachine) run(dev VirtualPV) Status {
-	s.currentState = s.currentState.transition(dev)
-	return s.currentState.action(dev)
+func (s *stateMachine) run(target Target, bus asset.VirtualStatus) Status {
+	s.currentState = s.currentState.transition(target, bus)
+	return s.currentState.action(target, bus)
 }
 
 type state interface {
-	action(VirtualPV) Status
-	transition(VirtualPV) state
+	action(Target, asset.VirtualStatus) Status
+	transition(Target, asset.VirtualStatus) state
+}
+
+func energized(bus asset.VirtualStatus) bool {
+	return bus.Hz() > 1 && bus.Volt() > 1
 }
 
 type offState struct{}
 
-func (s offState) action(dev VirtualPV) Status {
+func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:     0,
 		KVAR:   0,
-		Hz:     0,
-		Volt:   0,
+		Hz:     bus.Hz(),
+		Volt:   bus.Volt(),
 		Online: false,
 	}
 }
 
-func (s offState) transition(dev VirtualPV) state {
-	if dev.control.Run == true {
+func (s offState) transition(target Target, bus asset.VirtualStatus) state {
+	if target.control.Run == true && energized(bus) {
 		log.Printf("VirtualPV-Device: state: %v\n",
 			reflect.TypeOf(onState{}).String())
 		return onState{}
@@ -220,18 +235,18 @@ func (s offState) transition(dev VirtualPV) state {
 
 type onState struct{}
 
-func (s onState) action(dev VirtualPV) Status {
+func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:     0,
 		KVAR:   0,
-		Hz:     0,
-		Volt:   0,
-		Online: false,
+		Hz:     bus.Hz(),
+		Volt:   bus.Volt(),
+		Online: true,
 	}
 }
 
-func (s onState) transition(dev VirtualPV) state {
-	if dev.control.Run == false {
+func (s onState) transition(target Target, bus asset.VirtualStatus) state {
+	if target.control.Run == false || !energized(bus) {
 		log.Printf("VirtualPV-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}
