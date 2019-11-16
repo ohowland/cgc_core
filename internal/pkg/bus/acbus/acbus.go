@@ -161,9 +161,12 @@ func aggregateCapacity(agg map[uuid.UUID]asset.Status) AggregateCapacity {
 
 	var realPositiveCapacity float64
 	var realNegativeCapacity float64
-	for _, assetStatus := range agg {
-		realPositiveCapacity += assetStatus.RealPositiveCapacity()
-		realNegativeCapacity += assetStatus.RealNegativeCapacity()
+	for _, status := range agg {
+		capacity, ok := status.(asset.Capacity)
+		if ok {
+			realPositiveCapacity += capacity.RealPositiveCapacity()
+			realNegativeCapacity += capacity.RealNegativeCapacity()
+		}
 	}
 	return AggregateCapacity{
 		realPositiveCapacity,
@@ -173,8 +176,7 @@ func aggregateCapacity(agg map[uuid.UUID]asset.Status) AggregateCapacity {
 
 // UpdateRelayer requests a physical device read, then updates MachineStatus field.
 func (b *ACBus) UpdateRelayer() error {
-	relayStatus, err := b.relay.ReadRelayStatus()
-	log.Println("update relay:", relayStatus)
+	relayStatus, err := b.relay.ReadDeviceStatus()
 	if err != nil {
 		return err
 	}
@@ -196,24 +198,12 @@ func (v Msg) Status() asset.Status {
 }
 
 type Relayer interface {
-	ReadRelayStatus() (RelayStatus, error)
+	ReadDeviceStatus() (RelayStatus, error)
 }
 
-type RelayStatus struct {
-	hz   float64
-	volt float64
-}
-
-func NewRelayStatus(hz float64, volt float64) RelayStatus {
-	return RelayStatus{hz: hz, volt: volt}
-}
-
-func (s RelayStatus) Hz() float64 {
-	return s.hz
-}
-
-func (s RelayStatus) Volt() float64 {
-	return s.volt
+type RelayStatus interface {
+	Hz() float64
+	Volt() float64
 }
 
 type EmptyStatus struct{}

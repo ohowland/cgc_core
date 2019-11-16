@@ -193,11 +193,8 @@ func (d DummyRelay) Volt() float64 {
 	return d.volt
 }
 
-func (d DummyRelay) ReadRelayStatus() (RelayStatus, error) {
-	return RelayStatus{
-		d.Hz(),
-		d.Volt(),
-	}, nil
+func (d DummyRelay) ReadDeviceStatus() (RelayStatus, error) {
+	return d, nil
 }
 
 func newDummyRelay() Relayer {
@@ -216,13 +213,13 @@ var assertedDummyRelay = randDummyRelayStatus()
 func TestUpdateRelayer(t *testing.T) {
 	bus := newACBus()
 
-	relayStatus, err := bus.UpdateRelayer()
+	err := bus.UpdateRelayer()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	assertStatus := assertedDummyRelay()
 
-	assert.Assert(t, relayStatus.Hz() == assertStatus.Hz())
-	assert.Assert(t, relayStatus.Volt() == assertStatus.Volt())
+	assert.Assert(t, bus.status.relay.Hz() == assertStatus.Hz())
+	assert.Assert(t, bus.status.relay.Volt() == assertStatus.Volt())
 }

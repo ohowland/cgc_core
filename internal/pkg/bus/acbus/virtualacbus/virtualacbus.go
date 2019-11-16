@@ -43,12 +43,9 @@ func (b VirtualACBus) PID() uuid.UUID {
 	return b.pid
 }
 
-func (b VirtualACBus) ReadRelayStatus() (acbus.RelayStatus, error) {
+func (b VirtualACBus) ReadDeviceStatus() (acbus.RelayStatus, error) {
 	status := <-b.assetReciever
-	return acbus.NewRelayStatus(
-		status.Hz(),
-		status.Volt(),
-	), nil
+	return status, nil
 }
 
 func (b *VirtualACBus) AddMember(a asset.VirtualAsset) {

@@ -144,11 +144,11 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	bus1.AddMember(&grid1)
 	bus1.AddMember(&pv1)
 
-	relay1 := bus1.Relayer().(*virtualacbus.VirtualACBus)                // How to make ths interface explicit?
-	device1 := ess1.DeviceController().(*virtualess.VirtualESS)          // How to make this interface expicit?
-	device2 := feeder1.DeviceController().(*virtualfeeder.VirtualFeeder) // How to make this interface expicit?
-	device3 := grid1.DeviceController().(*virtualgrid.VirtualGrid)       // How to make this interface expicit?
-	device4 := pv1.DeviceController().(*virtualpv.VirtualPV)             // How to make this interface expicit?
+	relay1 := bus1.Relayer().(*virtualacbus.VirtualACBus)                // How to make this interface explicit?
+	device1 := ess1.DeviceController().(*virtualess.VirtualESS)          // How to make this interface explicit?
+	device2 := feeder1.DeviceController().(*virtualfeeder.VirtualFeeder) // How to make this interface explicit?
+	device3 := grid1.DeviceController().(*virtualgrid.VirtualGrid)       // How to make this interface explicit?
+	device4 := pv1.DeviceController().(*virtualpv.VirtualPV)             // How to make this interface explicit?
 
 	relay1.AddMember(device1)
 	relay1.AddMember(device2)

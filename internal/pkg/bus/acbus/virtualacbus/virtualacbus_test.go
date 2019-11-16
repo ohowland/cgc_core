@@ -215,7 +215,7 @@ func TestReadDeviceStatus(t *testing.T) {
 	asset1.send <- asset1.status
 
 	time.Sleep(100 * time.Millisecond)
-	relayStatus, _ := bus.ReadRelayStatus()
+	relayStatus, _ := bus.ReadDeviceStatus()
 
 	assertStatus := assertedStatus()
 	assert.Assert(t, relayStatus.Hz() == assertStatus.Hz())
