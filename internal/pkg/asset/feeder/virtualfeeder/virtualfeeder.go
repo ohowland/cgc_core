@@ -233,8 +233,8 @@ func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 	var kw float64
 	var kvar float64
 	if true {
-		kw = 456 //TODO: Link to a virtual load?
-		kvar = 123
+		kw = 0   //TODO: Link to a virtual load?
+		kvar = 0 //TODO: Link to a virtual load?
 	}
 	return Status{
 		KW:     kw,

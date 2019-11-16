@@ -219,7 +219,7 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:     0,
 		KVAR:   0,
 		Hz:     bus.Hz(),
-		Volt:   bus.Hz(),
+		Volt:   bus.Volt(),
 		Online: false,
 	}
 }
