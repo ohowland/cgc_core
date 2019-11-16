@@ -2,24 +2,27 @@ package grid
 
 import (
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
 // DeviceController is the hardware abstraction layer
 type DeviceController interface {
-	ReadDeviceStatus(func(int64, MachineStatus))
-	WriteDeviceControl(MachineControl)
+	ReadDeviceStatus() (MachineStatus, error)
+	WriteDeviceControl(MachineControl) error
 }
 
 // Asset is a datastructure for an Energy Storage System Asset
 type Asset struct {
-	pid     uuid.UUID
-	device  DeviceController
-	status  Status
-	control Control
-	config  Config
+	mux         *sync.Mutex
+	pid         uuid.UUID
+	device      DeviceController
+	broadcast   map[uuid.UUID]chan<- asset.Status
+	supervisory SupervisoryControl
+	config      Config
 }
 
 // PID is a getter for the asset PID
@@ -27,32 +30,61 @@ func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
-func (a *Asset) UpdateStatus() {
-	go a.device.ReadDeviceStatus(a.status.setStatus)
-}
-
-// WriteControl requests a physical device write of the data held in the GridAsset control field.
-func (a Asset) WriteControl() {
-	a.control.mux.Lock()
-	defer a.control.mux.Unlock()
-	control := a.control.machine
-	go a.device.WriteDeviceControl(control)
-}
-
 // DeviceController returns the hardware abstraction layer struct
 func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-// Status returns the archetypical status for the energy storage system asset.
-// This takes the form of the ess.MachineStatus struct
-func (a Asset) Status() Status {
-	return a.status
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Status {
+	ch := make(chan asset.Status, 1)
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.broadcast[pid] = ch
+	return ch
 }
 
-// Control returns a pointer to the machine control struct.
-func (a *Asset) Control() *Control {
-	return &a.control
+func (a *Asset) Unsubscribe(pid uuid.UUID) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	ch := a.broadcast[pid]
+	delete(a.broadcast, pid)
+	close(ch)
+}
+
+func (a Asset) UpdateStatus() {
+	machineStatus, err := a.device.ReadDeviceStatus()
+	if err != nil {
+		// comm fail handling path
+		return
+	}
+	status := transform(machineStatus)
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	for _, ch := range a.broadcast {
+		select {
+		case ch <- status:
+		default:
+		}
+	}
+}
+
+func transform(machineStatus MachineStatus) Status {
+	return Status{
+		CalculatedStatus{},
+		machineStatus,
+	}
+}
+
+// WriteControl requests a physical device write of the data held in the asset machine control field.
+func (a Asset) WriteControl(c interface{}) {
+	control, ok := c.(MachineControl)
+	if !ok {
+		panic(errors.New("bad cast to write control"))
+	}
+	err := a.device.WriteDeviceControl(control)
+	if err != nil {
+		// comm fail handling path
+	}
 }
 
 //Config returns the archetypical configuration for the energy storage system asset.
@@ -60,11 +92,16 @@ func (a Asset) Config() Config {
 	return a.config
 }
 
-type Status struct {
-	mux       *sync.Mutex
-	timestamp int64
-	machine   MachineStatus
+func (a Asset) Enable(b bool) {
+	a.supervisory.enable = b
 }
+
+type Status struct {
+	calc    CalculatedStatus
+	machine MachineStatus
+}
+
+type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical Grid Intertie status
 type MachineStatus struct {
@@ -72,9 +109,8 @@ type MachineStatus struct {
 	KVAR                 float64
 	Hz                   float64
 	Volts                float64
-	PositiveRealCapacity float64
-	NegativeRealCapacity float64
-	Synchronized         bool
+	RealPositiveCapacity float64
+	RealNegativeCapacity float64
 	Online               bool
 }
 
@@ -88,19 +124,14 @@ func (s Status) KVAR() float64 {
 	return s.machine.KVAR
 }
 
-func (s *Status) setStatus(timestamp int64, ms MachineStatus) {
-	if timestamp > s.timestamp { // mux before?
-		s.mux.Lock()
-		defer s.mux.Unlock()
-		s.machine = ms
-	}
+// RealPositiveCapacity returns the asset's operative real positive capacity
+func (s Status) RealPositiveCapacity() float64 {
+	return s.machine.RealPositiveCapacity
 }
 
-// Control is a data structure representing an architypical Grid Intertie control
-type Control struct {
-	mux         *sync.Mutex
-	machine     MachineControl
-	supervisory SupervisoryControl
+// RealNegativeCapacity returns the asset's operative real negative capacity
+func (s Status) RealNegativeCapacity() float64 {
+	return s.machine.RealNegativeCapacity
 }
 
 // MachineControl represents the control state of the machine
@@ -109,27 +140,11 @@ type MachineControl struct {
 }
 
 type SupervisoryControl struct {
-	Enable bool
-	Manual bool
+	mux    *sync.Mutex
+	enable bool
 }
 
-// KW sets the asset's real power setpoint
-func (c *Control) KW(kw float64) {}
-
-// KVAR sets the asset's reactive power setpoint
-func (c *Control) KVAR(kvar float64) {}
-
-// Run sets the asset's run request state
-func (c *Control) Run(run bool) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	c.machine.CloseIntertie = run
-}
-
-// Gridform sets the asset's gridform request state
-func (c *Control) Gridform(gridform bool) {}
-
-// Config differentiates between two types of configurations, static and dynamic
+// Config wraps MachineConfig with mutex a mutex and hides the internal state.
 type Config struct {
 	mux     *sync.Mutex
 	machine MachineConfig
@@ -147,6 +162,11 @@ func (c Config) Name() string {
 	return c.machine.Name
 }
 
+// Bus is a getter for the asset's connected Bus
+func (c Config) Bus() string {
+	return c.machine.Bus
+}
+
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	machineConfig := MachineConfig{}
@@ -160,13 +180,11 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	status := Status{&sync.Mutex{}, 0, MachineStatus{}}
-	control := Control{
-		&sync.Mutex{},
-		MachineControl{false},
-		SupervisoryControl{false, false},
-	}
+	broadcast := make(map[uuid.UUID]chan<- asset.Status)
+
+	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
-	return Asset{PID, device, status, control, config}, err
+
+	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
 
 }

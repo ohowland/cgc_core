@@ -92,6 +92,7 @@ func (a Asset) WriteControl(c interface{}) {
 func (a Asset) Config() Config {
 	return a.config
 }
+
 func (a Asset) Enable(b bool) {
 	a.supervisory.enable = b
 }

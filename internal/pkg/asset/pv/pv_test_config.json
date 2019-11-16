@@ -1,10 +1,6 @@
 {
-  "StaticConfig": {
-    "Name": "Grid Intertie",
-    "KwRated": 20,
-    "KvarRated": 10
-  },
-  "DynamicConfig": {
-    "DemandLimit": 20
-  }
+  "Name": "TEST_Virtual PV",
+  "Bus": "Virtual Bus",
+  "RatedKW": 20,
+  "RatedKVAR": 19
 }
