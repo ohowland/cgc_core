@@ -8,11 +8,11 @@ import (
 type Asset interface {
 	PID() uuid.UUID
 	UpdateStatus()
-	Subscribe(uuid.UUID) <-chan Status
+	Subscribe(uuid.UUID) <-chan interface{}
 	Unsubscribe(uuid.UUID)
 }
 
-type Status interface {
+type Power interface {
 	KW() float64
 	KVAR() float64
 }
@@ -24,5 +24,4 @@ type Capacity interface {
 
 type Renewable interface {
 	RE_KW() float64
-	RE_KVAR() float64
 }
