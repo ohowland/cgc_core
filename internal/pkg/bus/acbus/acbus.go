@@ -19,23 +19,10 @@ type ACBus struct {
 	pid         uuid.UUID
 	relay       Relayer
 	inbox       chan Msg
-	members     map[uuid.UUID]bool
+	members     map[uuid.UUID]chan<- interface{}
+	dispatch    chan interface{}
 	config      Config
 	stopProcess chan bool
-}
-
-type Status struct {
-	capacity   Capacity
-	renewables Renewables
-}
-
-type Capacity struct {
-	RealPositiveCapacity float64
-	RealNegativeCapacity float64
-}
-
-type Renewables struct {
-	RE_KW float64
 }
 
 type Config struct {
@@ -44,7 +31,7 @@ type Config struct {
 	RatedHz   float64 `json:"RatedHz"`
 }
 
-func New(jsonConfig []byte, relay Relayer) (ACBus, error) {
+func New(jsonConfig []byte, relay Relayer, dispatch chan interface{}) (ACBus, error) {
 
 	config := Config{}
 	err := json.Unmarshal(jsonConfig, &config)
@@ -60,7 +47,7 @@ func New(jsonConfig []byte, relay Relayer) (ACBus, error) {
 	inbox := make(chan Msg)
 	//dispatch := make(chan Status)
 	stopProcess := make(chan bool)
-	members := make(map[uuid.UUID]bool)
+	members := make(map[uuid.UUID]chan<- interface{})
 
 	return ACBus{
 		&sync.Mutex{},
@@ -68,6 +55,7 @@ func New(jsonConfig []byte, relay Relayer) (ACBus, error) {
 		relay,
 		inbox,
 		members,
+		dispatch,
 		config,
 		stopProcess}, nil
 }
@@ -87,8 +75,8 @@ func (b ACBus) Relayer() Relayer {
 func (b *ACBus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	assetSender := a.Subscribe(b.pid)
-	b.members[a.PID()] = true
+	assetSender, assetReceiver := a.Subscribe(b.pid)
+	b.members[a.PID()] = assetReceiver
 
 	// aggregate messages from assets into the busReciever channel, which is read in the Process loop.
 	go func(pid uuid.UUID, assetSender <-chan interface{}, inbox chan<- Msg) {
@@ -102,7 +90,7 @@ func (b *ACBus) AddMember(a asset.Asset) {
 	}
 }
 
-func (b *ACBus) RemoveMember(pid uuid.UUID) {
+func (b *ACBus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	delete(b.members, pid)
@@ -128,18 +116,15 @@ func (b *ACBus) StopProcess() {
 func (b *ACBus) Process() {
 	defer close(b.inbox)
 	log.Println("ACBus Process: Loop Started")
-	memberStatus := make(map[uuid.UUID]Status)
 loop:
 	for {
 		select {
 		case msg, ok := <-b.inbox:
 			if !ok {
-				b.RemoveMember(msg.PID())
-				delete(memberStatus, msg.PID())
+				b.removeMember(msg.PID())
 			} else {
-				memberStatus = b.updateMemberStatus(msg, memberStatus)
+				b.forwardMsg(b.dispatch, msg)
 			}
-		//case b.dispatch <- b.updateBusStatus(memberStatus):
 		case <-b.stopProcess:
 			break loop
 		}
@@ -147,46 +132,14 @@ loop:
 	log.Println("ACBus Process: Loop Stopped")
 }
 
-func (b ACBus) hasMember(pid uuid.UUID) bool {
-	return b.members[pid] == true
-}
-
-func (b ACBus) updateMemberStatus(msg Msg, memberStatus map[uuid.UUID]Status) map[uuid.UUID]Status {
+func (b ACBus) forwardMsg(reciever chan<- interface{}, msg Msg) {
 	if b.hasMember(msg.PID()) {
-		status := memberStatus[msg.PID()]
-		switch p := msg.payload.(type) {
-		case asset.Capacity:
-			status.capacity = Capacity{
-				RealPositiveCapacity: p.RealNegativeCapacity(),
-				RealNegativeCapacity: p.RealNegativeCapacity(),
-			}
-		case asset.Renewable:
-			status.renewables = Renewables{
-				RE_KW: p.RE_KW(),
-			}
-		}
-		memberStatus[msg.PID()] = status
-	}
-	return memberStatus
-}
-
-func (b ACBus) updateBusStatus(memberStatus map[uuid.UUID]Status) Status {
-	return Status{
-		capacity: aggregateCapacity(memberStatus),
+		reciever <- msg
 	}
 }
 
-func aggregateCapacity(memberStatus map[uuid.UUID]Status) Capacity {
-	var realPositiveCapacity float64
-	var realNegativeCapacity float64
-	for _, status := range memberStatus {
-		realPositiveCapacity += status.capacity.RealPositiveCapacity
-		realNegativeCapacity += status.capacity.RealNegativeCapacity
-	}
-	return Capacity{
-		realPositiveCapacity,
-		realNegativeCapacity,
-	}
+func (b ACBus) hasMember(pid uuid.UUID) bool {
+	return b.members[pid] != nil
 }
 
 // UpdateRelayer requests a physical device read, then updates MachineStatus field.

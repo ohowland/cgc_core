@@ -8,7 +8,7 @@ import (
 type Asset interface {
 	PID() uuid.UUID
 	UpdateStatus()
-	Subscribe(uuid.UUID) <-chan interface{}
+	Subscribe(uuid.UUID) (<-chan interface{}, chan<- interface{})
 	Unsubscribe(uuid.UUID)
 }
 

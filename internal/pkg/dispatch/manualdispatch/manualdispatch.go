@@ -1,1 +1,4 @@
-package dispatch
+package manualdispatch
+
+type Dispatch struct {
+}
