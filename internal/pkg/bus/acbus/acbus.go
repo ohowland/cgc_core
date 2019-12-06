@@ -9,29 +9,32 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
 type ACBus struct {
 	mux         *sync.Mutex
 	pid         uuid.UUID
 	relay       Relayer
-	inbox       chan Msg
+	inbox       chan asset.Msg
 	members     map[uuid.UUID]chan<- interface{}
-	dispatch    chan interface{}
+	dispatch    dispatch.Dispatcher
 	config      Config
 	stopProcess chan bool
 }
 
 type Config struct {
-	Name      string  `json:"Name"`
-	RatedVolt float64 `json:"RatedVolt"`
-	RatedHz   float64 `json:"RatedHz"`
+	Name      string        `json:"Name"`
+	RatedVolt float64       `json:"RatedVolt"`
+	RatedHz   float64       `json:"RatedHz"`
+	Pollrate  time.Duration `json:"Pollrate`
 }
 
-func New(jsonConfig []byte, relay Relayer, dispatch chan interface{}) (ACBus, error) {
+func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus, error) {
 
 	config := Config{}
 	err := json.Unmarshal(jsonConfig, &config)
@@ -44,8 +47,7 @@ func New(jsonConfig []byte, relay Relayer, dispatch chan interface{}) (ACBus, er
 		return ACBus{}, err
 	}
 
-	inbox := make(chan Msg)
-	//dispatch := make(chan Status)
+	inbox := make(chan asset.Msg)
 	stopProcess := make(chan bool)
 	members := make(map[uuid.UUID]chan<- interface{})
 
@@ -79,9 +81,9 @@ func (b *ACBus) AddMember(a asset.Asset) {
 	b.members[a.PID()] = assetReceiver
 
 	// aggregate messages from assets into the busReciever channel, which is read in the Process loop.
-	go func(pid uuid.UUID, assetSender <-chan interface{}, inbox chan<- Msg) {
+	go func(pid uuid.UUID, assetSender <-chan interface{}, inbox chan<- asset.Msg) {
 		for status := range assetSender {
-			inbox <- Msg{pid, status}
+			inbox <- asset.NewMsg(pid, status)
 		}
 	}(a.PID(), assetSender, b.inbox)
 
@@ -114,28 +116,34 @@ func (b *ACBus) StopProcess() {
 
 // Process aggregates information from members, while members exist.
 func (b *ACBus) Process() {
-	defer close(b.inbox)
 	log.Println("ACBus Process: Loop Started")
+	defer close(b.inbox)
+	poll := time.NewTicker(b.config.Pollrate * time.Millisecond)
+	defer poll.Stop()
 loop:
 	for {
 		select {
 		case msg, ok := <-b.inbox:
 			if !ok {
 				b.removeMember(msg.PID())
-			} else {
-				b.forwardMsg(b.dispatch, msg)
+				b.dispatch.DropStatus(msg.PID())
+			}
+			if b.hasMember(msg.PID()) {
+				b.dispatch.UpdateStatus(msg.PID(), msg.Payload())
+			}
+		case <-poll.C:
+			assetControls := b.dispatch.GetControl()
+			for pid, control := range assetControls {
+				select {
+				case b.members[pid] <- control:
+				default:
+				}
 			}
 		case <-b.stopProcess:
 			break loop
 		}
 	}
 	log.Println("ACBus Process: Loop Stopped")
-}
-
-func (b ACBus) forwardMsg(reciever chan<- interface{}, msg Msg) {
-	if b.hasMember(msg.PID()) {
-		reciever <- msg
-	}
 }
 
 func (b ACBus) hasMember(pid uuid.UUID) bool {
@@ -150,30 +158,3 @@ func (b ACBus) UpdateRelayer() (RelayStatus, error) {
 	}
 	return relayStatus, nil
 }
-
-type Msg struct {
-	sender  uuid.UUID
-	payload interface{}
-}
-
-func (v Msg) PID() uuid.UUID {
-	return v.sender
-}
-
-func (v Msg) Payload() interface{} {
-	return v.payload
-}
-
-type Relayer interface {
-	ReadDeviceStatus() (RelayStatus, error)
-}
-
-type RelayStatus interface {
-	Hz() float64
-	Volt() float64
-}
-
-type EmptyRelayStatus struct{}
-
-func (s EmptyRelayStatus) Hz() float64   { return 0 }
-func (s EmptyRelayStatus) Volt() float64 { return 0 }

@@ -25,3 +25,20 @@ type Capacity interface {
 type Renewable interface {
 	RE_KW() float64
 }
+
+type Msg struct {
+	sender  uuid.UUID
+	payload interface{}
+}
+
+func NewMsg(sender uuid.UUID, payload interface{}) Msg {
+	return Msg{sender, payload}
+}
+
+func (v Msg) PID() uuid.UUID {
+	return v.sender
+}
+
+func (v Msg) Payload() interface{} {
+	return v.payload
+}

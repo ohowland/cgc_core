@@ -3,7 +3,6 @@ package dispatch
 import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 )
 
 type CalculatedStatus struct{}
@@ -22,7 +21,7 @@ type Renewables struct {
 	RE_KW float64
 }
 
-func (b CalculatedStatus) updateMemberStatus(msg acbus.Msg, memberStatus map[uuid.UUID]Status) map[uuid.UUID]Status {
+func (b CalculatedStatus) updateMemberStatus(msg asset.Msg, memberStatus map[uuid.UUID]Status) map[uuid.UUID]Status {
 	status := memberStatus[msg.PID()]
 	switch p := msg.Payload().(type) {
 	case asset.Capacity:
