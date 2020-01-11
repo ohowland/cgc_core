@@ -9,7 +9,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
-	"github.com/ohowland/cgc/internal/pkg/bus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
 )
 
 func buildBuses() (map[uuid.UUID]bus.Bus, error) {

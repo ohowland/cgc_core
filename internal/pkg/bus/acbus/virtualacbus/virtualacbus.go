@@ -36,7 +36,7 @@ func New(configPath string) (acbus.ACBus, error) {
 		stopProcess:   make(chan bool),
 	}
 
-	return acbus.New(jsonConfig, &virtualsystem)
+	return acbus.New(jsonConfig, &virtualsystem, nil)
 }
 
 func (b VirtualACBus) PID() uuid.UUID {

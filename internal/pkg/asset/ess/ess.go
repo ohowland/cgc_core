@@ -20,7 +20,7 @@ type Asset struct {
 	mux         *sync.Mutex
 	pid         uuid.UUID
 	device      DeviceController
-	broadcast   map[uuid.UUID]chan<- asset.Status
+	broadcast   map[uuid.UUID]chan<- asset.Msg
 	supervisory SupervisoryControl
 	config      Config
 }
@@ -35,8 +35,8 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Status {
-	ch := make(chan asset.Status, 1)
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
+	ch := make(chan asset.Msg, 1)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
@@ -63,7 +63,7 @@ func (a Asset) UpdateStatus() {
 	defer a.mux.Unlock()
 	for _, ch := range a.broadcast {
 		select {
-		case ch <- status:
+		case ch <- asset.NewMsg(a.PID(), status):
 		default:
 		}
 	}
@@ -190,7 +190,7 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Status)
+	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}

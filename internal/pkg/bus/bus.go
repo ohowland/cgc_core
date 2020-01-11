@@ -1,9 +1,5 @@
 package bus
 
-import (
-	"github.com/google/uuid"
-)
-
 // Bus is the interface for power system connectivity graph.
 type Bus interface{}
 
@@ -12,6 +8,7 @@ type Graph struct {
 	adjacentcyList map[Bus][]Bus
 }
 
+/*
 // NewBusGraph builds a graph datastructure of the buses
 func NewBusGraph(buses map[uuid.UUID]Bus) BusGraph {
 	var busList []Bus
@@ -27,7 +24,7 @@ func NewBusGraph(buses map[uuid.UUID]Bus) BusGraph {
 	}
 }
 
-/*
+
 type BusGroup interface {
 	PID() uuid.UUID
 	BusGraph() BusGraph

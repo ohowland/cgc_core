@@ -22,10 +22,6 @@ type Capacity interface {
 	RealNegativeCapacity() float64
 }
 
-type Renewable interface {
-	RE_KW() float64
-}
-
 type Msg struct {
 	sender  uuid.UUID
 	payload interface{}

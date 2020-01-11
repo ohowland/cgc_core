@@ -5,11 +5,13 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset"
 )
 
-type CalculatedStatus struct{}
+type CalculatedStatus struct {
+	memberStatus map[uuid.UUID]Status
+}
 
 type Status struct {
-	capacity   Capacity
-	renewables Renewables
+	power    Power
+	capacity Capacity
 }
 
 type Capacity struct {
@@ -17,29 +19,30 @@ type Capacity struct {
 	RealNegativeCapacity float64
 }
 
-type Renewables struct {
-	RE_KW float64
+type Power struct {
+	KW   float64
+	KVAR float64
 }
 
-func (b CalculatedStatus) updateMemberStatus(msg asset.Msg, memberStatus map[uuid.UUID]Status) map[uuid.UUID]Status {
-	status := memberStatus[msg.PID()]
+func (b *CalculatedStatus) AggregateMemberStatus(msg asset.Msg) {
+	status := b.memberStatus[msg.PID()]
 	switch p := msg.Payload().(type) {
 	case asset.Capacity:
 		status.capacity = Capacity{
 			RealPositiveCapacity: p.RealNegativeCapacity(),
 			RealNegativeCapacity: p.RealNegativeCapacity(),
 		}
-	case asset.Renewable:
-		status.renewables = Renewables{
-			RE_KW: p.RE_KW(),
+	case asset.Power:
+		status.power = Power{
+			KW:   p.KW(),
+			KVAR: p.KVAR(),
 		}
+	default:
 	}
-	memberStatus[msg.PID()] = status
-
-	return memberStatus
+	b.memberStatus[msg.PID()] = status
 }
 
-func (b CalculatedStatus) updateBusStatus(memberStatus map[uuid.UUID]Status) Status {
+func (b CalculatedStatus) updateBusStatus(msg asset.Msg, memberStatus map[uuid.UUID]Status) Status {
 	return Status{
 		capacity: aggregateCapacity(memberStatus),
 	}

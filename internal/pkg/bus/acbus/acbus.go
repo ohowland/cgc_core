@@ -31,7 +31,7 @@ type Config struct {
 	Name      string        `json:"Name"`
 	RatedVolt float64       `json:"RatedVolt"`
 	RatedHz   float64       `json:"RatedHz"`
-	Pollrate  time.Duration `json:"Pollrate`
+	Pollrate  time.Duration `json:"Pollrate"`
 }
 
 func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus, error) {
@@ -129,7 +129,7 @@ loop:
 				b.dispatch.DropStatus(msg.PID())
 			}
 			if b.hasMember(msg.PID()) {
-				b.dispatch.UpdateStatus(msg.PID(), msg.Payload())
+				b.dispatch.UpdateStatus(msg)
 			}
 		case <-poll.C:
 			assetControls := b.dispatch.GetControl()
