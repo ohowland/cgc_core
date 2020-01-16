@@ -55,11 +55,15 @@ func newESS() (Asset, error) {
 	}
 
 	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
+
+	var control <-chan asset.Msg
+	controlOwner := PID
+
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
 }
 
 func TestReadConfig(t *testing.T) {
@@ -99,18 +103,24 @@ func TestUpdateStatus(t *testing.T) {
 	ch := ess.Subscribe(pid)
 	sub := subscriber{pid, ch}
 
-	ess.UpdateStatus()
-
-	assertedStatus := Status{
-		CalculatedStatus{},
-		assertedStatus(),
+	for pid := range ess.broadcast {
+		log.Println((pid))
 	}
 
-	msg, ok := <-sub.ch
-	status := msg.Payload().(Status)
+	go func() {
+		msg, ok := <-sub.ch
+		status := msg.Payload().(Status)
 
-	assert.Assert(t, ok == true)
-	assert.Assert(t, status == assertedStatus)
+		assertedStatus := Status{
+			CalculatedStatus{},
+			assertedStatus(),
+		}
+
+		assert.Assert(t, ok == true)
+		assert.Assert(t, status == assertedStatus)
+	}()
+
+	ess.UpdateStatus()
 }
 
 func TestBroadcast(t *testing.T) {
@@ -125,10 +135,7 @@ func TestBroadcast(t *testing.T) {
 		pid, _ := uuid.NewUUID()
 		ch := ess.Subscribe(pid)
 		subs[i] = subscriber{pid, ch}
-
 	}
-
-	go ess.UpdateStatus()
 
 	assertedStatus := Status{
 		CalculatedStatus{},
@@ -136,11 +143,15 @@ func TestBroadcast(t *testing.T) {
 	}
 
 	for _, sub := range subs {
-		msg, ok := <-sub.ch
-		status := msg.Payload().(Status)
-		assert.Assert(t, ok == true)
-		assert.Assert(t, status == assertedStatus)
+		go func() {
+			msg, ok := <-sub.ch
+			status := msg.Payload().(Status)
+			assert.Assert(t, ok == true)
+			assert.Assert(t, status == assertedStatus)
+		}()
 	}
+
+	ess.UpdateStatus()
 }
 
 func TestTransform(t *testing.T) {

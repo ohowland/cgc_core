@@ -3,6 +3,7 @@ package ess
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -37,14 +38,17 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
+// Subscribe returns a read only channel for the asset's status.
 func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
 	ch := make(chan asset.Msg)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
+	log.Printf("ADDED: %v\n", pid)
 	return ch
 }
 
+// RequestControl connects the asset control to the read only channel parameter.
 func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
@@ -53,12 +57,15 @@ func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
 	return true
 }
 
+// Unsubscribe closes the broadcast channel associated with the pid parameter.
 func (a *Asset) Unsubscribe(pid uuid.UUID) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	ch := a.broadcast[pid]
-	delete(a.broadcast, pid)
-	close(ch)
+	if ch, ok := a.broadcast[pid]; ok {
+		delete(a.broadcast, pid)
+		close(ch)
+	}
+
 }
 
 // UpdateStatus requests a physical device read, then updates MachineStatus field.
@@ -74,7 +81,9 @@ func (a Asset) UpdateStatus() {
 	for _, ch := range a.broadcast {
 		select {
 		case ch <- asset.NewMsg(a.PID(), status):
+			log.Printf("BROADCAST: pid: %v, status: %v\n", a.PID(), status)
 		default:
+			log.Println("default fail!")
 		}
 	}
 }
@@ -103,7 +112,8 @@ func (a Asset) Config() Config {
 	return a.config
 }
 
-func (a Asset) Enable(b bool) {
+// Enable is an settor for the asset enable state
+func (a *Asset) Enable(b bool) {
 	a.supervisory.enable = b
 }
 
@@ -113,6 +123,8 @@ type Status struct {
 	machine MachineStatus
 }
 
+// CalculatedStatus is a data structure representing asset state information
+// that is calculated from data read into the archetype ess.
 type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical ESS status
@@ -202,8 +214,11 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
 
+	var control <-chan asset.Msg
+	controlOwner := PID
+
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
 }
