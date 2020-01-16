@@ -1,6 +1,6 @@
 /*
 acbus.go Representation of a single AC bus. Data structures that implement the Asset interface
-may join as members. Members report asset.AssetStatus, which is aggregated by the bus.
+may join as members.
 */
 
 package acbus
@@ -16,6 +16,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
+// ACBus represents a single electrical AC power system bus.
 type ACBus struct {
 	mux         *sync.Mutex
 	pid         uuid.UUID
@@ -27,6 +28,7 @@ type ACBus struct {
 	stopProcess chan bool
 }
 
+// Config represents the static properties of an AC Bus
 type Config struct {
 	Name      string        `json:"Name"`
 	RatedVolt float64       `json:"RatedVolt"`
@@ -34,6 +36,7 @@ type Config struct {
 	Pollrate  time.Duration `json:"Pollrate"`
 }
 
+// New configures and returns an ACbus data structure.
 func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus, error) {
 
 	config := Config{}
@@ -62,18 +65,25 @@ func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus,
 		stopProcess}, nil
 }
 
+// Name is an accessor for the ACBus's configured name.
+// Use this only when displaying information to customer.
+// PID is used internally.
 func (b ACBus) Name() string {
 	return b.config.Name
 }
 
+// PID is an accessor for the ACBus's process id.
 func (b ACBus) PID() uuid.UUID {
 	return b.pid
 }
 
+// Relayer is an accessor for the assigned bus relay.
 func (b ACBus) Relayer() Relayer {
 	return b.relay
 }
 
+// AddMember links an asset to the bus.
+// The bus subscribes to member status updates, and requests control of the asset.
 func (b *ACBus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -96,6 +106,7 @@ func (b *ACBus) AddMember(a asset.Asset) {
 	}
 }
 
+// removeMember revokes membership of an asset to the bus.
 func (b *ACBus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -106,6 +117,7 @@ func (b *ACBus) removeMember(pid uuid.UUID) {
 
 }
 
+// StopProcess terminates the bus. This method is used during a controlled shutdown.
 func (b *ACBus) StopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -154,6 +166,7 @@ loop:
 	log.Println("ACBus Process: Loop Stopped")
 }
 
+// hasMember verifies the membership of an asset.
 func (b ACBus) hasMember(pid uuid.UUID) bool {
 	return b.members[pid] != nil
 }

@@ -3,6 +3,7 @@ package acbus
 import (
 	"io/ioutil"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,7 +22,15 @@ func randDummyStatus() func() DummyStatus {
 	}
 }
 
+func randDummyControl() func() DummyControl {
+	control := DummyControl{rand.Float64(), rand.Float64()}
+	return func() DummyControl {
+		return control
+	}
+}
+
 var assertedStatus = randDummyStatus()
+var assertedControl = randDummyControl()
 
 type DummyAsset struct {
 	pid          uuid.UUID
@@ -51,6 +60,19 @@ func (d DummyAsset) PID() uuid.UUID {
 func (d DummyAsset) UpdateStatus() {
 	status := asset.NewMsg(d.pid, assertedStatus())
 	d.broadcast <- status
+}
+
+type DummyControl struct {
+	kW   float64
+	kVAR float64
+}
+
+func (c DummyControl) KW() float64 {
+	return c.kW
+}
+
+func (c DummyControl) KVAR() float64 {
+	return c.kVAR
 }
 
 type DummyStatus struct {
@@ -114,16 +136,36 @@ func randDummyRelayStatus() func() DummyRelay {
 
 var assertedDummyRelay = randDummyRelayStatus()
 
-type DummyDispatch struct{}
+type DummyDispatch struct {
+	mux          *sync.Mutex
+	PID          uuid.UUID
+	assetStatus  map[uuid.UUID]asset.Msg
+	assetControl map[uuid.UUID]asset.Msg
+}
 
-func (d DummyDispatch) UpdateStatus(asset.Msg) {}
-func (d DummyDispatch) DropAsset(uuid.UUID)    {}
+func (d DummyDispatch) UpdateStatus(msg asset.Msg) {
+	d.mux.Lock()
+	defer d.mux.Unlock()
+	d.assetStatus[msg.PID()] = msg.Payload().(asset.Msg)
+}
+
+func (d DummyDispatch) DropAsset(uuid.UUID) {}
+
 func (d DummyDispatch) GetControl() map[uuid.UUID]asset.Msg {
-	return make(map[uuid.UUID]asset.Msg)
+	resp := asset.NewMsg(d.PID, assertedControl())
+	d.mux.Lock()
+	defer d.mux.Unlock()
+	for _, Msg := range d.assetStatus {
+		d.assetControl[Msg.PID()] = resp
+	}
+	return d.assetControl
 }
 
 func newDummyDispatch() dispatch.Dispatcher {
-	return DummyDispatch{}
+	status := make(map[uuid.UUID]asset.Msg)
+	control := make(map[uuid.UUID]asset.Msg)
+	pid, _ := uuid.NewUUID()
+	return &DummyDispatch{&sync.Mutex{}, pid, status, control}
 }
 
 func newACBus() ACBus {
@@ -196,58 +238,69 @@ func TestRemoveMember(t *testing.T) {
 	}
 
 	bus.StopProcess()
-
 }
 
-func TestProcess(t *testing.T) {
-	bus := newACBus()
-
-	asset1 := newDummyAsset()
-	bus.AddMember(&asset1)
-
-	asset1.UpdateStatus()
-
-	//assertStatus := assertedStatus()
-	time.Sleep(100 * time.Millisecond)
-	//assert.Assert(t, bus.status.aggregateCapacity.RealPositiveCapacity == assertStatus.realPositiveCapacity)
-	//assert.Assert(t, bus.status.aggregateCapacity.RealNegativeCapacity == assertStatus.realNegativeCapacity)
-
-	bus.StopProcess()
-}
-
-/*
-func TestAggregateCapacity(t *testing.T) {
+func TestUpdateDispatcherUpdate(t *testing.T) {
 	bus := newACBus()
 
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
-	bus.AddMember(asset1)
-	bus.AddMember(asset2)
+	bus.AddMember(&asset1)
+	bus.AddMember(&asset2)
 
+	// assets status is pushed to the bus process, which pushes to dispatch
+	// asset.UpdateStatus() initiates the cycle.
 	asset1.UpdateStatus()
 	asset2.UpdateStatus()
 	assertStatus := assertedStatus()
 
 	time.Sleep(100 * time.Millisecond)
-	assert.Assert(t, bus.status.aggregateCapacity.RealPositiveCapacity == 2*assertStatus.realPositiveCapacity)
-	assert.Assert(t, bus.status.aggregateCapacity.RealNegativeCapacity == 2*assertStatus.realNegativeCapacity)
+
+	// check the internals of the mock object DummyDispatch.
+	// confirm asset status made it to dispatch.
+	dispatch := bus.dispatch.(*DummyDispatch)
+	asset1Msg := dispatch.assetStatus[asset1.PID()]
+	assert.Assert(t, asset1Msg.Payload().(DummyStatus) == assertStatus)
+	assert.Assert(t, asset1Msg.PID() == asset1.PID())
+
+	asset2Msg := dispatch.assetStatus[asset2.PID()]
+	assert.Assert(t, asset2Msg.Payload().(DummyStatus) == assertStatus)
+	assert.Assert(t, asset2Msg.PID() == asset2.PID())
 
 	bus.StopProcess()
 }
-*/
 
-/*
+func TestUpdateDispatcherControl(t *testing.T) {
+	bus := newACBus()
+
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
+	bus.AddMember(&asset1)
+	bus.AddMember(&asset2)
+
+	asset1.UpdateStatus()
+	asset2.UpdateStatus()
+	assertControl := assertedControl()
+
+	time.Sleep(100 * time.Millisecond)
+
+	assetControl := bus.dispatch.GetControl()
+	assert.Assert(t, assetControl[asset1.PID()].Payload().(DummyControl) == assertControl)
+	assert.Assert(t, assetControl[asset2.PID()].Payload().(DummyControl) == assertControl)
+
+	bus.StopProcess()
+}
+
 func TestUpdateRelayer(t *testing.T) {
 	bus := newACBus()
 
-	err := bus.UpdateRelayer()
+	relay, err := bus.UpdateRelayer()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	assertStatus := assertedDummyRelay()
 
-	assert.Assert(t, bus.status.relay.Hz() == assertStatus.Hz())
-	assert.Assert(t, bus.status.relay.Volt() == assertStatus.Volt())
+	assert.Assert(t, relay.Hz() == assertStatus.Hz())
+	assert.Assert(t, relay.Volt() == assertStatus.Volt())
 }
-*/
