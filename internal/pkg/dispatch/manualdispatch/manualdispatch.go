@@ -20,7 +20,7 @@ func (c *Core) UpdateStatus(msg asset.Msg) {
 	c.calcStatus.AggregateMemberStatus(msg)
 }
 
-func (c *Core) DropStatus(uuid.UUID) {
+func (c *Core) DropAsset(uuid.UUID) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 

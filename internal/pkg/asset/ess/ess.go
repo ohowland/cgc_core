@@ -17,12 +17,14 @@ type DeviceController interface {
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
-	mux         *sync.Mutex
-	pid         uuid.UUID
-	device      DeviceController
-	broadcast   map[uuid.UUID]chan<- asset.Msg
-	supervisory SupervisoryControl
-	config      Config
+	mux          *sync.Mutex
+	pid          uuid.UUID
+	device       DeviceController
+	broadcast    map[uuid.UUID]chan<- asset.Msg
+	control      <-chan asset.Msg
+	controlOwner uuid.UUID
+	supervisory  SupervisoryControl
+	config       Config
 }
 
 // PID is a getter for the asset PID
@@ -36,11 +38,19 @@ func (a Asset) DeviceController() DeviceController {
 }
 
 func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
-	ch := make(chan asset.Msg, 1)
+	ch := make(chan asset.Msg)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
 	return ch
+}
+
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control = ch
+	a.controlOwner = pid
+	return true
 }
 
 func (a *Asset) Unsubscribe(pid uuid.UUID) {

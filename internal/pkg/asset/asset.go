@@ -8,7 +8,8 @@ import (
 type Asset interface {
 	PID() uuid.UUID
 	UpdateStatus()
-	Subscribe(uuid.UUID) (<-chan interface{}, chan<- interface{})
+	Subscribe(uuid.UUID) <-chan Msg
+	RequestControl(uuid.UUID, <-chan Msg) bool
 	Unsubscribe(uuid.UUID)
 }
 

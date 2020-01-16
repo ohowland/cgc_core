@@ -21,7 +21,7 @@ type ACBus struct {
 	pid         uuid.UUID
 	relay       Relayer
 	inbox       chan asset.Msg
-	members     map[uuid.UUID]chan<- interface{}
+	members     map[uuid.UUID]chan<- asset.Msg
 	dispatch    dispatch.Dispatcher
 	config      Config
 	stopProcess chan bool
@@ -49,7 +49,7 @@ func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus,
 
 	inbox := make(chan asset.Msg)
 	stopProcess := make(chan bool)
-	members := make(map[uuid.UUID]chan<- interface{})
+	members := make(map[uuid.UUID]chan<- asset.Msg)
 
 	return ACBus{
 		&sync.Mutex{},
@@ -77,11 +77,15 @@ func (b ACBus) Relayer() Relayer {
 func (b *ACBus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	assetSender, assetReceiver := a.Subscribe(b.pid)
-	b.members[a.PID()] = assetReceiver
+	assetSender := a.Subscribe(b.pid)
+
+	assetReceiver := make(chan asset.Msg)
+	if ok := a.RequestControl(b.pid, assetReceiver); ok {
+		b.members[a.PID()] = assetReceiver
+	}
 
 	// aggregate messages from assets into the busReciever channel, which is read in the Process loop.
-	go func(pid uuid.UUID, assetSender <-chan interface{}, inbox chan<- asset.Msg) {
+	go func(pid uuid.UUID, assetSender <-chan asset.Msg, inbox chan<- asset.Msg) {
 		for status := range assetSender {
 			inbox <- asset.NewMsg(pid, status)
 		}
@@ -95,7 +99,11 @@ func (b *ACBus) AddMember(a asset.Asset) {
 func (b *ACBus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
+	if ch, ok := b.members[pid]; ok {
+		close(ch)
+	}
 	delete(b.members, pid)
+
 }
 
 func (b *ACBus) StopProcess() {
@@ -126,7 +134,7 @@ loop:
 		case msg, ok := <-b.inbox:
 			if !ok {
 				b.removeMember(msg.PID())
-				b.dispatch.DropStatus(msg.PID())
+				b.dispatch.DropAsset(msg.PID())
 			}
 			if b.hasMember(msg.PID()) {
 				b.dispatch.UpdateStatus(msg)
