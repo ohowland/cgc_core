@@ -14,7 +14,10 @@ import (
 	"gotest.tools/assert"
 )
 
-type DummyDevice struct{}
+type DummyDevice struct {
+	KW  float64 // control
+	Run bool    // control
+}
 
 // randMachineStatus returns a closure for random MachineStatus
 func randMachineStatus() func() MachineStatus {
@@ -31,7 +34,9 @@ func (d DummyDevice) ReadDeviceStatus() (MachineStatus, error) {
 	return assertedStatus(), nil
 }
 
-func (d DummyDevice) WriteDeviceControl(MachineControl) error {
+func (d *DummyDevice) WriteDeviceControl(ctrl MachineControl) error {
+	d.KW = ctrl.KW
+	d.Run = ctrl.Run
 	time.Sleep(100 * time.Millisecond)
 	return nil
 }
@@ -86,6 +91,15 @@ func TestWriteControl(t *testing.T) {
 
 	control := MachineControl{false, 10, 10, false}
 	ess.WriteControl(control)
+	device := ess.DeviceController()
+	assert.Assert(t, device.(*DummyDevice).KW == control.KW)
+	assert.Assert(t, device.(*DummyDevice).Run == control.Run)
+
+	control = MachineControl{true, 3, 9, true}
+	ess.WriteControl(control)
+	device = ess.DeviceController()
+	assert.Assert(t, device.(*DummyDevice).KW == control.KW)
+	assert.Assert(t, device.(*DummyDevice).Run == control.Run)
 }
 
 type subscriber struct {
@@ -102,10 +116,6 @@ func TestUpdateStatus(t *testing.T) {
 	pid, _ := uuid.NewUUID()
 	ch := ess.Subscribe(pid)
 	sub := subscriber{pid, ch}
-
-	for pid := range ess.broadcast {
-		log.Println((pid))
-	}
 
 	go func() {
 		msg, ok := <-sub.ch
@@ -143,17 +153,25 @@ func TestBroadcast(t *testing.T) {
 	}
 
 	for _, sub := range subs {
-		go func() {
+		go func(sub subscriber) {
 			msg, ok := <-sub.ch
 			status := msg.Payload().(Status)
 			assert.Assert(t, ok == true)
 			assert.Assert(t, status == assertedStatus)
-		}()
+		}(sub)
 	}
 
 	ess.UpdateStatus()
 }
 
 func TestTransform(t *testing.T) {
+	machineStatus := assertedStatus()
 
+	assertedStatus := Status{
+		CalculatedStatus{},
+		machineStatus,
+	}
+
+	status := transform(machineStatus)
+	assert.Assert(t, status == assertedStatus)
 }

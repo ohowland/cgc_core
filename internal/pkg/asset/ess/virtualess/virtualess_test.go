@@ -56,7 +56,7 @@ func TestNew(t *testing.T) {
 	assert.Assert(t, ess.Config().Name() == "TEST_Virtual ESS")
 }
 
-func TestLinkToBus(t *testing.T) {
+func TestLinkToVirtualBus(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
@@ -72,16 +72,24 @@ func TestLinkToBus(t *testing.T) {
 	targetSend := Target{
 		pid: device.PID(),
 		status: Status{
-			KW:   1,
-			KVAR: 2,
-			Hz:   60,
-			Volt: 480,
+			KW:                   1,
+			KVAR:                 2,
+			Hz:                   60,
+			Volt:                 480,
+			SOC:                  0.6,
+			RealPositiveCapacity: 10,
+			RealNegativeCapacity: 10,
+			Gridforming:          false,
+			Online:               true,
 		},
 	}
 
 	device.bus.send <- targetSend
+	time.Sleep(100 * time.Millisecond)
 	targetRecieve := <-device.bus.recieve
 
+	// Gridforming device kw/kvar values are not counted in the aggregation.
+	// This test will fail if the asset is gridforming.
 	assert.Assert(t, targetSend.KW() == -1*targetRecieve.KW())
 	assert.Assert(t, targetSend.KVAR() == targetRecieve.KVAR())
 

@@ -3,7 +3,6 @@ package ess
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -44,7 +43,6 @@ func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
-	log.Printf("ADDED: %v\n", pid)
 	return ch
 }
 
@@ -81,9 +79,7 @@ func (a Asset) UpdateStatus() {
 	for _, ch := range a.broadcast {
 		select {
 		case ch <- asset.NewMsg(a.PID(), status):
-			log.Printf("BROADCAST: pid: %v, status: %v\n", a.PID(), status)
 		default:
-			log.Println("default fail!")
 		}
 	}
 }

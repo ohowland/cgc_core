@@ -130,7 +130,7 @@ func TestRemoveMember(t *testing.T) {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID() || pid == asset3.PID())
 	}
 
-	bus.RemoveMember(asset2.PID())
+	bus.removeMember(asset2.PID())
 
 	assert.Assert(t, len(bus.members) == 2)
 	for pid := range bus.members {
@@ -206,7 +206,7 @@ func TestProcessTwoAssets(t *testing.T) {
 	bus.StopProcess()
 }
 
-func TestReadDeviceStatus(t *testing.T) {
+func TestReadHzVoltStatus(t *testing.T) {
 	bus := newVirtualBus()
 	asset1 := newDummyAsset()
 	asset1.status.gridforming = true
@@ -215,66 +215,86 @@ func TestReadDeviceStatus(t *testing.T) {
 	asset1.send <- asset1.status
 
 	time.Sleep(100 * time.Millisecond)
-	relayStatus, _ := bus.ReadDeviceStatus()
 
 	assertStatus := assertedStatus()
-	assert.Assert(t, relayStatus.Hz() == assertStatus.Hz())
-	assert.Assert(t, relayStatus.Volt() == assertStatus.Volt())
+	assert.Assert(t, bus.Hz() == assertStatus.Hz())
+	assert.Assert(t, bus.Volt() == assertStatus.Volt())
 
 	bus.StopProcess()
 }
 
-/*
-func TestBusPowerBalance(t *testing.T) {
+func TestUpdateAggregates(t *testing.T) {
 	bus := newVirtualBus()
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
 
-	asset1 := NewDummyAsset()
-	asset2 := NewDummyAsset()
+	bus.AddMember(asset1)
+	bus.AddMember(asset2)
 
-	bus.assetObserver <- asset1.asSource()
-	bus.assetObserver <- asset2.asSource()
-	gridformer := <-bus.busObserver
+	msg1 := asset.NewMsg(asset1.PID(), asset1.status)
+	msg2 := asset.NewMsg(asset2.PID(), asset2.status)
+
+	agg := make(map[uuid.UUID]asset.VirtualStatus)
+	agg = bus.updateAggregates(msg1, agg)
+
+	_, ok := agg[asset1.PID()]
+	assert.Assert(t, ok)
+	assert.Assert(t, agg[asset1.PID()].(DummyStatus) == asset1.status)
+
+	_, ok = agg[asset2.PID()]
+	assert.Assert(t, !ok)
+
+	agg = bus.updateAggregates(msg2, agg)
+	assert.Assert(t, agg[asset1.PID()].(DummyStatus) == asset2.status)
+	assert.Assert(t, agg[asset2.PID()].(DummyStatus) == asset2.status)
+
+	_, ok = agg[asset1.PID()]
+	assert.Assert(t, ok)
+	_, ok = agg[asset2.PID()]
+	assert.Assert(t, ok)
+
+}
+
+func TestBusPowerBalance(t *testing.T) {
+
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
+
+	asset1.status.gridforming = false
+	asset2.status.gridforming = false
+
+	testAssetMap := make(map[uuid.UUID]asset.VirtualStatus)
+
+	testAssetMap[asset1.PID()] = asset1.status
+	testAssetMap[asset2.PID()] = asset2.status
+
+	gridformer := busPowerBalance(testAssetMap)
 
 	assertKwSum := -1 * (asset1.status.kW + asset2.status.kW)
 	assertKvarSum := asset1.status.kVAR + asset2.status.kVAR
 
-	assert.Assert(t, gridformer.KW == assertKwSum)
-	assert.Assert(t, gridformer.KVAR == assertKvarSum)
-
-	close(bus.assetObserver)
+	assert.Assert(t, gridformer.KW() == assertKwSum)
+	assert.Assert(t, gridformer.KVAR() == assertKvarSum)
 }
 
-func TestBusPowerBalanceChange(t *testing.T) {
-	bus := newVirtualBus()
+func TestBusPowerBalanceGridformer(t *testing.T) {
 
-	gridfollowingAsset1 := NewDummyAsset()
-	gridfollowingAsset2 := NewDummyAsset()
-	gridformingAsset := NewDummyAsset()
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
 
-	gridformingAsset.status.gridforming = true
+	asset1.status.gridforming = true
+	asset2.status.gridforming = false
 
-	bus.assetObserver <- gridfollowingAsset1.asSource()
-	bus.assetObserver <- gridformingAsset.asSource()
-	bus.assetObserver <- gridfollowingAsset2.asSource()
+	testAssetMap := make(map[uuid.UUID]asset.VirtualStatus)
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 1; i <= 5; i++ {
-		gridfollowingAsset1.status.kW = r.Float64() * 1000
-		gridfollowingAsset2.status.kW = r.Float64() * 1000
+	testAssetMap[asset1.PID()] = asset1.status
+	testAssetMap[asset2.PID()] = asset2.status
 
-		bus.assetObserver <- gridfollowingAsset2.asSource()
-		bus.assetObserver <- gridformingAsset.asSource()
-		bus.assetObserver <- gridfollowingAsset1.asSource()
-	}
+	gridformer := busPowerBalance(testAssetMap)
 
-	time.Sleep(time.Duration(200) * time.Millisecond)
+	assertKwSum := -1 * (asset2.status.kW)
+	assertKvarSum := asset2.status.kVAR
 
-	gridformer := <-bus.busObserver
-	assertKwSum := -1 * (gridfollowingAsset1.status.kW + gridfollowingAsset2.status.kW)
-	assertKvarSum := gridfollowingAsset1.status.kVAR + gridfollowingAsset2.status.kVAR
-	assert.Assert(t, gridformer.KW == assertKwSum)
-	assert.Assert(t, gridformer.KVAR == assertKvarSum)
-
-	close(bus.assetObserver)
+	assert.Assert(t, gridformer.KW() == assertKwSum)
+	assert.Assert(t, gridformer.KVAR() == assertKvarSum)
 }
-*/

@@ -171,11 +171,9 @@ func (b ACBus) hasMember(pid uuid.UUID) bool {
 	return b.members[pid] != nil
 }
 
-// UpdateRelayer requests a physical device read, then updates MachineStatus field.
-func (b ACBus) UpdateRelayer() (RelayStatus, error) {
-	relayStatus, err := b.relay.ReadDeviceStatus()
-	if err != nil {
-		return EmptyRelayStatus{}, err
-	}
-	return relayStatus, nil
+// Energized returns the state of the bus.
+func (b ACBus) Energized() bool {
+	hzOk := b.Relayer().Hz() > b.config.RatedHz*0.5
+	voltOk := b.Relayer().Volt() > b.config.RatedVolt*0.5
+	return hzOk && voltOk
 }
