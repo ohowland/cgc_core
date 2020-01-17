@@ -3,6 +3,7 @@ package ess
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -70,7 +71,7 @@ func (a *Asset) Unsubscribe(pid uuid.UUID) {
 func (a Asset) UpdateStatus() {
 	machineStatus, err := a.device.ReadDeviceStatus()
 	if err != nil {
-		// comm fail handling path
+		log.Printf("ESS: %v Comm Error\n", err)
 		return
 	}
 	status := transform(machineStatus)

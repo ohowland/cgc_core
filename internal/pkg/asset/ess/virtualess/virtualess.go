@@ -101,7 +101,7 @@ func (a VirtualESS) read() (Status, error) {
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus, ok := <-a.comm.incoming
 	if !ok {
-		return Status{}, errors.New("Read Error")
+		return Status{}, errors.New("Process Loop Stopped")
 	}
 	return readStatus, nil
 }
@@ -217,10 +217,6 @@ type state interface {
 	transition(Target, asset.VirtualStatus) state
 }
 
-func energized(bus asset.VirtualStatus) bool {
-	return bus.Hz() > 1 && bus.Volt() > 1
-}
-
 type offState struct{}
 
 func (s offState) action(target Target, bus asset.VirtualStatus) Status {
@@ -245,7 +241,7 @@ func (s offState) transition(target Target, bus asset.VirtualStatus) state {
 			return hzVState{}
 		}
 
-		if energized(bus) {
+		if bus.Gridforming() {
 			log.Printf("VirtualESS-Device: state: %v\n",
 				reflect.TypeOf(pQState{}).String())
 			return pQState{}
@@ -272,7 +268,7 @@ func (s pQState) action(target Target, bus asset.VirtualStatus) Status {
 }
 
 func (s pQState) transition(target Target, bus asset.VirtualStatus) state {
-	if target.control.Run == false || !energized(bus) {
+	if target.control.Run == false || !bus.Gridforming() {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}

@@ -142,10 +142,11 @@ func (b *VirtualACBus) updateAggregates(msg asset.Msg,
 // Template data structure is used to hold the essential data for the
 // grid forming device.
 type Template struct {
-	kW   float64
-	kVAR float64
-	hz   float64
-	volt float64
+	kW         float64
+	kVAR       float64
+	hz         float64
+	volt       float64
+	gridformer bool
 }
 
 // KW is an accessor for real power
@@ -171,22 +172,23 @@ func (v Template) Volt() float64 {
 
 // Gridforming is required to meet the asset.VirtualStatus interface.
 func (v Template) Gridforming() bool {
-	return true
+	return v.gridformer
 }
 
 func newTemplate(a asset.VirtualStatus) Template {
 	return Template{
-		kW:   a.KW(),
-		kVAR: a.KVAR(),
-		hz:   a.Hz(),
-		volt: a.Volt(),
+		kW:         a.KW(),
+		kVAR:       a.KVAR(),
+		hz:         a.Hz(),
+		volt:       a.Volt(),
+		gridformer: a.Gridforming(),
 	}
 }
 
 func busPowerBalance(agg map[uuid.UUID]asset.VirtualStatus) Template {
 	kwSum := 0.0
 	kvarSum := 0.0
-	var gridformerStatus Template
+	gridformerStatus := Template{}
 	for _, assetStatus := range agg {
 		if assetStatus.Gridforming() == false {
 			kwSum += assetStatus.KW()
