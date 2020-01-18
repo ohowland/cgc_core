@@ -34,11 +34,14 @@ func (d DummyAsset) PID() uuid.UUID {
 
 func (d *DummyAsset) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
 	d.recieve = busIn
-
 	busOut := make(chan asset.VirtualStatus)
 	d.send = busOut
 
 	return busOut
+}
+
+func (d *DummyAsset) StopProcess() {
+	close(d.send)
 }
 
 type DummyStatus struct {
@@ -99,6 +102,7 @@ func TestNewVirtualACBus(t *testing.T) {
 
 func TestAddMember(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
 
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
@@ -110,12 +114,11 @@ func TestAddMember(t *testing.T) {
 	for pid := range bus.members {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
 	}
-
-	bus.StopProcess()
 }
 
 func TestRemoveMember(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
 
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
@@ -138,11 +141,11 @@ func TestRemoveMember(t *testing.T) {
 		assert.Assert(t, pid != asset2.PID())
 	}
 
-	bus.StopProcess()
 }
 
 func TestProcessOneGridformer(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
 
 	asset1 := newDummyAsset()
 	asset1.status.gridforming = true
@@ -158,13 +161,12 @@ func TestProcessOneGridformer(t *testing.T) {
 	assert.Assert(t, gridformer.KVAR() == 0)
 	assert.Assert(t, gridformer.Hz() == assertStatus.Hz())
 	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
-
-	bus.StopProcess()
-	time.Sleep(1000 * time.Millisecond)
 }
 
 func TestProcessOneNongridformer(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
+
 	asset1 := newDummyAsset()
 	asset1.status.gridforming = false
 	bus.AddMember(asset1)
@@ -178,12 +180,12 @@ func TestProcessOneNongridformer(t *testing.T) {
 	assert.Assert(t, gridformer.KVAR() == assertStatus.KVAR())
 	assert.Assert(t, gridformer.Hz() == 0)
 	assert.Assert(t, gridformer.Volt() == 0)
-
-	bus.StopProcess()
 }
 
 func TestProcessTwoAssets(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
+
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
 	asset1.status.gridforming = false
@@ -202,12 +204,12 @@ func TestProcessTwoAssets(t *testing.T) {
 	assert.Assert(t, gridformer.KVAR() == assertStatus.KVAR())
 	assert.Assert(t, gridformer.Hz() == assertStatus.Hz())
 	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
-
-	bus.StopProcess()
 }
 
 func TestReadHzVoltStatus(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
+
 	asset1 := newDummyAsset()
 	asset1.status.gridforming = true
 	bus.AddMember(asset1)
@@ -219,12 +221,12 @@ func TestReadHzVoltStatus(t *testing.T) {
 	assertStatus := assertedStatus()
 	assert.Assert(t, bus.Hz() == assertStatus.Hz())
 	assert.Assert(t, bus.Volt() == assertStatus.Volt())
-
-	bus.StopProcess()
 }
 
-func TestUpdateAggregates(t *testing.T) {
+func TestProcessMessage(t *testing.T) {
 	bus := newVirtualBus()
+	defer bus.StopProcess()
+
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
 
@@ -235,7 +237,7 @@ func TestUpdateAggregates(t *testing.T) {
 	msg2 := asset.NewMsg(asset2.PID(), asset2.status)
 
 	agg := make(map[uuid.UUID]asset.VirtualStatus)
-	agg = bus.updateAggregates(msg1, agg)
+	agg = bus.processMsg(msg1, agg)
 
 	_, ok := agg[asset1.PID()]
 	assert.Assert(t, ok)
@@ -244,7 +246,7 @@ func TestUpdateAggregates(t *testing.T) {
 	_, ok = agg[asset2.PID()]
 	assert.Assert(t, !ok)
 
-	agg = bus.updateAggregates(msg2, agg)
+	agg = bus.processMsg(msg2, agg)
 	assert.Assert(t, agg[asset1.PID()].(DummyStatus) == asset2.status)
 	assert.Assert(t, agg[asset2.PID()].(DummyStatus) == asset2.status)
 
@@ -252,11 +254,43 @@ func TestUpdateAggregates(t *testing.T) {
 	assert.Assert(t, ok)
 	_, ok = agg[asset2.PID()]
 	assert.Assert(t, ok)
+}
+
+func TestDropAggregateOfRemovedMember(t *testing.T) {
+	bus := newVirtualBus()
+	defer bus.StopProcess()
+
+	asset1 := newDummyAsset()
+	asset2 := newDummyAsset()
+
+	bus.AddMember(asset1)
+	bus.AddMember(asset2)
+
+	asset1.send <- asset1.status
+	asset2.send <- asset2.status
+
+	time.Sleep(100 * time.Millisecond)
+	powerBalance := <-asset1.recieve
+
+	assertKwSum := -1 * (asset1.status.kW + asset2.status.kW)
+	assertKvarSum := asset1.status.kVAR + asset2.status.kVAR
+
+	assert.Assert(t, powerBalance.KW() == assertKwSum)
+	assert.Assert(t, powerBalance.KVAR() == assertKvarSum)
+
+	asset1.StopProcess()
+
+	time.Sleep(100 * time.Millisecond)
+	powerBalance = <-asset2.recieve
+
+	assertKwSum = -1 * asset2.status.kW
+	assertKvarSum = asset2.status.kVAR
+	assert.Assert(t, powerBalance.KW() == assertKwSum)
+	assert.Assert(t, powerBalance.KVAR() == assertKvarSum)
 
 }
 
 func TestBusPowerBalance(t *testing.T) {
-
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
 
@@ -268,17 +302,16 @@ func TestBusPowerBalance(t *testing.T) {
 	testAssetMap[asset1.PID()] = asset1.status
 	testAssetMap[asset2.PID()] = asset2.status
 
-	gridformer := busPowerBalance(testAssetMap)
+	powerBalance := busPowerBalance(testAssetMap)
 
 	assertKwSum := -1 * (asset1.status.kW + asset2.status.kW)
 	assertKvarSum := asset1.status.kVAR + asset2.status.kVAR
 
-	assert.Assert(t, gridformer.KW() == assertKwSum)
-	assert.Assert(t, gridformer.KVAR() == assertKvarSum)
+	assert.Assert(t, powerBalance.KW() == assertKwSum)
+	assert.Assert(t, powerBalance.KVAR() == assertKvarSum)
 }
 
 func TestBusPowerBalanceGridformer(t *testing.T) {
-
 	asset1 := newDummyAsset()
 	asset2 := newDummyAsset()
 

@@ -69,7 +69,8 @@ func (b *VirtualACBus) AddMember(a asset.VirtualAsset) {
 		for status := range assetSender {
 			inbox <- asset.NewMsg(pid, status)
 		}
-		inbox <- asset.NewMsg(pid, Template{}) // on close clear contribution with default status.
+		b.removeMember(a.PID())                // on channel close revoke membership
+		inbox <- asset.NewMsg(pid, Template{}) // and clear contribuiton.
 	}(a.PID(), assetSender, b.inbox)
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
@@ -102,24 +103,26 @@ func (b *VirtualACBus) StopProcess() {
 	b.stopProcess <- true
 }
 
+type assetMap map[uuid.UUID]asset.VirtualStatus
+
 // Process is the main process loop for the virtual bus.
 // This loop is responsible for aggregating virtual component data,
 // and calculating the power balance (swing load) for gridformer.
 func (b *VirtualACBus) Process() {
 	defer close(b.assetReciever)
 	log.Println("VirtualBus Process: Loop Started")
-	agg := make(map[uuid.UUID]asset.VirtualStatus)
+	memberStatus := make(map[uuid.UUID]asset.VirtualStatus)
 loop:
 	for {
 		select {
 		case msg, ok := <-b.inbox:
 			if !ok {
-				b.removeMember(msg.PID())
-				delete(agg, msg.PID())
+				break loop
 			} else {
-				agg = b.updateAggregates(msg, agg)
+				memberStatus = b.processMsg(msg, memberStatus)
 			}
-		case b.assetReciever <- busPowerBalance(agg):
+		case b.assetReciever <- busPowerBalance(memberStatus):
+
 		case <-b.stopProcess:
 			break loop
 		}
@@ -127,15 +130,25 @@ loop:
 	log.Println("VirtualBus Process: Loop Stopped")
 }
 
-// updateAggregate manages the aggregation of asset status.
-func (b *VirtualACBus) updateAggregates(msg asset.Msg,
-	agg map[uuid.UUID]asset.VirtualStatus) map[uuid.UUID]asset.VirtualStatus {
+func (b *VirtualACBus) processMsg(msg asset.Msg, memberStatus assetMap) assetMap {
+	if b.hasMember(msg.PID()) {
+		memberStatus = aggregateStatus(msg, memberStatus)
+	} else if _, ok := memberStatus[msg.PID()]; ok { // if non-member, remove stale data -
+		delete(memberStatus, msg.PID()) // this is currently the mechanism to remove old data.
+	}
+	return memberStatus
+}
+
+func (b *VirtualACBus) hasMember(pid uuid.UUID) bool {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	if _, ok := b.members[msg.PID()]; ok { // filter for member pid
-		agg[msg.PID()] = msg.Payload().(asset.VirtualStatus)
-	}
+	_, ok := b.members[pid]
+	return ok
+}
 
+// updateAggregate manages the aggregation of asset status.
+func aggregateStatus(msg asset.Msg, agg assetMap) assetMap {
+	agg[msg.PID()] = msg.Payload().(asset.VirtualStatus)
 	return agg
 }
 

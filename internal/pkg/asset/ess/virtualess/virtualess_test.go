@@ -57,14 +57,13 @@ func TestNew(t *testing.T) {
 }
 
 func TestLinkToVirtualBus(t *testing.T) {
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+	defer relay.StopProcess()
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
 	defer device.StopProcess()
-
-	bus := newBus()
-	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
-	defer relay.StopProcess()
 
 	relay.AddMember(device)
 
@@ -98,27 +97,25 @@ func TestLinkToVirtualBus(t *testing.T) {
 }
 
 func TestStartStopProcess(t *testing.T) {
-	ess := newESS()
-	device := ess.DeviceController().(*VirtualESS)
-
-	bus := newBus()
-	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
-
-	relay.AddMember(device)
-	device.StopProcess()
-
-	_, ok := <-device.comm.outgoing
-	assert.Assert(t, !ok)
-}
-
-func TestRead(t *testing.T) {
-	ess := newESS()
-	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
-
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 	defer relay.StopProcess()
+
+	ess := newESS()
+	device := ess.DeviceController().(*VirtualESS)
+
+	relay.AddMember(device)
+	device.StopProcess()
+}
+
+func TestRead(t *testing.T) {
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+	defer relay.StopProcess()
+
+	ess := newESS()
+	device := ess.DeviceController().(*VirtualESS)
+	defer device.StopProcess()
 
 	relay.AddMember(device)
 
@@ -170,11 +167,13 @@ func TestWrite(t *testing.T) {
 }
 
 func TestReadDeviceStatus(t *testing.T) {
-	newESS := newESS()
-	device := newESS.DeviceController().(*VirtualESS)
-
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+	defer relay.StopProcess()
+
+	newESS := newESS()
+	device := newESS.DeviceController().(*VirtualESS)
+	defer device.StopProcess()
 
 	relay.AddMember(device)
 
@@ -193,6 +192,7 @@ func TestReadDeviceStatus(t *testing.T) {
 	}
 
 	assert.Assert(t, machineStatus == assertedStatus)
+	time.Sleep(200 * time.Millisecond)
 
 }
 
@@ -208,7 +208,12 @@ func TestWriteDeviceControl(t *testing.T) {
 	intercept := make(chan Control)
 	device.comm.outgoing = intercept
 
-	machineControl := ess.MachineControl{true, 10, 10, false}
+	machineControl := ess.MachineControl{
+		Run:      true,
+		KW:       10,
+		KVAR:     10,
+		Gridform: false,
+	}
 
 	go func() {
 		err := device.WriteDeviceControl(machineControl)

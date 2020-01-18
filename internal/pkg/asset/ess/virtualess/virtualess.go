@@ -21,6 +21,13 @@ type VirtualESS struct {
 	bus  virtualBus
 }
 
+// For commmunication between asset and virtual hardware
+type comm struct {
+	incoming chan Status
+	outgoing chan Control
+}
+
+// For commmunication between virtual bus and asset
 type virtualBus struct {
 	send    chan<- asset.VirtualStatus
 	recieve <-chan asset.VirtualStatus
@@ -71,12 +78,6 @@ type Control struct {
 	KW       float64 `json:"KW"`
 	KVAR     float64 `json:"KVAR"`
 	Gridform bool    `json:"Gridform"`
-}
-
-// Comm data structure for the VirtualESS
-type comm struct {
-	incoming chan Status
-	outgoing chan Control
 }
 
 func (a VirtualESS) PID() uuid.UUID {
@@ -164,10 +165,8 @@ func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.Vi
 }
 
 func (a *VirtualESS) StartProcess() {
-	in := make(chan Status)
-	out := make(chan Control)
-	a.comm.incoming = in
-	a.comm.outgoing = out
+	a.comm.incoming = make(chan Status)
+	a.comm.outgoing = make(chan Control)
 
 	go Process(a.pid, a.comm, a.bus)
 }
@@ -181,6 +180,7 @@ func (a *VirtualESS) StopProcess() {
 
 func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 	defer close(comm.incoming)
+	defer close(bus.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
@@ -192,10 +192,17 @@ loop:
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- target.status:
-		case busStatus := <-bus.recieve:
+
+		case comm.incoming <- target.status: // read from 'hardware'
+
+		case busStatus, ok := <-bus.recieve: // read from 'virtual system'
+			if !ok {
+				break loop
+			}
 			target.status = sm.run(*target, busStatus)
-		case bus.send <- target:
+
+		case bus.send <- target: // write to 'virtual system'
+
 		default:
 			time.Sleep(200 * time.Millisecond)
 		}
