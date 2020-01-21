@@ -54,12 +54,16 @@ func newGrid() (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Status)
+	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
+
+	var control <-chan asset.Msg
+	controlOwner := PID
+
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
 }
 
 func TestReadConfig(t *testing.T) {
@@ -86,7 +90,7 @@ func TestWriteControl(t *testing.T) {
 
 type subscriber struct {
 	pid uuid.UUID
-	ch  <-chan asset.Status
+	ch  <-chan asset.Msg
 }
 
 func TestUpdateStatus(t *testing.T) {
@@ -99,17 +103,20 @@ func TestUpdateStatus(t *testing.T) {
 	ch := grid.Subscribe(pid)
 	sub := subscriber{pid, ch}
 
+	go func() {
+		msg, ok := <-sub.ch
+		status := msg.Payload().(Status)
+
+		assertedStatus := Status{
+			CalculatedStatus{},
+			assertedStatus(),
+		}
+
+		assert.Assert(t, ok == true)
+		assert.Assert(t, status == assertedStatus)
+	}()
+
 	grid.UpdateStatus()
-
-	assertedStatus := Status{
-		CalculatedStatus{},
-		assertedStatus(),
-	}
-
-	status, ok := <-sub.ch
-
-	assert.Assert(t, ok == true)
-	assert.Assert(t, status == assertedStatus)
 }
 
 func TestBroadcast(t *testing.T) {
@@ -127,18 +134,21 @@ func TestBroadcast(t *testing.T) {
 
 	}
 
-	go grid.UpdateStatus()
-
 	assertedStatus := Status{
 		CalculatedStatus{},
 		assertedStatus(),
 	}
 
 	for _, sub := range subs {
-		status, ok := <-sub.ch
-		assert.Assert(t, ok == true)
-		assert.Assert(t, status == assertedStatus)
+		go func(sub subscriber) {
+			msg, ok := <-sub.ch
+			status := msg.Payload().(Status)
+			assert.Assert(t, ok == true)
+			assert.Assert(t, status == assertedStatus)
+		}(sub)
 	}
+
+	grid.UpdateStatus()
 }
 
 func TestTransform(t *testing.T) {

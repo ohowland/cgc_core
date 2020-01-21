@@ -17,14 +17,14 @@ import (
 // VirtualESS target
 type VirtualESS struct {
 	pid  uuid.UUID
-	comm comm
+	comm virtualHardware
 	bus  virtualBus
 }
 
 // For commmunication between asset and virtual hardware
-type comm struct {
-	incoming chan Status
-	outgoing chan Control
+type virtualHardware struct {
+	send    chan Control
+	recieve chan Status
 }
 
 // For commmunication between virtual bus and asset
@@ -40,21 +40,28 @@ type Target struct {
 	control Control
 }
 
+// KW is an accessor for real power
 func (t Target) KW() float64 {
 	return t.status.KW
 }
+
+// KVAR is an accessor for reactive power
 func (t Target) KVAR() float64 {
 	return t.status.KVAR
 
 }
+
+// Hz is an accessor for frequency
 func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
+// Volt is an accessor for ac voltage
 func (t Target) Volt() float64 {
 	return t.status.Volt
 }
 
+// Gridforming is an accessor for gridforming state
 func (t Target) Gridforming() bool {
 	return t.status.Gridforming
 }
@@ -80,6 +87,7 @@ type Control struct {
 	Gridform bool    `json:"Gridform"`
 }
 
+// PID is an accessor for the process id
 func (a VirtualESS) PID() uuid.UUID {
 	return a.pid
 }
@@ -98,17 +106,17 @@ func (a VirtualESS) WriteDeviceControl(machineControl ess.MachineControl) error 
 }
 
 func (a VirtualESS) read() (Status, error) {
-	fuzzing := rand.Intn(2000)
+	fuzzing := rand.Intn(500)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus, ok := <-a.comm.incoming
+	readStatus, ok := <-a.comm.recieve
 	if !ok {
-		return Status{}, errors.New("Process Loop Stopped")
+		return Status{}, errors.New("Read Error")
 	}
 	return readStatus, nil
 }
 
 func (a VirtualESS) write(control Control) error {
-	a.comm.outgoing <- control
+	a.comm.send <- control
 	return nil
 }
 
@@ -123,7 +131,7 @@ func New(configPath string) (ess.Asset, error) {
 
 	device := VirtualESS{
 		pid:  pid,
-		comm: comm{},
+		comm: virtualHardware{},
 	}
 
 	return ess.New(jsonConfig, &device)
@@ -154,32 +162,35 @@ func mapControl(c ess.MachineControl) Control {
 	}
 }
 
+// LinkToBus recieves a channel from the virtual bus, which the bus will transmit its status on.
+// the method returns a channel for the virtual asset to report its status to the bus.
 func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
 	busOut := make(chan asset.VirtualStatus)
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
 	a.StopProcess()
-	a.StartProcess()
+	a.startProcess()
 	return busOut
 }
 
-func (a *VirtualESS) StartProcess() {
-	a.comm.incoming = make(chan Status)
-	a.comm.outgoing = make(chan Control)
+// startProcess spawns virtual hardware which the virtual ess communicates with
+func (a *VirtualESS) startProcess() {
+	a.comm.recieve = make(chan Status)
+	a.comm.send = make(chan Control)
 
 	go Process(a.pid, a.comm, a.bus)
 }
 
 // StopProcess stops the virtual machine loop by closing it's communication channels.
 func (a *VirtualESS) StopProcess() {
-	if a.comm.outgoing != nil {
-		close(a.comm.outgoing)
+	if a.comm.send != nil {
+		close(a.comm.send)
 	}
 }
 
-func Process(pid uuid.UUID, comm comm, bus virtualBus) {
-	defer close(comm.incoming)
+// Process is the virtual hardware update loop
+func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
 	defer close(bus.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
@@ -188,12 +199,12 @@ func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 loop:
 	for {
 		select {
-		case target.control, ok = <-comm.outgoing: // write to 'hardware'
+		case target.control, ok = <-comm.send: // write to 'hardware'
 			if !ok {
 				break loop
 			}
 
-		case comm.incoming <- target.status: // read from 'hardware'
+		case comm.recieve <- target.status: // read from 'hardware'
 
 		case busStatus, ok := <-bus.recieve: // read from 'virtual system'
 			if !ok {
@@ -204,6 +215,9 @@ loop:
 		case bus.send <- target: // write to 'virtual system'
 
 		default:
+			// TODO: understand buffered/unbuffered channels in select statement...
+			// These channels are all unbuffered, default seems to provide a path for execution.
+			// If this isn't included, the process locks.
 			time.Sleep(200 * time.Millisecond)
 		}
 	}

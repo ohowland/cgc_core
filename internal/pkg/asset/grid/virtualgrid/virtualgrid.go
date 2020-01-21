@@ -16,8 +16,14 @@ import (
 // VirtualGrid target
 type VirtualGrid struct {
 	pid  uuid.UUID
-	comm comm
+	comm virtualHardware
 	bus  virtualBus
+}
+
+// Comm data structure for the VirtualGrid
+type virtualHardware struct {
+	send    chan Control
+	recieve chan Status
 }
 
 type virtualBus struct {
@@ -32,21 +38,27 @@ type Target struct {
 	control Control
 }
 
+// KW is an accessor for real power
 func (t Target) KW() float64 {
 	return t.status.KW
 }
+
+// KVAR is an accessor for reactive power
 func (t Target) KVAR() float64 {
 	return t.status.KVAR
-
 }
+
+// Hz is an accessor for frequency
 func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
+// Volt is an accessor for ac voltage
 func (t Target) Volt() float64 {
 	return t.status.Volt
 }
 
+// Gridforming is an accessor for gridforming state
 func (t Target) Gridforming() bool {
 	return t.status.Online
 }
@@ -67,12 +79,7 @@ type Control struct {
 	CloseIntertie bool
 }
 
-// Comm data structure for the VirtualGrid
-type comm struct {
-	incoming chan Status
-	outgoing chan Control
-}
-
+// PID is an accessor for the process id
 func (a VirtualGrid) PID() uuid.UUID {
 	return a.pid
 }
@@ -91,9 +98,9 @@ func (a VirtualGrid) WriteDeviceControl(machineControl grid.MachineControl) erro
 }
 
 func (a VirtualGrid) read() (Status, error) {
-	fuzzing := rand.Intn(2000)
+	fuzzing := rand.Intn(500)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus, ok := <-a.comm.incoming
+	readStatus, ok := <-a.comm.recieve
 	if !ok {
 		return Status{}, errors.New("Read Error")
 	}
@@ -101,7 +108,7 @@ func (a VirtualGrid) read() (Status, error) {
 }
 
 func (a VirtualGrid) write(control Control) error {
-	a.comm.outgoing <- control
+	a.comm.send <- control
 	return nil
 }
 
@@ -116,7 +123,7 @@ func New(configPath string) (grid.Asset, error) {
 
 	device := VirtualGrid{
 		pid:  pid,
-		comm: comm{},
+		comm: virtualHardware{},
 	}
 
 	return grid.New(jsonConfig, &device)
@@ -148,28 +155,26 @@ func (a *VirtualGrid) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.V
 	a.bus.recieve = busIn
 
 	a.StopProcess()
-	a.StartProcess()
+	a.startProcess()
 	return busOut
 }
 
-func (a *VirtualGrid) StartProcess() {
-	in := make(chan Status)
-	out := make(chan Control)
-	a.comm.incoming = in
-	a.comm.outgoing = out
+func (a *VirtualGrid) startProcess() {
+	a.comm.recieve = make(chan Status)
+	a.comm.send = make(chan Control)
 
 	go Process(a.pid, a.comm, a.bus)
 }
 
 // StopProcess stops the virtual machine loop by closing it's communication channels.
 func (a *VirtualGrid) StopProcess() {
-	if a.comm.outgoing != nil {
-		close(a.comm.outgoing)
+	if a.comm.send != nil {
+		close(a.comm.send)
 	}
 }
 
 func Process(pid uuid.UUID, comm comm, bus virtualBus) {
-	defer close(comm.incoming)
+	defer close(bus.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
@@ -181,10 +186,17 @@ loop:
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- target.status:
-		case busStatus := <-bus.recieve:
+
+		case comm.incoming <- target.status: // read from 'hardware'
+
+		case busStatus := <-bus.recieve: // read from 'virtual system'
+			if !ok {
+				break loop
+			}
 			target.status = sm.run(*target, busStatus)
-		case bus.send <- target:
+
+		case bus.send <- target: // write to 'virtual system'
+
 		default:
 			time.Sleep(200 * time.Millisecond)
 		}
@@ -212,10 +224,10 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:                   0,
 		KVAR:                 0,
-		Hz:                   60,  // TODO: Get Config into VirtualGrid
-		Volt:                 480, // TODO: Get Config into VirtualGrid
-		RealPositiveCapacity: 0,   // TODO: Get Config into VirtualGrid
-		RealNegativeCapacity: 0,   // TODO: Get Config into VirtualGrid
+		Hz:                   bus.Hz(),   // TODO: Get Config into VirtualGrid
+		Volt:                 bus.Volt(), // TODO: Get Config into VirtualGrid
+		RealPositiveCapacity: 0,          // TODO: Get Config into VirtualGrid
+		RealNegativeCapacity: 0,          // TODO: Get Config into VirtualGrid
 		Online:               false,
 	}
 }

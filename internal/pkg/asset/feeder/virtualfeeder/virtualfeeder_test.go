@@ -56,13 +56,13 @@ func TestNew(t *testing.T) {
 	assert.Assert(t, feeder.Config().Name() == "TEST_Virtual Feeder")
 }
 
-func TestLinkToBus(t *testing.T) {
+func TestLinkToVirtualBus(t *testing.T) {
+	bus := newBus()
+	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
 	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
-
-	bus := newBus()
-	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+	defer device.StopProcess()
 
 	relay.AddMember(device)
 
@@ -80,34 +80,34 @@ func TestLinkToBus(t *testing.T) {
 	}
 
 	device.bus.send <- targetSend
+	time.Sleep(100 * time.Millisecond)
 	targetRecieve := <-device.bus.recieve
 
 	assert.Assert(t, targetSend.KW() == -1*targetRecieve.KW())
 	assert.Assert(t, targetSend.KVAR() == targetRecieve.KVAR())
-
-	relay.RemoveMember(device.PID())
 }
 
 func TestStartStopProcess(t *testing.T) {
-	feeder := newFeeder()
-	device := feeder.DeviceController().(*VirtualFeeder)
-
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	feeder := newFeeder()
+	device := feeder.DeviceController().(*VirtualFeeder)
 
 	relay.AddMember(device)
 	device.StopProcess()
 
-	_, ok := <-device.comm.outgoing
+	_, ok := <-device.comm.send
 	assert.Assert(t, !ok)
 }
 
 func TestRead(t *testing.T) {
-	feeder := newFeeder()
-	device := feeder.DeviceController().(*VirtualFeeder)
-
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
+
+	feeder := newFeeder()
+	device := feeder.DeviceController().(*VirtualFeeder)
+	defer device.StopProcess()
 
 	relay.AddMember(device)
 
@@ -125,13 +125,12 @@ func TestRead(t *testing.T) {
 	}
 
 	assert.Assert(t, assertedStatus == status)
-
-	relay.RemoveMember(device.PID())
 }
 
 func TestWrite(t *testing.T) {
 	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
+	defer device.StopProcess()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -139,7 +138,7 @@ func TestWrite(t *testing.T) {
 	relay.AddMember(device)
 
 	intercept := make(chan Control)
-	device.comm.outgoing = intercept
+	device.comm.send = intercept
 
 	control := Control{true}
 
@@ -157,6 +156,7 @@ func TestWrite(t *testing.T) {
 func TestReadDeviceStatus(t *testing.T) {
 	newfeeder := newFeeder()
 	device := newfeeder.DeviceController().(*VirtualFeeder)
+	defer device.StopProcess()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -174,12 +174,12 @@ func TestReadDeviceStatus(t *testing.T) {
 	}
 
 	assert.Assert(t, machineStatus == assertedStatus)
-
 }
 
 func TestWriteDeviceControl(t *testing.T) {
 	newfeeder := newFeeder()
 	device := newfeeder.DeviceController().(*VirtualFeeder)
+	defer device.StopProcess()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -187,7 +187,7 @@ func TestWriteDeviceControl(t *testing.T) {
 	relay.AddMember(device)
 
 	intercept := make(chan Control)
-	device.comm.outgoing = intercept
+	device.comm.send = intercept
 
 	machineControl := feeder.MachineControl{true}
 
@@ -222,7 +222,6 @@ func TestMapStatus(t *testing.T) {
 	}
 
 	assert.Assert(t, machineStatus == assertedStatus)
-
 }
 
 func TestMapControl(t *testing.T) {
@@ -245,6 +244,7 @@ func TestTransitionOffToOn(t *testing.T) {
 
 	newFeeder := newFeeder()
 	device := newFeeder.DeviceController().(*VirtualFeeder)
+	defer device.StopProcess()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -272,8 +272,6 @@ func TestTransitionOffToOn(t *testing.T) {
 	status, err = device.read()
 
 	assert.Assert(t, status.Online == true)
-
-	relay.RemoveMember(device.PID())
 }
 
 func TestTransitionOnToOff(t *testing.T) {
@@ -283,6 +281,7 @@ func TestTransitionOnToOff(t *testing.T) {
 
 	newFeeder := newFeeder()
 	device := newFeeder.DeviceController().(*VirtualFeeder)
+	defer device.StopProcess()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -324,6 +323,4 @@ func TestTransitionOnToOff(t *testing.T) {
 	status, err = device.read()
 
 	assert.Assert(t, status.Online == false)
-
-	relay.RemoveMember(device.PID())
 }

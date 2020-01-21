@@ -17,8 +17,14 @@ import (
 // VirtualFeeder target
 type VirtualFeeder struct {
 	pid  uuid.UUID
-	comm comm
+	comm virtualHardware
 	bus  virtualBus
+}
+
+// Comm data structure for the VirtualFeeder
+type virtualHardware struct {
+	send    chan Control
+	recieve chan Status
 }
 
 type virtualBus struct {
@@ -33,21 +39,27 @@ type Target struct {
 	control Control
 }
 
+// KW is an accessor for real power
 func (t Target) KW() float64 {
 	return t.status.KW
 }
+
+// KVAR is an accessor for reactive power
 func (t Target) KVAR() float64 {
 	return t.status.KVAR
-
 }
+
+// Hz is an accessor for frequency
 func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
+// Volt is an accessor for ac voltage
 func (t Target) Volt() float64 {
 	return t.status.Volt
 }
 
+// Gridforming is an accessor for gridforming state
 func (t Target) Gridforming() bool {
 	return false
 }
@@ -66,12 +78,7 @@ type Control struct {
 	CloseFeeder bool
 }
 
-// Comm data structure for the VirtualFeeder
-type comm struct {
-	incoming chan Status
-	outgoing chan Control
-}
-
+// PID is an accessor for the process id
 func (a VirtualFeeder) PID() uuid.UUID {
 	return a.pid
 }
@@ -90,9 +97,9 @@ func (a VirtualFeeder) WriteDeviceControl(machineControl feeder.MachineControl) 
 }
 
 func (a VirtualFeeder) read() (Status, error) {
-	fuzzing := rand.Intn(2000)
+	fuzzing := rand.Intn(500)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus, ok := <-a.comm.incoming
+	readStatus, ok := <-a.comm.recieve
 	if !ok {
 		return Status{}, errors.New("Read Error")
 	}
@@ -100,7 +107,7 @@ func (a VirtualFeeder) read() (Status, error) {
 }
 
 func (a VirtualFeeder) write(control Control) error {
-	a.comm.outgoing <- control
+	a.comm.send <- control
 	return nil
 }
 
@@ -115,7 +122,7 @@ func New(configPath string) (feeder.Asset, error) {
 
 	device := VirtualFeeder{
 		pid:  pid,
-		comm: comm{},
+		comm: virtualHardware{},
 	}
 
 	return feeder.New(jsonConfig, &device)
@@ -139,34 +146,35 @@ func mapControl(c feeder.MachineControl) Control {
 	}
 }
 
+// LinkToBus recieves a channel from the virtual bus, which the bus will transmit its status on.
+// the method returns a channel for the virtual asset to report its status to the bus.
 func (a *VirtualFeeder) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
 	busOut := make(chan asset.VirtualStatus)
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
 	a.StopProcess()
-	a.StartProcess()
+	a.startProcess()
 	return busOut
 }
 
-func (a *VirtualFeeder) StartProcess() {
-	in := make(chan Status)
-	out := make(chan Control)
-	a.comm.incoming = in
-	a.comm.outgoing = out
+func (a *VirtualFeeder) startProcess() {
+	a.comm.recieve = make(chan Status)
+	a.comm.send = make(chan Control)
 
 	go Process(a.pid, a.comm, a.bus)
 }
 
 // StopProcess stops the virtual machine loop by closing it's communication channels.
 func (a *VirtualFeeder) StopProcess() {
-	if a.comm.outgoing != nil {
-		close(a.comm.outgoing)
+	if a.comm.send != nil {
+		close(a.comm.send)
 	}
 }
 
-func Process(pid uuid.UUID, comm comm, bus virtualBus) {
-	defer close(comm.incoming)
+// Process is the virtual hardware update loop
+func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
+	defer close(bus.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
@@ -174,15 +182,25 @@ func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 loop:
 	for {
 		select {
-		case target.control, ok = <-comm.outgoing: // write to 'hardware'
+		case target.control, ok = <-comm.send: // write to 'hardware'
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- target.status:
-		case busStatus := <-bus.recieve:
+
+		case comm.recieve <- target.status: // read from 'hardware'
+
+		case busStatus, ok := <-bus.recieve: // read from 'virtual system'
+			if !ok {
+				break loop
+			}
 			target.status = sm.run(*target, busStatus)
-		case bus.send <- target:
+
+		case bus.send <- target: // write to 'virtual system'
+
 		default:
+			// TODO: understand buffered/unbuffered channels in select statement...
+			// These channels are all unbuffered, default seems to provide a path for execution.
+			// If this isn't included, the process locks.
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
@@ -201,10 +219,6 @@ func (s *stateMachine) run(target Target, bus asset.VirtualStatus) Status {
 type state interface {
 	action(Target, asset.VirtualStatus) Status
 	transition(Target, asset.VirtualStatus) state
-}
-
-func energized(bus asset.VirtualStatus) bool {
-	return bus.Hz() > 1 && bus.Volt() > 1
 }
 
 type offState struct{}
@@ -239,8 +253,8 @@ func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:     kw,
 		KVAR:   kvar,
-		Hz:     60.0, // TODO: Link to virtual system model
-		Volt:   480,
+		Hz:     bus.Hz(),
+		Volt:   bus.Volt(),
 		Online: true,
 	}
 }

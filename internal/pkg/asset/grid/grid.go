@@ -3,6 +3,7 @@ package grid
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -17,12 +18,14 @@ type DeviceController interface {
 
 // Asset is a datastructure for an Energy Storage System Asset
 type Asset struct {
-	mux         *sync.Mutex
-	pid         uuid.UUID
-	device      DeviceController
-	broadcast   map[uuid.UUID]chan<- asset.Status
-	supervisory SupervisoryControl
-	config      Config
+	mux          *sync.Mutex
+	pid          uuid.UUID
+	device       DeviceController
+	broadcast    map[uuid.UUID]chan<- asset.Msg
+	control      <-chan asset.Msg
+	controlOwner uuid.UUID
+	supervisory  SupervisoryControl
+	config       Config
 }
 
 // PID is a getter for the asset PID
@@ -35,8 +38,8 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Status {
-	ch := make(chan asset.Status, 1)
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
+	ch := make(chan asset.Msg)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
@@ -46,23 +49,34 @@ func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Status {
 func (a *Asset) Unsubscribe(pid uuid.UUID) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	ch := a.broadcast[pid]
-	delete(a.broadcast, pid)
-	close(ch)
+	if ch, ok := a.broadcast[pid]; ok {
+		delete(a.broadcast, pid)
+		close(ch)
+	}
 }
 
+// RequestControl connects the asset control to the read only channel parameter.
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control = ch
+	a.controlOwner = pid
+	return true
+}
+
+// UpdateStatus requests a physical device read, then updates MachineStatus field.
 func (a Asset) UpdateStatus() {
 	machineStatus, err := a.device.ReadDeviceStatus()
 	if err != nil {
-		// comm fail handling path
+		log.Printf("Grid: %v Comm Error\n", err)
 		return
 	}
 	status := transform(machineStatus)
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	for _, ch := range a.broadcast {
+	for _, broadcast := range a.broadcast {
 		select {
-		case ch <- status:
+		case broadcast <- asset.NewMsg(a.PID(), status):
 		default:
 		}
 	}
@@ -79,11 +93,11 @@ func transform(machineStatus MachineStatus) Status {
 func (a Asset) WriteControl(c interface{}) {
 	control, ok := c.(MachineControl)
 	if !ok {
-		panic(errors.New("bad cast to write control"))
+		panic(errors.New("Grid bad cast to write control"))
 	}
 	err := a.device.WriteDeviceControl(control)
 	if err != nil {
-		// comm fail handling path
+		log.Printf("Grid: %v Comm Error\n", err)
 	}
 }
 
@@ -92,15 +106,19 @@ func (a Asset) Config() Config {
 	return a.config
 }
 
+// Enable is an settor for the asset enable state
 func (a Asset) Enable(b bool) {
 	a.supervisory.enable = b
 }
 
+// Status wraps MachineStatus with mutex and state metadata
 type Status struct {
 	calc    CalculatedStatus
 	machine MachineStatus
 }
 
+// CalculatedStatus is a data structure representing asset state information
+// that is calculated from data read into the archetype grid.
 type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical Grid Intertie status
@@ -180,11 +198,14 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Status)
+	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
+
+	var control <-chan asset.Msg
+	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
 
 }

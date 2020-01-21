@@ -47,15 +47,6 @@ func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
 	return ch
 }
 
-// RequestControl connects the asset control to the read only channel parameter.
-func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.control = ch
-	a.controlOwner = pid
-	return true
-}
-
 // Unsubscribe closes the broadcast channel associated with the pid parameter.
 func (a *Asset) Unsubscribe(pid uuid.UUID) {
 	a.mux.Lock()
@@ -65,6 +56,15 @@ func (a *Asset) Unsubscribe(pid uuid.UUID) {
 		close(ch)
 	}
 
+}
+
+// RequestControl connects the asset control to the read only channel parameter.
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	a.control = ch
+	a.controlOwner = pid
+	return true
 }
 
 // UpdateStatus requests a physical device read, then updates MachineStatus field.
@@ -77,9 +77,9 @@ func (a Asset) UpdateStatus() {
 	status := transform(machineStatus)
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	for _, ch := range a.broadcast {
+	for _, broadcast := range a.broadcast {
 		select {
-		case ch <- asset.NewMsg(a.PID(), status):
+		case broadcast <- asset.NewMsg(a.PID(), status):
 		default:
 		}
 	}
@@ -96,11 +96,11 @@ func transform(machineStatus MachineStatus) Status {
 func (a Asset) WriteControl(c interface{}) {
 	control, ok := c.(MachineControl)
 	if !ok {
-		panic(errors.New("bad cast to write control"))
+		panic(errors.New("ESS bad cast to write control"))
 	}
 	err := a.device.WriteDeviceControl(control)
 	if err != nil {
-		// comm fail handling path
+		log.Printf("ESS: %v Comm Error\n", err)
 	}
 }
 

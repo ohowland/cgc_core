@@ -83,6 +83,10 @@ func (b *VirtualACBus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	delete(b.members, pid)
+
+	if len(b.members) < 1 { // if this is the first member, start the bus process.
+		b.stopProcess <- true
+	}
 }
 
 // StopProcess terminates the virtual bus process loop.
