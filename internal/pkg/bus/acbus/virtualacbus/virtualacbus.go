@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
 // VirtualACBus is the top level data structure for virtual bus.
@@ -21,7 +22,7 @@ type VirtualACBus struct {
 }
 
 // New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string) (acbus.ACBus, error) {
+func New(configPath string, dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return acbus.ACBus{}, err
@@ -37,7 +38,7 @@ func New(configPath string) (acbus.ACBus, error) {
 		stopProcess:   make(chan bool),
 	}
 
-	return acbus.New(jsonConfig, &virtualsystem, nil)
+	return acbus.New(jsonConfig, &virtualsystem, dispatch)
 }
 
 // PID is an accessor for the process id

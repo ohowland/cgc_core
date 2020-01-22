@@ -149,6 +149,8 @@ func mapControl(c grid.MachineControl) Control {
 	}
 }
 
+// LinkToBus recieves a channel from the virtual bus, which the bus will transmit its status on.
+// the method returns a channel for the virtual asset to report its status to the bus.
 func (a *VirtualGrid) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
 	busOut := make(chan asset.VirtualStatus)
 	a.bus.send = busOut
@@ -173,7 +175,8 @@ func (a *VirtualGrid) StopProcess() {
 	}
 }
 
-func Process(pid uuid.UUID, comm comm, bus virtualBus) {
+// Process is an asynchronous routine representing the hardware device.
+func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
 	defer close(bus.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
@@ -182,12 +185,12 @@ func Process(pid uuid.UUID, comm comm, bus virtualBus) {
 loop:
 	for {
 		select {
-		case target.control, ok = <-comm.outgoing: // write to 'hardware'
+		case target.control, ok = <-comm.send: // write to 'hardware'
 			if !ok {
 				break loop
 			}
 
-		case comm.incoming <- target.status: // read from 'hardware'
+		case comm.recieve <- target.status: // read from 'hardware'
 
 		case busStatus := <-bus.recieve: // read from 'virtual system'
 			if !ok {

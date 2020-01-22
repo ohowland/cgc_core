@@ -1,5 +1,6 @@
 {
     "Name": "Virtual Bus",
     "RatedVolt": 480,
-    "RatedHz": 60
+    "RatedHz": 60,
+    "Pollrate": 100
 }

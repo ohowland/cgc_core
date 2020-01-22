@@ -81,7 +81,7 @@ func newDummyAsset() *DummyAsset {
 
 func newVirtualBus() *VirtualACBus {
 	configPath := "../acbus_test_config.json"
-	bus, err := New(configPath)
+	bus, err := New(configPath, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -92,7 +92,7 @@ func newVirtualBus() *VirtualACBus {
 
 func TestNewVirtualACBus(t *testing.T) {
 	configPath := "../acbus_test_config.json"
-	bus, err := New(configPath)
+	bus, err := New(configPath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
