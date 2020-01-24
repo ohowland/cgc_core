@@ -136,30 +136,31 @@ type DummyDispatch struct {
 	mux          *sync.Mutex
 	PID          uuid.UUID
 	assetStatus  map[uuid.UUID]asset.Msg
-	assetControl map[uuid.UUID]asset.Msg
+	assetControl map[uuid.UUID]interface{}
 }
 
-func (d DummyDispatch) UpdateStatus(msg asset.Msg) {
+func (d *DummyDispatch) UpdateStatus(msg asset.Msg) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
-	d.assetStatus[msg.PID()] = msg.Payload().(asset.Msg)
+	d.assetStatus[msg.PID()] = msg
 }
 
-func (d DummyDispatch) DropAsset(uuid.UUID) {}
+func (d *DummyDispatch) DropAsset(uuid.UUID) error {
+	return nil
+}
 
-func (d DummyDispatch) GetControl() map[uuid.UUID]asset.Msg {
-	resp := asset.NewMsg(d.PID, assertedControl())
+func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	for _, Msg := range d.assetStatus {
-		d.assetControl[Msg.PID()] = resp
+		d.assetControl[Msg.PID()] = assertedControl()
 	}
 	return d.assetControl
 }
 
 func newDummyDispatch() dispatch.Dispatcher {
 	status := make(map[uuid.UUID]asset.Msg)
-	control := make(map[uuid.UUID]asset.Msg)
+	control := make(map[uuid.UUID]interface{})
 	pid, _ := uuid.NewUUID()
 	return &DummyDispatch{&sync.Mutex{}, pid, status, control}
 }
@@ -205,8 +206,6 @@ func TestAddMember(t *testing.T) {
 	for pid := range bus.members {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
 	}
-
-	bus.StopProcess()
 }
 
 func TestRemoveMember(t *testing.T) {
@@ -232,8 +231,6 @@ func TestRemoveMember(t *testing.T) {
 		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
 		assert.Assert(t, pid != asset2.PID())
 	}
-
-	bus.StopProcess()
 }
 
 func TestUpdateDispatcherUpdate(t *testing.T) {
@@ -262,8 +259,6 @@ func TestUpdateDispatcherUpdate(t *testing.T) {
 	asset2Msg := dispatch.assetStatus[asset2.PID()]
 	assert.Assert(t, asset2Msg.Payload().(DummyStatus) == assertStatus)
 	assert.Assert(t, asset2Msg.PID() == asset2.PID())
-
-	bus.StopProcess()
 }
 
 func TestUpdateDispatcherControl(t *testing.T) {
@@ -281,10 +276,8 @@ func TestUpdateDispatcherControl(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	assetControl := bus.dispatch.GetControl()
-	assert.Assert(t, assetControl[asset1.PID()].Payload().(DummyControl) == assertControl)
-	assert.Assert(t, assetControl[asset2.PID()].Payload().(DummyControl) == assertControl)
-
-	bus.StopProcess()
+	assert.Assert(t, assetControl[asset1.PID()].(DummyControl) == assertControl)
+	assert.Assert(t, assetControl[asset2.PID()].(DummyControl) == assertControl)
 }
 
 func TestGetRelay(t *testing.T) {

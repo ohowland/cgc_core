@@ -8,24 +8,45 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
-type Core struct {
-	mux        *sync.Mutex
-	calcStatus *dispatch.CalculatedStatus
-	assetState map[uuid.UUID]interface{}
+// ManualDispatch is the core datastructure
+type ManualDispatch struct {
+	mux           *sync.Mutex
+	calcStatus    *dispatch.CalculatedStatus
+	memberControl map[uuid.UUID]interface{}
 }
 
-func (c *Core) UpdateStatus(msg asset.Msg) {
+// New returns a configured ManualDispatch struct
+func New(configPath string) (ManualDispatch, error) {
+	calcStatus, err := dispatch.NewCalculatedStatus()
+	memberControl := make(map[uuid.UUID]interface{})
+	return ManualDispatch{
+		&sync.Mutex{},
+		&calcStatus,
+		memberControl}, err
+}
+
+// UpdateStatus ...
+func (c *ManualDispatch) UpdateStatus(msg asset.Msg) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	c.calcStatus.AggregateMemberStatus(msg)
 }
 
-func (c *Core) DropAsset(uuid.UUID) {
+// DropAsset ...
+func (c *ManualDispatch) DropAsset(pid uuid.UUID) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-
+	c.calcStatus.DropAsset(pid)
+	delete(c.memberControl, pid)
+	return nil
 }
 
-func (c Core) GetControl() map[uuid.UUID]interface{} {
-	return c.assetState
+// GetControl ...
+func (c ManualDispatch) GetControl() map[uuid.UUID]interface{} {
+	return c.memberControl
+}
+
+// GetMemberStatus
+func (c ManualDispatch) MemberStatus() map[uuid.UUID]dispatch.Status {
+	return c.calcStatus.MemberStatus()
 }

@@ -192,7 +192,7 @@ loop:
 
 		case comm.recieve <- target.status: // read from 'hardware'
 
-		case busStatus := <-bus.recieve: // read from 'virtual system'
+		case busStatus, ok := <-bus.recieve: // read from 'virtual system'
 			if !ok {
 				break loop
 			}

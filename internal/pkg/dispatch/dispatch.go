@@ -7,6 +7,6 @@ import (
 
 type Dispatcher interface {
 	UpdateStatus(asset.Msg)
-	DropAsset(uuid.UUID)
-	GetControl() map[uuid.UUID]asset.Msg
+	DropAsset(uuid.UUID) error
+	GetControl() map[uuid.UUID]interface{}
 }

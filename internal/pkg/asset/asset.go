@@ -9,16 +9,13 @@ type Asset interface {
 	PID() uuid.UUID
 	UpdateStatus()
 	Subscribe(uuid.UUID) <-chan Msg
-	RequestControl(uuid.UUID, <-chan Msg) bool
 	Unsubscribe(uuid.UUID)
+	RequestControl(uuid.UUID, <-chan Msg) bool
 }
 
-type Power interface {
+type Status interface {
 	KW() float64
 	KVAR() float64
-}
-
-type Capacity interface {
 	RealPositiveCapacity() float64
 	RealNegativeCapacity() float64
 }

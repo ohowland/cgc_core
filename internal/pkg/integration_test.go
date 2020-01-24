@@ -1,6 +1,7 @@
 package cgcintegrationtest
 
 import (
+	"log"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
@@ -20,7 +22,9 @@ import (
 )
 
 func TestVirtualBusVirtualEss(t *testing.T) {
-	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json")
+	disp, err := manualdispatch.New("")
+
+	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json", &disp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,12 +112,13 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 	device4.StopProcess()
 	device5.StopProcess()
 	device6.StopProcess()
-	time.Sleep(100 * time.Millisecond)
-	bus1.StopProcess()
+	time.Sleep(500 * time.Millisecond)
 }
 
 func TestVirtualBusAllAssets(t *testing.T) {
-	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json")
+	disp, err := manualdispatch.New("")
+
+	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json", &disp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,9 +155,9 @@ func TestVirtualBusAllAssets(t *testing.T) {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
 			<-ticker.C
+			go grid1.UpdateStatus()
 			go ess1.UpdateStatus()
 			go feeder1.UpdateStatus()
-			go grid1.UpdateStatus()
 		}
 	}(&ess1, &feeder1, &grid1, &bus1)
 
@@ -167,12 +172,123 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	gridstatus := <-ch
 
-	assert.Assert(t, gridstatus.Payload().(asset.VirtualStatus).KW() == -1*kwSp)
+	assert.Assert(t, gridstatus.Payload().(grid.Status).KW() == -1*kwSp)
 	assert.Assert(t, bus1.Energized() == true)
 
 	device1.StopProcess()
 	device2.StopProcess()
 	device3.StopProcess()
-	time.Sleep(100 * time.Millisecond)
-	bus1.StopProcess()
+	time.Sleep(500 * time.Millisecond)
+}
+
+type MockDispatch struct {
+	msgList    []asset.Msg
+	controlMap map[uuid.UUID]interface{}
+}
+
+func newMockDispatch() MockDispatch {
+	msgList := make([]asset.Msg, 0)
+	controlMap := make(map[uuid.UUID]interface{})
+	return MockDispatch{msgList, controlMap}
+}
+
+func (d *MockDispatch) UpdateStatus(msg asset.Msg) {
+	d.msgList = append(d.msgList, msg)
+}
+
+func (d *MockDispatch) DropAsset(uuid.UUID) error {
+	return nil
+}
+
+func (d MockDispatch) GetControl() map[uuid.UUID]interface{} {
+	return d.controlMap
+}
+
+func TestBusDispatchForwarding(t *testing.T) {
+
+	dispatch := newMockDispatch()
+
+	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json", &dispatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ess1, err := virtualess.New("../../config/asset/virtualESS.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bus1.AddMember(&ess1)
+
+	// TODO: This should be hidden. When a virtual device is added to a virtual bus, it should add itself.
+	relay1 := bus1.Relayer().(*virtualacbus.VirtualACBus)
+	device1 := ess1.DeviceController().(*virtualess.VirtualESS)
+	relay1.AddMember(device1)
+
+	go func(*ess.Asset) {
+		ticker := time.NewTicker(1 * time.Second)
+		for {
+			<-ticker.C
+			go ess1.UpdateStatus()
+		}
+	}(&ess1)
+
+	for len(dispatch.msgList) < 1 {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	assert.Assert(t, dispatch.msgList[0].PID() == ess1.PID())
+}
+
+func TestDispatchCalculatedStatusAggregate(t *testing.T) {
+
+	dispatch, err := manualdispatch.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json", &dispatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ess1, err := virtualess.New("../../config/asset/virtualESS.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grid1, err := virtualgrid.New("../../config/asset/virtualGrid.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bus1.AddMember(&ess1)
+	bus1.AddMember(&grid1)
+
+	// TODO: This should be hidden. When a virtual device is added to a virtual bus, it should add itself.
+	relay1 := bus1.Relayer().(*virtualacbus.VirtualACBus)
+	device1 := ess1.DeviceController().(*virtualess.VirtualESS)
+	device2 := grid1.DeviceController().(*virtualgrid.VirtualGrid) // How to make this interface explicit?
+
+	relay1.AddMember(device1)
+	relay1.AddMember(device2)
+
+	go func(*ess.Asset, *grid.Asset, *acbus.ACBus) {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		for {
+			<-ticker.C
+			go grid1.UpdateStatus()
+			go ess1.UpdateStatus()
+		}
+	}(&ess1, &grid1, &bus1)
+
+	kwSp := 5.0
+	ess1.WriteControl(ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+	grid1.WriteControl(grid.MachineControl{CloseIntertie: true})
+	time.Sleep(2000 * time.Millisecond)
+
+	memberStatus := dispatch.MemberStatus()
+	log.Println(memberStatus)
+
+	assert.Assert(t, memberStatus[ess1.PID()].KW() == kwSp)
 }
