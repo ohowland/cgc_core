@@ -12,7 +12,7 @@ import (
 type ManualDispatch struct {
 	mux           *sync.Mutex
 	calcStatus    *dispatch.CalculatedStatus
-	memberControl map[uuid.UUID]interface{}
+	memberControl map[uuid.UUID]interface{}	
 }
 
 // New returns a configured ManualDispatch struct
@@ -20,9 +20,11 @@ func New(configPath string) (ManualDispatch, error) {
 	calcStatus, err := dispatch.NewCalculatedStatus()
 	memberControl := make(map[uuid.UUID]interface{})
 	return ManualDispatch{
-		&sync.Mutex{},
-		&calcStatus,
-		memberControl}, err
+			&sync.Mutex{},
+			&calcStatus,
+			memberControl,
+		},
+		err
 }
 
 // UpdateStatus ...
@@ -50,3 +52,5 @@ func (c ManualDispatch) GetControl() map[uuid.UUID]interface{} {
 func (c ManualDispatch) MemberStatus() map[uuid.UUID]dispatch.Status {
 	return c.calcStatus.MemberStatus()
 }
+
+func (c *ManualDispatch) PostStatus()
