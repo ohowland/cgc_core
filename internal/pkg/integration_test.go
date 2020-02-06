@@ -287,8 +287,8 @@ func TestDispatchCalculatedStatusAggregate(t *testing.T) {
 	grid1.WriteControl(grid.MachineControl{CloseIntertie: true})
 	time.Sleep(2000 * time.Millisecond)
 
-	memberStatus := dispatch.MemberStatus()
+	memberStatus := dispatch.GetStatus()
 	log.Println(memberStatus)
 
-	assert.Assert(t, memberStatus[ess1.PID()].KW() == kwSp)
+	assert.Assert(t, memberStatus[ess1.PID()].(asset.Status).KW() == kwSp)
 }

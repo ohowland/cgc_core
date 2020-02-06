@@ -4,20 +4,21 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gorilla/mux"
-	"github.com/ohowland/cgc/internal/pkg/webservice"
+	"github.com/ohowland/cgc/internal/lib/webservice"
+	"github.com/ohowland/cgc/internal/lib/webservice/models"
 )
 
-func makeRouter() *mux.Router {
-	r := mux.NewRouter()
-	r.HandleFunc("/", webservice.BaseHandler)
-	r.HandleFunc("/asset/{pid}/status", webservice.StatusHandler).Methods("GET", "POST")
-	r.HandleFunc("/asset/{pid}/control", webservice.ControlHandler).Methods("GET")
-	return r
-}
-
 func main() {
-	r := makeRouter()
+	db, err := models.NewDB()
+	if err != nil {
+		panic(err)
+	}
+
+	app := webservice.App{
+		DB: db,
+	}
+
+	r := app.Router()
 	http.Handle("/", r)
 
 	port := ":8080"

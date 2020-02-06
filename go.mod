@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/websocket v1.4.1
+	github.com/lib/pq v1.3.0
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/rivo/tview v0.0.0-20200108161608-1316ea7a4b35
 	golang.org/x/tools v0.0.0-20200108203644-89082a384178 // indirect

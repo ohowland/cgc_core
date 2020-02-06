@@ -6,22 +6,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/bus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
 )
 
 func buildBuses() (map[uuid.UUID]bus.Bus, error) {
 	buses := make(map[uuid.UUID]bus.Bus)
-
-	bus, err := virtualacbus.New("./config/bus/virtualACBus.json")
-	if err != nil {
-		return buses, err
-	}
-	buses[bus.PID()] = &bus
-
-	return buses, err
+	return buses, nil
 }
 
 /*
@@ -32,46 +22,6 @@ func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
 
 func buildAssets(buses map[uuid.UUID]bus.Bus) (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
-
-	ess, err := virtualess.New("./config/asset/virtualESS.json")
-	if err != nil {
-		return assets, err
-	}
-
-	var targetBus bus.Bus
-	for _, bus := range buses {
-		if bus.Name() == ess.Config().Bus() {
-			targetBus = bus
-		}
-	}
-
-	targetBus.(*acbus.ACBus).AddMember(&ess)
-	ess.DeviceController().(*virtualess.VirtualESS).LinkToBus(targetBus)
-	assets[ess.PID()] = &ess
-
-	/*
-		grid, err := virtualgrid.New("./config/asset/virtualGrid.json", buses)
-		if err != nil {
-			return assets, err
-		}
-		assets[grid.PID()] = &grid
-	*/
-
-	/*
-		pv, err := virtualpv.New("./config/asset/virtualPV.json", buses)
-		if err != nil {
-			return assets, err
-		}
-		assets[pv.PID()] = &pv
-	*/
-
-	/*
-		feeder, err := virtualfeeder.New("./config/asset/virtualFeeder.json", buses)
-		if err != nil {
-			return assets, err
-		}
-		assets[feeder.PID()] = &feeder
-	*/
 
 	return assets, nil
 }
@@ -84,6 +34,7 @@ func launchUpdateLoop(assets map[uuid.UUID]asset.Asset) error {
 			asset.UpdateStatus()
 			//asset.WriteControl()
 		}
+		break
 	}
 	return nil
 }
