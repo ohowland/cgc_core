@@ -84,11 +84,12 @@ func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 
 		sqlStatement := `
 		INSERT INTO asset_status (pid, kw, kvar)
-		VALUES ($1, $2, $3, $4)`
+		VALUES ($1, $2, $3, $4);`
 
-		_, err = app.DB.Exec(sqlStatement, req[])
+		_, err = app.DB.Exec(sqlStatement, req["pid"], req["kw"], req["kvar"])
 
-		log.Println("POSTED to Status:", jsonMap)
+		// handle err
+		log.Println("POSTED to Status:", req)
 
 	default:
 		w.WriteHeader(http.StatusBadRequest)
