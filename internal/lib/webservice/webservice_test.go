@@ -1,6 +1,9 @@
 package webservice
 
 import (
+	"bytes"
+	"encoding/json"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,9 +15,7 @@ import (
 
 func TestAssetStatusGet(t *testing.T) {
 	db, err := models.NewDB()
-	if err != nil {
-		panic(err)
-	}
+	assert.NilError(t, err)
 
 	app := App{
 		DB: db,
@@ -23,13 +24,20 @@ func TestAssetStatusGet(t *testing.T) {
 	pid, err := uuid.NewUUID()
 	assert.NilError(t, err)
 
-	_, err = app.DB.Exec(`INSERT INTO asset_status (pid, kw, kvar) VALUES ($1, $2, $3)`, pid, 1, 2)
-	if err != nil {
-		panic(err)
+	asset := models.AssetStatus{
+		PID:  pid,
+		Name: "ESS",
+		KW:   rand.Float64(),
+		KVAR: rand.Float64(),
 	}
 
+	_, err = app.DB.Exec(`INSERT INTO asset_status (pid, name, kw, kvar) 
+			      VALUES ($1, $2, $3, $4)`,
+		asset.PID, asset.Name, asset.KW, asset.KVAR)
+	assert.NilError(t, err)
+
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "http://example.com/asset/"+pid.String()+"/status", nil)
+	r := httptest.NewRequest("GET", "http://example.com/assets/"+asset.PID.String()+"/status", nil)
 
 	router := app.Router()
 	router.ServeHTTP(w, r)
@@ -37,33 +45,32 @@ func TestAssetStatusGet(t *testing.T) {
 	assert.Equal(t, "application/json; charset=UTF-8", w.HeaderMap.Get("Content-Type"), "got expected Content-Type in response")
 }
 
-/*
-type testAssetStatus struct {
-	Test1 string  `json:"Test1"`
-	Test2 float64 `json:"Test2"`
-	Test3 bool    `json:"Test3"`
-}
-
 func TestAssetStatusPost(t *testing.T) {
+	db, err := models.NewDB()
+	assert.NilError(t, err)
+
+	app := App{
+		DB: db,
+	}
+
 	pid, err := uuid.NewUUID()
 	assert.NilError(t, err)
 
-	app := App{}
-
-	status := testAssetStatus{
-		Test1: "hi",
-		Test2: 2.1,
-		Test3: true,
+	asset := models.AssetStatus{
+		PID:  pid,
+		Name: "Grid",
+		KW:   rand.Float64(),
+		KVAR: rand.Float64(),
 	}
 
-	reqBody, err := json.Marshal(status)
+	reqBody, err := json.Marshal(asset)
 
-	var statusReturn testAssetStatus
+	var statusReturn models.AssetStatus
 	err = json.Unmarshal(reqBody, &statusReturn)
 	assert.NilError(t, err)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("POST", "http://example.com/asset/"+pid.String()+"/status", bytes.NewBuffer(reqBody))
+	r := httptest.NewRequest("POST", "http://example.com/assets/"+asset.PID.String()+"/status", bytes.NewBuffer(reqBody))
 
 	router := app.Router()
 	router.ServeHTTP(w, r)
@@ -72,7 +79,6 @@ func TestAssetStatusPost(t *testing.T) {
 	assert.Equal(t, "application/json; charset=UTF-8", w.HeaderMap.Get("Content-Type"), "got expected Content-Type in response")
 
 }
-*/
 
 /*
 func TestAssetControlGet(t *testing.T) {

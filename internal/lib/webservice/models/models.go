@@ -4,20 +4,23 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
 const (
 	host     = "localhost"
 	port     = 5432
-	user     = "postgres"
-	password = "zx125!G33"
+	user     = "cgc"
+	password = "x9xwa25"
 	dbname   = "cgc_test"
 )
 
 type AssetStatus struct {
-	KW   float64
-	KVAR float64
+	PID  uuid.UUID `json:"PID"`
+	Name string    `json:"Name"`
+	KW   float64   `json:"KW"`
+	KVAR float64   `json:"KVAR"`
 }
 
 // NewDB returns a database reference
@@ -45,7 +48,8 @@ func createTables() {
 
 	statusTable := `
 	CREATE TABLE asset_status (
-		pid UUID PRIMARY KEY,
+	        name VARCHAR(257),
+		pid UUID,
 		kw FLOAT,
 		kvar FLOAT
 	);`
@@ -56,7 +60,8 @@ func createTables() {
 
 	controlTable := `
 	CREATE TABLE asset_control (
-		pid UUID PRIMARY KEY,
+	        name VARCHAR(256),
+		pid UUID,
 		run_request BOOL,
 		kw FLOAT,
 		kvar FLOAT,

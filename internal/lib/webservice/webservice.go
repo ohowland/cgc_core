@@ -26,7 +26,8 @@ func (app *App) Router() *mux.Router {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/", app.BaseHandler)
-	r.HandleFunc("/asset/{pid}/status", app.StatusHandler).Methods("GET", "POST")
+	r.HandleFunc("/assets/status", app.AllStatusHandler).Methods("GET")
+	r.HandleFunc("/assets/{pid}/status", app.StatusHandler).Methods("GET", "POST")
 	//r.HandleFunc("/asset/{pid}/control", app.ControlHandler).Methods("GET")
 	return r
 }
@@ -45,6 +46,30 @@ func (app *App) BaseHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (app *App) AllStatusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	rows, err := app.DB.Query(`SELECT (name, pid, kw, kvar) FROM asset_status`)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	defer rows.Close()
+
+	var statusArray []models.AssetStatus
+	for rows.Next() {
+		status := models.AssetStatus{}
+		err = rows.Scan(&status.Name, &status.PID, &status.KW, &status.KVAR)
+		if err == nil {
+			statusArray = append(statusArray, status)
+		}
+	}
+
+	body, err := json.Marshal(statusArray)
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(body)
+
+}
+
 func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -55,14 +80,14 @@ func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("malformed UUID:", err)
 		}
 
-		rows, err := app.DB.Query(`SELECT (kw, kvar) FROM asset_status WHERE pid = $1`, pid)
+		rows, err := app.DB.Query(`SELECT (name, kw, kvar) FROM asset_status WHERE pid = $1`, pid)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
 			defer rows.Close()
 			status := models.AssetStatus{}
 			for rows.Next() {
-				err = rows.Scan(&status.KW, &status.KVAR)
+				err = rows.Scan(&status.Name, &status.KW, &status.KVAR)
 			}
 
 			body, err := json.Marshal(status)
@@ -71,7 +96,6 @@ func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			w.WriteHeader(http.StatusOK)
-			log.Println("GET REQUEST:", vars)
 			_, err = w.Write(body)
 		}
 
@@ -86,10 +110,10 @@ func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		err = json.Unmarshal(body, &req)
 
 		sqlStatement := `
-		INSERT INTO asset_status (pid, kw, kvar)
+		INSERT INTO asset_status (name, pid, kw, kvar)
 		VALUES ($1, $2, $3, $4);`
 
-		_, err = app.DB.Exec(sqlStatement, req["pid"], req["kw"], req["kvar"])
+		_, err = app.DB.Exec(sqlStatement, req["name"], req["pid"], req["kw"], req["kvar"])
 
 		// handle err
 		log.Println("POSTED to Status:", req)
