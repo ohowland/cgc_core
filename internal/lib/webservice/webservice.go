@@ -55,22 +55,25 @@ func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("malformed UUID:", err)
 		}
 
-		rows, err := app.DB.Query(`SELECT (kw, kvar) FROM asset_status WHERE pid = %s`, pid)
-		defer rows.Close()
-
-		status := models.AssetStatus{}
-		for rows.Next() {
-			err = rows.Scan(&status.KW, &status.KVAR)
-		}
-
-		body, err := json.Marshal(status)
+		rows, err := app.DB.Query(`SELECT (kw, kvar) FROM asset_status WHERE pid = $1`, pid)
 		if err != nil {
-			log.Println("malformed JSON:", err)
-		}
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			defer rows.Close()
+			status := models.AssetStatus{}
+			for rows.Next() {
+				err = rows.Scan(&status.KW, &status.KVAR)
+			}
 
-		w.WriteHeader(http.StatusOK)
-		log.Println("GET REQUEST:", vars)
-		_, err = w.Write(body)
+			body, err := json.Marshal(status)
+			if err != nil {
+				log.Println("malformed JSON:", err)
+			}
+
+			w.WriteHeader(http.StatusOK)
+			log.Println("GET REQUEST:", vars)
+			_, err = w.Write(body)
+		}
 
 	case "POST":
 		w.WriteHeader(http.StatusCreated)

@@ -8,6 +8,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
 )
 
@@ -31,8 +32,9 @@ func newESS() ess.Asset {
 }
 
 func newBus() acbus.ACBus {
+	dispatch := dispatch.NewDummyDispatch()
 	configPath := "../../../bus/acbus/acbus_test_config.json"
-	bus, err := virtualacbus.New(configPath)
+	bus, err := virtualacbus.New(configPath, dispatch)
 	if err != nil {
 		panic(err)
 	}

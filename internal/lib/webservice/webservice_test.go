@@ -1,21 +1,32 @@
 package webservice
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/lib/webservice/models"
 	"gotest.tools/assert"
 )
 
 func TestAssetStatusGet(t *testing.T) {
+	db, err := models.NewDB()
+	if err != nil {
+		panic(err)
+	}
+
+	app := App{
+		DB: db,
+	}
+
 	pid, err := uuid.NewUUID()
 	assert.NilError(t, err)
 
-	app := App{}
+	_, err = app.DB.Exec(`INSERT INTO asset_status (pid, kw, kvar) VALUES ($1, $2, $3)`, pid, 1, 2)
+	if err != nil {
+		panic(err)
+	}
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "http://example.com/asset/"+pid.String()+"/status", nil)
@@ -26,6 +37,7 @@ func TestAssetStatusGet(t *testing.T) {
 	assert.Equal(t, "application/json; charset=UTF-8", w.HeaderMap.Get("Content-Type"), "got expected Content-Type in response")
 }
 
+/*
 type testAssetStatus struct {
 	Test1 string  `json:"Test1"`
 	Test2 float64 `json:"Test2"`
@@ -60,7 +72,9 @@ func TestAssetStatusPost(t *testing.T) {
 	assert.Equal(t, "application/json; charset=UTF-8", w.HeaderMap.Get("Content-Type"), "got expected Content-Type in response")
 
 }
+*/
 
+/*
 func TestAssetControlGet(t *testing.T) {
 	pid, err := uuid.NewUUID()
 	assert.NilError(t, err)
@@ -75,3 +89,4 @@ func TestAssetControlGet(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code, "get returned 200")
 	assert.Equal(t, "application/json; charset=UTF-8", w.HeaderMap.Get("Content-Type"), "got expected Content-Type in response")
 }
+*/
