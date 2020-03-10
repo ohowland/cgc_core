@@ -9,9 +9,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/lib/webservice"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
-	"github.com/ohowland/cgc/internal/lib/webservice"
 )
 
 // ManualDispatch is the core datastructure
@@ -81,13 +81,21 @@ func (c ManualDispatch) GetCalcStatus() map[uuid.UUID]dispatch.Status {
 }
 
 func (c ManualDispatch) updateHandler() {
+	log.Println("STATUS: ", c.GetStatus())
 	for pid, status := range c.GetStatus() {
+		log.Println(status)
 		json, err := json.Marshal(status)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		bytes.NewBuffer(json)
-		http.NewRequest("POST", c.handler.URL+c.handler.Port+"/asset/"+pid.String()+"/status", nil)
+
+		targetURL := c.handler.URL + "/assets/" + pid.String() + "/status"
+		log.Println(targetURL)
+		_, err = http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(json))
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 	}
 }
