@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
 
@@ -54,7 +54,7 @@ func newPV() (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Status)
+	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
@@ -86,7 +86,7 @@ func TestWriteControl(t *testing.T) {
 
 type subscriber struct {
 	pid uuid.UUID
-	ch  <-chan asset.Status
+	ch  <-chan msg.Msg
 }
 
 func TestUpdateStatus(t *testing.T) {
@@ -106,10 +106,10 @@ func TestUpdateStatus(t *testing.T) {
 		assertedStatus(),
 	}
 
-	status, ok := <-sub.ch
+	msg, ok := <-sub.ch
 
 	assert.Assert(t, ok == true)
-	assert.Assert(t, status == assertedStatus)
+	assert.Assert(t, msg.Payload().(Status) == assertedStatus)
 }
 
 func TestBroadcast(t *testing.T) {
@@ -135,9 +135,9 @@ func TestBroadcast(t *testing.T) {
 	}
 
 	for _, sub := range subs {
-		status, ok := <-sub.ch
+		msg, ok := <-sub.ch
 		assert.Assert(t, ok == true)
-		assert.Assert(t, status == assertedStatus)
+		assert.Assert(t, msg.Payload().(Status) == assertedStatus)
 	}
 }
 

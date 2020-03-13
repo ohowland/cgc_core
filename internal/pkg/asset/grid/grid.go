@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // DeviceController is the hardware abstraction layer
@@ -21,8 +21,8 @@ type Asset struct {
 	mux          *sync.Mutex
 	pid          uuid.UUID
 	device       DeviceController
-	broadcast    map[uuid.UUID]chan<- asset.Msg
-	control      <-chan asset.Msg
+	broadcast    map[uuid.UUID]chan<- msg.Msg
+	control      <-chan msg.Msg
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -38,8 +38,8 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
-	ch := make(chan asset.Msg)
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan msg.Msg {
+	ch := make(chan msg.Msg)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
@@ -56,7 +56,7 @@ func (a *Asset) Unsubscribe(pid uuid.UUID) {
 }
 
 // RequestControl connects the asset control to the read only channel parameter.
-func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.control = ch
@@ -76,7 +76,7 @@ func (a Asset) UpdateStatus() {
 	defer a.mux.Unlock()
 	for _, broadcast := range a.broadcast {
 		select {
-		case broadcast <- asset.NewMsg(a.PID(), status):
+		case broadcast <- msg.New(a.PID(), status):
 		default:
 		}
 	}
@@ -113,8 +113,8 @@ func (a Asset) Enable(b bool) {
 
 // Status wraps MachineStatus with mutex and state metadata
 type Status struct {
-	calc    CalculatedStatus
-	machine MachineStatus
+	Calc    CalculatedStatus `json:"CalculatedStatus"`
+	Machine MachineStatus    `json:"MachineStatus"`
 }
 
 // CalculatedStatus is a data structure representing asset state information
@@ -123,33 +123,33 @@ type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical Grid Intertie status
 type MachineStatus struct {
-	KW                   float64
-	KVAR                 float64
-	Hz                   float64
-	Volts                float64
-	RealPositiveCapacity float64
-	RealNegativeCapacity float64
-	Online               bool
+	KW                   float64 `json:"KW"`
+	KVAR                 float64 `json:"KVAR"`
+	Hz                   float64 `json:"Hz"`
+	Volts                float64 `json:"Volts"`
+	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
+	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
+	Online               bool    `json:"Online"`
 }
 
 // KW returns the asset's measured real power
 func (s Status) KW() float64 {
-	return s.machine.KW
+	return s.Machine.KW
 }
 
 // KVAR returns the asset's measured reactive power
 func (s Status) KVAR() float64 {
-	return s.machine.KVAR
+	return s.Machine.KVAR
 }
 
 // RealPositiveCapacity returns the asset's operative real positive capacity
 func (s Status) RealPositiveCapacity() float64 {
-	return s.machine.RealPositiveCapacity
+	return s.Machine.RealPositiveCapacity
 }
 
 // RealNegativeCapacity returns the asset's operative real negative capacity
 func (s Status) RealNegativeCapacity() float64 {
-	return s.machine.RealNegativeCapacity
+	return s.Machine.RealNegativeCapacity
 }
 
 // MachineControl represents the control state of the machine
@@ -198,9 +198,9 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
+	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan asset.Msg
+	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}

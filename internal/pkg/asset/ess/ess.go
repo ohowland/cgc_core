@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // DeviceController is the hardware abstraction layer
@@ -21,8 +21,8 @@ type Asset struct {
 	mux          *sync.Mutex
 	pid          uuid.UUID
 	device       DeviceController
-	broadcast    map[uuid.UUID]chan<- asset.Msg
-	control      <-chan asset.Msg
+	broadcast    map[uuid.UUID]chan<- msg.Msg
+	control      <-chan msg.Msg
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -39,8 +39,8 @@ func (a Asset) DeviceController() DeviceController {
 }
 
 // Subscribe returns a read only channel for the asset's status.
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan asset.Msg {
-	ch := make(chan asset.Msg)
+func (a *Asset) Subscribe(pid uuid.UUID) <-chan msg.Msg {
+	ch := make(chan msg.Msg)
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.broadcast[pid] = ch
@@ -59,7 +59,7 @@ func (a *Asset) Unsubscribe(pid uuid.UUID) {
 }
 
 // RequestControl connects the asset control to the read only channel parameter.
-func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	a.control = ch
@@ -79,7 +79,7 @@ func (a Asset) UpdateStatus() {
 	defer a.mux.Unlock()
 	for _, broadcast := range a.broadcast {
 		select {
-		case broadcast <- asset.NewMsg(a.PID(), status):
+		case broadcast <- msg.New(a.PID(), status):
 		default:
 		}
 	}
@@ -209,9 +209,9 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
+	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan asset.Msg
+	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}

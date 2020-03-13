@@ -6,12 +6,23 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus"
+	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
+	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 )
 
-func buildBuses() (map[uuid.UUID]bus.Bus, error) {
-	buses := make(map[uuid.UUID]bus.Bus)
-	return buses, nil
+func buildDispatch() (dispatch.Dispatcher, error) {
+	dispatch, err := manualdispatch.New("./config/dispatch/manualdispatch.json")
+	return &dispatch, err
+}
+
+func buildBuses(dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
+	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json", dispatch)
+	return vrBus, err
 }
 
 /*
@@ -20,39 +31,71 @@ func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
 }
 */
 
-func buildAssets(buses map[uuid.UUID]bus.Bus) (map[uuid.UUID]asset.Asset, error) {
+func buildAssets(bus *acbus.ACBus) (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
+	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-	return assets, nil
+	grid, err := virtualgrid.New("./config/asset/virtualGrid.json")
+	if err != nil {
+		panic(err)
+	}
+
+	assets[grid.PID()] = &grid
+	bus.AddMember(&grid)
+
+	vrGrid := grid.DeviceController().(*virtualgrid.VirtualGrid)
+	vrBus.AddMember(vrGrid)
+
+	ess, err := virtualess.New("./config/asset/virtualESS.json")
+	if err != nil {
+		panic(err)
+	}
+
+	assets[ess.PID()] = &ess
+	bus.AddMember(&ess)
+
+	vrEss := ess.DeviceController().(*virtualess.VirtualESS)
+	vrBus.AddMember(vrEss)
+
+	feeder, err := virtualfeeder.New("./config/asset/virtualFeeder.json")
+	if err != nil {
+		panic(err)
+	}
+
+	assets[feeder.PID()] = &feeder
+	bus.AddMember(&feeder)
+
+	vrFeeder := feeder.DeviceController().(*virtualfeeder.VirtualFeeder)
+	vrBus.AddMember(vrFeeder)
+
+	return assets, err
 }
 
-func launchUpdateLoop(assets map[uuid.UUID]asset.Asset) error {
+func launchUpdateLoop(assets map[uuid.UUID]asset.Asset) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		<-ticker.C
 		for _, asset := range assets {
 			asset.UpdateStatus()
-			//asset.WriteControl()
 		}
-		break
 	}
-	return nil
 }
-
-/*
-func launchServer(assets map[uuid.UUID]asset.Asset) {
-	go web.StartServer(assets)
-}
-*/
 
 func main() {
 	log.Println("Starting CGC v0.1")
 
-	log.Println("Building Buses")
-	buses, err := buildBuses()
+	log.Println("[MAIN] Building Dispatch")
+	dispatch, err := buildDispatch()
 	if err != nil {
 		panic(err)
 	}
+
+	log.Println("[MAIN] Building Buses")
+	bus, err := buildBuses(dispatch)
+	if err != nil {
+		panic(err)
+	}
+
 	/*
 		log.Println("Assembling Bus Graph")
 		busGraph, err := buildBusGraph(buses)
@@ -61,8 +104,8 @@ func main() {
 		}
 	*/
 
-	log.Println("[Building Assets]")
-	assets, err := buildAssets(buses)
+	log.Println("[MAIN] Building Assets")
+	assets, err := buildAssets(&bus)
 	if err != nil {
 		panic(err)
 	}
@@ -76,26 +119,14 @@ func main() {
 	*/
 
 	/*
-		log.Println("[Starting Dispatch]")
-		dispatch, err := buildDispatch(busGraph)
-		if err != nil {
-			panic(err)
-		}
-	*/
-
-	/*
 		microgrid.linkDispatch(dispatch)
 		if err != nil {
 			panic(err)
 		}
 	*/
 
-	log.Println("Starting update loops")
+	log.Println("[MAIN] Starting update loops")
 	launchUpdateLoop(assets)
-	/*
-		log.Println("Starting dispatch loop")
-		launchDispatchLoop(dispatch)
-	*/
 
 	/*
 		log.Println("Starting Datalogging")
@@ -107,5 +138,5 @@ func main() {
 		launchServer(assets)
 	*/
 
-	log.Println("Stopping system")
+	log.Println("[MAIN] Stopping system")
 }

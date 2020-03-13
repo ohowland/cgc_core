@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
 
@@ -57,9 +57,9 @@ func newFeeder() (Asset, error) {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- asset.Msg)
+	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan asset.Msg
+	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
@@ -93,7 +93,7 @@ func TestWriteControl(t *testing.T) {
 
 type subscriber struct {
 	pid uuid.UUID
-	ch  <-chan asset.Msg
+	ch  <-chan msg.Msg
 }
 
 func TestUpdateStatus(t *testing.T) {

@@ -1,7 +1,6 @@
 package manualdispatch
 
 import (
-	"math/rand"
 	"testing"
 
 	"github.com/google/uuid"
@@ -118,22 +117,4 @@ func TestDropAsset(t *testing.T) {
 	assert.Assert(t, memberstatus[pid2].KVAR() == status2.KVAR())
 	assert.Assert(t, memberstatus[pid2].RealPositiveCapacity() == status2.RealPositiveCapacity())
 	assert.Assert(t, memberstatus[pid2].RealNegativeCapacity() == status2.RealNegativeCapacity())
-}
-
-func TestUpdateHandler(t *testing.T) {
-	dispatch, _ := New("./manualdispatch_test_config.json")
-
-	pid1, _ := uuid.NewUUID()
-	pid2, _ := uuid.NewUUID()
-
-	asset1 := MockAsset{MockStatus{"ESS", pid1, rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64()}}
-	asset2 := MockAsset{MockStatus{"Grid", pid2, rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64()}}
-
-	msg1 := asset.NewMsg(pid1, asset1.Status)
-	msg2 := asset.NewMsg(pid2, asset2.Status)
-	dispatch.UpdateStatus(msg1)
-	dispatch.UpdateStatus(msg2)
-
-	dispatch.updateHandler()
-
 }

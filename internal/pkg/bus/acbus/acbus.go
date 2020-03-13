@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // ACBus represents a single electrical AC power system bus.
@@ -21,8 +22,8 @@ type ACBus struct {
 	mux      *sync.Mutex
 	pid      uuid.UUID
 	relay    Relayer
-	inbox    chan asset.Msg
-	members  map[uuid.UUID]chan<- asset.Msg
+	inbox    chan msg.Msg
+	members  map[uuid.UUID]chan<- msg.Msg
 	dispatch dispatch.Dispatcher
 	config   Config
 	stop     chan bool
@@ -50,9 +51,9 @@ func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus,
 		return ACBus{}, err
 	}
 
-	inbox := make(chan asset.Msg)
+	inbox := make(chan msg.Msg)
 	stop := make(chan bool)
-	members := make(map[uuid.UUID]chan<- asset.Msg)
+	members := make(map[uuid.UUID]chan<- msg.Msg)
 
 	return ACBus{
 		&sync.Mutex{},
@@ -87,7 +88,7 @@ loop:
 			for pid, control := range assetControls {
 
 				select {
-				case b.members[pid] <- asset.NewMsg(pid, control):
+				case b.members[pid] <- msg.New(pid, control):
 				default:
 				}
 			}
@@ -120,16 +121,18 @@ func (b *ACBus) stopProcess() {
 func (b *ACBus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	sub := a.Subscribe(b.pid)
+
+	//sub := a.Subscribe(b.pid)
+	sub := b.subscribe(a)
 
 	// create a channel for bus to publish to asset control
-	pub := make(chan asset.Msg)
+	pub := make(chan msg.Msg)
 	if ok := a.RequestControl(b.pid, pub); ok {
 		b.members[a.PID()] = pub
 	}
 
 	// aggregate messages from assets subscription into the bus inbox
-	go func(sub <-chan asset.Msg, inbox chan<- asset.Msg) {
+	go func(sub <-chan msg.Msg, inbox chan<- msg.Msg) {
 		for msg := range sub {
 			inbox <- msg
 		}
@@ -138,6 +141,11 @@ func (b *ACBus) AddMember(a asset.Asset) {
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
+}
+
+func (b ACBus) subscribe(s msg.Subscriber) <-chan msg.Msg {
+	sub := s.Subscribe(b.pid)
+	return sub
 }
 
 // removeMember revokes membership of an asset to the bus.
