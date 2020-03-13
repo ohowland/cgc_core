@@ -48,7 +48,7 @@ func createTables() {
 
 	statusTable := `
 	CREATE TABLE asset_status (
-	        name VARCHAR(257),
+	    name VARCHAR(257) PRIMARY KEY,
 		pid UUID,
 		kw FLOAT,
 		kvar FLOAT
@@ -60,7 +60,7 @@ func createTables() {
 
 	controlTable := `
 	CREATE TABLE asset_control (
-	        name VARCHAR(256),
+	    name VARCHAR(256) PRIMARY KEY,
 		pid UUID,
 		run_request BOOL,
 		kw FLOAT,

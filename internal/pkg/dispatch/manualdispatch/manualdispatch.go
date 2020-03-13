@@ -3,6 +3,7 @@ package manualdispatch
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,6 +12,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/lib/webservice"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid"
+	"github.com/ohowland/cgc/internal/pkg/asset/pv"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
@@ -83,19 +88,30 @@ func (c ManualDispatch) GetCalcStatus() map[uuid.UUID]dispatch.Status {
 func (c ManualDispatch) updateHandler() {
 	log.Println("STATUS: ", c.GetStatus())
 	for pid, status := range c.GetStatus() {
-		log.Println(status)
-		json, err := json.Marshal(status)
+
+		var b []byte
+		var err error
+		switch s := status.(type) {
+		case ess.Status:
+			b, err = json.Marshal(s)
+		case grid.Status:
+			b, err = json.Marshal(s)
+		case feeder.Status:
+			b, err = json.Marshal(s)
+		case pv.Status:
+			b, err = json.Marshal(s)
+		default:
+			b = json.RawMessage("{}")
+			err = errors.New("manualDispatch.updateHandler: Could not cast status")
+		}
+
 		if err != nil {
 			log.Println(err)
-			continue
 		}
 
 		targetURL := c.handler.URL + "/assets/" + pid.String() + "/status"
-		log.Println(targetURL)
-		_, err = http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(json))
-		if err != nil {
-			log.Println(err)
-			continue
-		}
+		log.Println("TARGET:", targetURL)
+		log.Println("JSON:", b)
+		_, err = http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(b))
 	}
 }
