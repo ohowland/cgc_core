@@ -4,20 +4,21 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 type DummyDispatch struct {
 	mux          *sync.Mutex
 	PID          uuid.UUID
-	assetStatus  map[uuid.UUID]msg.Msg
-	assetControl map[uuid.UUID]interface{}
+	AssetStatus  map[uuid.UUID]msg.Msg
+	AssetControl map[uuid.UUID]interface{}
 }
 
 func (d *DummyDispatch) UpdateStatus(msg msg.Msg) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
-	d.assetStatus[msg.PID()] = msg
+	d.AssetStatus[msg.PID()] = msg
 }
 
 func (d *DummyDispatch) DropAsset(uuid.UUID) error {
@@ -27,10 +28,10 @@ func (d *DummyDispatch) DropAsset(uuid.UUID) error {
 func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
 	d.mux.Lock()
 	defer d.mux.Unlock()
-	for _, Msg := range d.assetStatus {
-		d.assetControl[Msg.PID()] = 0xBEEF
+	for _, Msg := range d.AssetStatus {
+		d.AssetControl[Msg.PID()] = asset.AssertedControl()
 	}
-	return d.assetControl
+	return d.AssetControl
 }
 
 func NewDummyDispatch() Dispatcher {

@@ -4,35 +4,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
-
-type MockAsset struct {
-	Status MockStatus `json:"Status"`
-}
-
-type MockStatus struct {
-	Name                 string    `json:"Name"`
-	PID                  uuid.UUID `json:"PID"`
-	KW                   float64   `json:"KW"`
-	KVAR                 float64   `json:"KVAR"`
-	RealPositiveCapacity float64   `json:"RealPositiveCapacity"`
-	RealNegativeCapacity float64   `json:"RealNegativeCapacity"`
-}
-
-func (s MockAsset) KW() float64 {
-	return s.Status.KW
-}
-func (s MockAsset) KVAR() float64 {
-	return s.Status.KVAR
-}
-func (s MockAsset) RealPositiveCapacity() float64 {
-	return s.Status.RealPositiveCapacity
-}
-func (s MockAsset) RealNegativeCapacity() float64 {
-	return s.Status.RealNegativeCapacity
-}
 
 func TestNew(t *testing.T) {
 	_, err := New("./manualdispatch_test_config.json")
@@ -46,7 +21,7 @@ func TestUpdateStatusSingle(t *testing.T) {
 
 	pid, _ := uuid.NewUUID()
 
-	status := MockAsset{MockStatus{"ESS", pid, 10, 20, 30, 40}}
+	status := asset.DummyStatus{}
 	msg := msg.New(pid, status)
 
 	dispatch.UpdateStatus(msg)
@@ -69,11 +44,11 @@ func TestUpdatePowerMulti(t *testing.T) {
 
 	status1 := MockAsset{MockStatus{"ESS", pid1, 10, 20, 30, 40}}
 	status2 := MockAsset{MockStatus{"Grid", pid2, 40, 50, 60, 70}}
-	msg := msg.New(pid1, status1)
-	dispatch.UpdateStatus(msg)
+	msg1 := msg.New(pid1, status1)
+	dispatch.UpdateStatus(msg1)
 
-	msg = msg.New(pid2, status2)
-	dispatch.UpdateStatus(msg)
+	msg2 := msg.New(pid2, status2)
+	dispatch.UpdateStatus(msg2)
 
 	memberstatus := dispatch.calcStatus.MemberStatus()
 

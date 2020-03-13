@@ -118,18 +118,17 @@ func (b *ACBus) stopProcess() {
 
 // AddMember links an asset to the bus.
 // The bus subscribes to member status updates, and requests control of the asset.
-func (b *ACBus) AddMember(a interface{}) {
+func (b *ACBus) AddMember(asset interface{}) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
-	//sub := a.Subscribe(b.pid)
-	sub := b.subscribe(a.(msg.Subscriber))
+	// subscribe to asset broaccast
+	sub := b.subscribe(asset)
 
 	// create a channel for bus to publish to asset control
 	pub := make(chan msg.Msg)
-
-	if ok := a.(asset.Controller).RequestControl(b.pid, pub); ok {
-		b.members[a.(asset.Identifier).PID()] = pub
+	if ok := b.requestControl(asset, pub); ok {
+		b.members[pid(asset)] = pub
 	}
 
 	// aggregate messages from assets subscription into the bus inbox
@@ -144,9 +143,20 @@ func (b *ACBus) AddMember(a interface{}) {
 	}
 }
 
-func (b ACBus) subscribe(s msg.Subscriber) <-chan msg.Msg {
+func (b ACBus) requestControl(i interface{}, pub chan msg.Msg) bool {
+	c := i.(asset.Controller)
+	ok := c.RequestControl(b.pid, pub)
+	return ok
+}
+
+func (b ACBus) subscribe(i interface{}) <-chan msg.Msg {
+	s := i.(msg.Subscriber)
 	sub := s.Subscribe(b.pid)
 	return sub
+}
+
+func pid(i interface{}) uuid.UUID {
+	return i.(asset.Identifier).PID()
 }
 
 // removeMember revokes membership of an asset to the bus.
