@@ -15,3 +15,13 @@ type Identifier interface {
 	PID() uuid.UUID
 	Name() string
 }
+
+type Power interface {
+	KW() float64
+	KVAR() float64
+}
+
+type Capacity interface {
+	RealPositiveCapacity() float64
+	RealNegativeCapacity() float64
+}

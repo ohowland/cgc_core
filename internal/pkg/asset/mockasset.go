@@ -10,7 +10,7 @@ import (
 
 // randDummyStatus returns a closure for random DummyAsset Status
 func randDummyStatus() func() DummyStatus {
-	status := DummyStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}
+	status := DummyStatus{MachineDummyStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}}
 	return func() DummyStatus {
 		return status
 	}
@@ -78,16 +78,36 @@ func (c DummyControl) KVAR() float64 {
 }
 
 type DummyStatus struct {
-	KW                   float64
-	KVAR                 float64
-	Hz                   float64
-	Volt                 float64
-	RealPositiveCapacity float64
-	RealNegativeCapacity float64
-	Gridforming          bool
+	machine MachineDummyStatus
+}
+
+type MachineDummyStatus struct {
+	KW                   float64 `json:"KW"`
+	KVAR                 float64 `json:"KVAR"`
+	Hz                   float64 `json:"Hz"`
+	Volt                 float64 `json:"Volt"`
+	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
+	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
+	Gridforming          bool    `json:"Gridforming"`
 }
 
 func NewDummyAsset() DummyAsset {
 	ch := make(chan msg.Msg, 1)
 	return DummyAsset{pid: uuid.New(), broadcast: ch}
+}
+
+func (s DummyStatus) KW() float64 {
+	return s.machine.KW
+}
+
+func (s DummyStatus) KVAR() float64 {
+	return s.machine.KVAR
+}
+
+func (s DummyStatus) RealPositiveCapacity() float64 {
+	return s.machine.RealPositiveCapacity
+}
+
+func (s DummyStatus) RealNegativeCapacity() float64 {
+	return s.machine.RealNegativeCapacity
 }

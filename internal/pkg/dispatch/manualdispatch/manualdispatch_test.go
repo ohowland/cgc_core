@@ -42,8 +42,9 @@ func TestUpdatePowerMulti(t *testing.T) {
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := MockAsset{MockStatus{"ESS", pid1, 10, 20, 30, 40}}
-	status2 := MockAsset{MockStatus{"Grid", pid2, 40, 50, 60, 70}}
+	status1 := asset.AssertedStatus()
+	status2 := asset.AssertedStatus()
+
 	msg1 := msg.New(pid1, status1)
 	dispatch.UpdateStatus(msg1)
 
@@ -73,11 +74,12 @@ func TestDropAsset(t *testing.T) {
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := MockAsset{MockStatus{"ESS", pid1, 11, 22, 33, 44}}
-	status2 := MockAsset{MockStatus{"Grid", pid2, 55, 66, 77, 88}}
+	status1 := asset.AssertedStatus()
+	status2 := asset.AssertedStatus()
 
 	msg1 := msg.New(pid1, status1)
 	msg2 := msg.New(pid2, status2)
+
 	dispatch.UpdateStatus(msg1)
 	dispatch.UpdateStatus(msg2)
 
@@ -88,6 +90,11 @@ func TestDropAsset(t *testing.T) {
 	_, ok := memberstatus[pid1]
 	assert.Assert(t, !ok)
 
+	if memberstatus[pid2].KW() != status2.KW() {
+		t.Errorf("DropAsset(): FAILED. %f != %f", memberstatus[pid2].KW(), status2.KW())
+	} else {
+		t.Logf("DropAsset(): PASSED. %f == %f", memberstatus[pid2].KW(), status2.KW())
+	}
 	assert.Assert(t, memberstatus[pid2].KW() == status2.KW())
 	assert.Assert(t, memberstatus[pid2].KVAR() == status2.KVAR())
 	assert.Assert(t, memberstatus[pid2].RealPositiveCapacity() == status2.RealPositiveCapacity())
