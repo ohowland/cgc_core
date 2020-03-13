@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // ManualDispatch is the core datastructure
@@ -31,7 +31,7 @@ func New(configPath string) (ManualDispatch, error) {
 }
 
 // UpdateStatus ...
-func (c *ManualDispatch) UpdateStatus(msg asset.Msg) {
+func (c *ManualDispatch) UpdateStatus(msg msg.Msg) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	c.memberStatus[msg.PID()] = msg.Payload()

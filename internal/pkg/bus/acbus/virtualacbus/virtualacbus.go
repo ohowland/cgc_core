@@ -9,6 +9,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // VirtualACBus is the top level data structure for virtual bus.
@@ -16,7 +17,7 @@ type VirtualACBus struct {
 	mux           *sync.Mutex
 	pid           uuid.UUID
 	assetReciever chan asset.VirtualStatus
-	inbox         chan asset.Msg
+	inbox         chan msg.Msg
 	members       map[uuid.UUID]bool
 	stopProcess   chan bool
 }
@@ -33,7 +34,7 @@ func New(configPath string, dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
 		mux:           &sync.Mutex{},
 		pid:           id,
 		assetReciever: make(chan asset.VirtualStatus),
-		inbox:         make(chan asset.Msg),
+		inbox:         make(chan msg.Msg),
 		members:       make(map[uuid.UUID]bool),
 		stopProcess:   make(chan bool),
 	}
@@ -66,12 +67,12 @@ func (b *VirtualACBus) AddMember(a asset.VirtualAsset) {
 	b.members[a.PID()] = true
 
 	// aggregate messages from assets into the busReciever channel, which is read in the Process loop.
-	go func(pid uuid.UUID, assetSender <-chan asset.VirtualStatus, inbox chan<- asset.Msg) {
+	go func(pid uuid.UUID, assetSender <-chan asset.VirtualStatus, inbox chan<- msg.Msg) {
 		for status := range assetSender {
-			inbox <- asset.NewMsg(pid, status)
+			inbox <- msg.New(pid, status)
 		}
-		b.removeMember(a.PID())                // on channel close revoke membership
-		inbox <- asset.NewMsg(pid, Template{}) // and clear contribuiton.
+		b.removeMember(a.PID())           // on channel close revoke membership
+		inbox <- msg.New(pid, Template{}) // and clear contribuiton.
 	}(a.PID(), assetSender, b.inbox)
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
@@ -135,7 +136,7 @@ loop:
 	log.Println("VirtualBus Process: Loop Stopped")
 }
 
-func (b *VirtualACBus) processMsg(msg asset.Msg, memberStatus assetMap) assetMap {
+func (b *VirtualACBus) processMsg(msg msg.Msg, memberStatus assetMap) assetMap {
 	if b.hasMember(msg.PID()) {
 		memberStatus = aggregateStatus(msg, memberStatus)
 	} else if _, ok := memberStatus[msg.PID()]; ok { // if non-member, remove stale data -
@@ -152,7 +153,7 @@ func (b *VirtualACBus) hasMember(pid uuid.UUID) bool {
 }
 
 // updateAggregate manages the aggregation of asset status.
-func aggregateStatus(msg asset.Msg, agg assetMap) assetMap {
+func aggregateStatus(msg msg.Msg, agg assetMap) assetMap {
 	agg[msg.PID()] = msg.Payload().(asset.VirtualStatus)
 	return agg
 }
