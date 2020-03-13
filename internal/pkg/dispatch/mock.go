@@ -4,17 +4,17 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 type DummyDispatch struct {
 	mux          *sync.Mutex
 	PID          uuid.UUID
-	assetStatus  map[uuid.UUID]asset.Msg
+	assetStatus  map[uuid.UUID]msg.Msg
 	assetControl map[uuid.UUID]interface{}
 }
 
-func (d *DummyDispatch) UpdateStatus(msg asset.Msg) {
+func (d *DummyDispatch) UpdateStatus(msg msg.Msg) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	d.assetStatus[msg.PID()] = msg
@@ -34,7 +34,7 @@ func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
 }
 
 func NewDummyDispatch() Dispatcher {
-	status := make(map[uuid.UUID]asset.Msg)
+	status := make(map[uuid.UUID]msg.Msg)
 	control := make(map[uuid.UUID]interface{})
 	pid, _ := uuid.NewUUID()
 	return &DummyDispatch{&sync.Mutex{}, pid, status, control}

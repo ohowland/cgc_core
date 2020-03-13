@@ -2,12 +2,6 @@ package msg
 
 import "github.com/google/uuid"
 
-// Subscriber is an interface for objects that allow subscribtion to their events
-type Subscriber interface {
-	Subscribe(uuid.UUID) <-chan Msg
-	Unsubscribe(uuid.UUID)
-}
-
 // Msg is
 type Msg struct {
 	sender  uuid.UUID

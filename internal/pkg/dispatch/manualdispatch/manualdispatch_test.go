@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
 
@@ -47,7 +47,7 @@ func TestUpdateStatusSingle(t *testing.T) {
 	pid, _ := uuid.NewUUID()
 
 	status := MockAsset{MockStatus{"ESS", pid, 10, 20, 30, 40}}
-	msg := asset.NewMsg(pid, status)
+	msg := msg.New(pid, status)
 
 	dispatch.UpdateStatus(msg)
 
@@ -69,10 +69,10 @@ func TestUpdatePowerMulti(t *testing.T) {
 
 	status1 := MockAsset{MockStatus{"ESS", pid1, 10, 20, 30, 40}}
 	status2 := MockAsset{MockStatus{"Grid", pid2, 40, 50, 60, 70}}
-	msg := asset.NewMsg(pid1, status1)
+	msg := msg.New(pid1, status1)
 	dispatch.UpdateStatus(msg)
 
-	msg = asset.NewMsg(pid2, status2)
+	msg = msg.New(pid2, status2)
 	dispatch.UpdateStatus(msg)
 
 	memberstatus := dispatch.calcStatus.MemberStatus()
@@ -101,8 +101,8 @@ func TestDropAsset(t *testing.T) {
 	status1 := MockAsset{MockStatus{"ESS", pid1, 11, 22, 33, 44}}
 	status2 := MockAsset{MockStatus{"Grid", pid2, 55, 66, 77, 88}}
 
-	msg1 := asset.NewMsg(pid1, status1)
-	msg2 := asset.NewMsg(pid2, status2)
+	msg1 := msg.New(pid1, status1)
+	msg2 := msg.New(pid2, status2)
 	dispatch.UpdateStatus(msg1)
 	dispatch.UpdateStatus(msg2)
 

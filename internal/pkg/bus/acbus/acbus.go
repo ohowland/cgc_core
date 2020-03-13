@@ -122,8 +122,7 @@ func (b *ACBus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
-	//sub := a.Subscribe(b.pid)
-	sub := b.subscribe(a)
+	sub := a.Subscribe(b.pid)
 
 	// create a channel for bus to publish to asset control
 	pub := make(chan msg.Msg)
@@ -141,11 +140,6 @@ func (b *ACBus) AddMember(a asset.Asset) {
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
-}
-
-func (b ACBus) subscribe(s msg.Subscriber) <-chan msg.Msg {
-	sub := s.Subscribe(b.pid)
-	return sub
 }
 
 // removeMember revokes membership of an asset to the bus.

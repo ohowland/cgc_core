@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"

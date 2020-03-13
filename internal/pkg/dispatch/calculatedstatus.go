@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 type CalculatedStatus struct {
@@ -50,7 +51,7 @@ func NewCalculatedStatus() (CalculatedStatus, error) {
 	return CalculatedStatus{&sync.Mutex{}, memberStatus}, nil
 }
 
-func (b *CalculatedStatus) AggregateMemberStatus(msg asset.Msg) {
+func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 	status := b.memberStatus[msg.PID()]
 	switch p := msg.Payload().(type) {
 	case asset.Status:
@@ -68,7 +69,7 @@ func (b *CalculatedStatus) AggregateMemberStatus(msg asset.Msg) {
 	b.memberStatus[msg.PID()] = status
 }
 
-func (b CalculatedStatus) updateBusStatus(msg asset.Msg, memberStatus map[uuid.UUID]Status) Status {
+func (b CalculatedStatus) updateBusStatus(msg msg.Msg, memberStatus map[uuid.UUID]Status) Status {
 	return Status{
 		capacity: aggregateCapacity(memberStatus),
 	}
