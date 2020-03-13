@@ -5,9 +5,13 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
-// Asset is the interface for all physical devices that make up dispatchable sources/sinks in the power system.
-type Asset interface {
-	PID() uuid.UUID
+// Controller is the interface to update Asset Status
+type Controller interface {
 	UpdateStatus()
 	RequestControl(uuid.UUID, <-chan msg.Msg) bool
+}
+
+type Identifier interface {
+	PID() uuid.UUID
+	Name() string
 }

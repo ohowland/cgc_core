@@ -118,17 +118,18 @@ func (b *ACBus) stopProcess() {
 
 // AddMember links an asset to the bus.
 // The bus subscribes to member status updates, and requests control of the asset.
-func (b *ACBus) AddMember(a asset.Asset) {
+func (b *ACBus) AddMember(a interface{}) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
 	//sub := a.Subscribe(b.pid)
-	sub := b.subscribe(a)
+	sub := b.subscribe(a.(msg.Subscriber))
 
 	// create a channel for bus to publish to asset control
 	pub := make(chan msg.Msg)
-	if ok := a.RequestControl(b.pid, pub); ok {
-		b.members[a.PID()] = pub
+
+	if ok := a.(asset.Controller).RequestControl(b.pid, pub); ok {
+		b.members[a.(asset.Identifier).PID()] = pub
 	}
 
 	// aggregate messages from assets subscription into the bus inbox

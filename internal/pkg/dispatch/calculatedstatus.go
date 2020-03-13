@@ -1,12 +1,10 @@
 package dispatch
 
 import (
-	"log"
-	"reflect"
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 type CalculatedStatus struct {
@@ -50,25 +48,27 @@ func NewCalculatedStatus() (CalculatedStatus, error) {
 	return CalculatedStatus{&sync.Mutex{}, memberStatus}, nil
 }
 
-func (b *CalculatedStatus) AggregateMemberStatus(msg asset.Msg) {
-	status := b.memberStatus[msg.PID()]
-	switch p := msg.Payload().(type) {
-	case asset.Status:
-		status.capacity = capacity{
-			realPositiveCapacity: p.RealPositiveCapacity(),
-			realNegativeCapacity: p.RealNegativeCapacity(),
+func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
+	/*
+		status := b.memberStatus[msg.PID()]
+		switch p := msg.Payload().(type) {
+		case asset.Status:
+			status.capacity = capacity{
+				realPositiveCapacity: p.RealPositiveCapacity(),
+				realNegativeCapacity: p.RealNegativeCapacity(),
+			}
+			status.power = power{
+				kW:   p.KW(),
+				kVAR: p.KVAR(),
+			}
+		default:
+			log.Println("Calculated Status Rejected:", reflect.TypeOf(msg.Payload()))
 		}
-		status.power = power{
-			kW:   p.KW(),
-			kVAR: p.KVAR(),
-		}
-	default:
-		log.Println("Calculated Status Rejected:", reflect.TypeOf(msg.Payload()))
-	}
-	b.memberStatus[msg.PID()] = status
+		b.memberStatus[msg.PID()] = status
+	*/
 }
 
-func (b CalculatedStatus) updateBusStatus(msg asset.Msg, memberStatus map[uuid.UUID]Status) Status {
+func (b CalculatedStatus) updateBusStatus(msg msg.Msg, memberStatus map[uuid.UUID]Status) Status {
 	return Status{
 		capacity: aggregateCapacity(memberStatus),
 	}

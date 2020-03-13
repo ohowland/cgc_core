@@ -10,8 +10,8 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // randDummyStatus returns a closure for random DummyAsset Status
@@ -34,18 +34,18 @@ var assertedControl = randDummyControl()
 
 type DummyAsset struct {
 	pid          uuid.UUID
-	broadcast    chan<- asset.Msg
-	control      <-chan asset.Msg
+	broadcast    chan<- msg.Msg
+	control      <-chan msg.Msg
 	controlOwner uuid.UUID
 }
 
-func (d *DummyAsset) Subscribe(uuid.UUID) <-chan asset.Msg {
-	ch := make(chan asset.Msg, 1)
+func (d *DummyAsset) Subscribe(uuid.UUID) <-chan msg.Msg {
+	ch := make(chan msg.Msg, 1)
 	d.broadcast = ch
 	return ch
 }
 
-func (d *DummyAsset) RequestControl(pid uuid.UUID, ch <-chan asset.Msg) bool {
+func (d *DummyAsset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	d.control = ch
 	d.controlOwner = pid
 	return true
@@ -58,8 +58,12 @@ func (d DummyAsset) PID() uuid.UUID {
 }
 
 func (d DummyAsset) UpdateStatus() {
-	status := asset.NewMsg(d.pid, assertedStatus())
+	status := msg.New(d.pid, assertedStatus())
 	d.broadcast <- status
+}
+
+func (d DummyAsset) RequestContol(uuid.UUID, <-chan msg.Msg) bool {
+	return true
 }
 
 type DummyControl struct {
@@ -102,7 +106,7 @@ func (s DummyStatus) RealNegativeCapacity() float64 {
 }
 
 func newDummyAsset() DummyAsset {
-	ch := make(chan asset.Msg, 1)
+	ch := make(chan msg.Msg, 1)
 	return DummyAsset{pid: uuid.New(), broadcast: ch}
 }
 
@@ -135,11 +139,11 @@ var assertedDummyRelay = randDummyRelayStatus()
 type DummyDispatch struct {
 	mux          *sync.Mutex
 	PID          uuid.UUID
-	assetStatus  map[uuid.UUID]asset.Msg
+	assetStatus  map[uuid.UUID]msg.Msg
 	assetControl map[uuid.UUID]interface{}
 }
 
-func (d *DummyDispatch) UpdateStatus(msg asset.Msg) {
+func (d *DummyDispatch) UpdateStatus(msg msg.Msg) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	d.assetStatus[msg.PID()] = msg
@@ -159,7 +163,7 @@ func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
 }
 
 func newDummyDispatch() dispatch.Dispatcher {
-	status := make(map[uuid.UUID]asset.Msg)
+	status := make(map[uuid.UUID]msg.Msg)
 	control := make(map[uuid.UUID]interface{})
 	pid, _ := uuid.NewUUID()
 	return &DummyDispatch{&sync.Mutex{}, pid, status, control}
