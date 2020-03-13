@@ -109,14 +109,17 @@ func (app *App) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		req := make(map[string]interface{})
 		err = json.Unmarshal(body, &req)
 
-		sqlStatement := `
-		INSERT INTO asset_status (name, pid, kw, kvar)
-		VALUES ($1, $2, $3, $4);`
+		sqlStatement := `INSERT INTO asset_status (name, pid, kw, kvar) 
+				 VALUES ($1, $2, $3, $4)
+				 ON CONFLICT (name) DO UPDATE SET
+				 	pid = $2,
+				     	kw = $3,
+				     	kvar = $4;`
 
-		_, err = app.DB.Exec(sqlStatement, req["name"], req["pid"], req["kw"], req["kvar"])
+		_, err = app.DB.Exec(sqlStatement, req["Name"], req["PID"], req["KW"], req["KVAR"])
 
-		// handle err
 		log.Println("POSTED to Status:", req)
+		log.Println(err)
 
 	default:
 		w.WriteHeader(http.StatusBadRequest)
