@@ -1,4 +1,4 @@
 {
-    "URL": "localhost",
-    "Port": "8080"
+    "URL": "http://192.168.0.5",
+    "Port": "80"
 }

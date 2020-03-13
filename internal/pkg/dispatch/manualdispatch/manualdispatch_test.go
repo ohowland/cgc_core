@@ -1,47 +1,53 @@
 package manualdispatch
 
 import (
+	"math/rand"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"gotest.tools/assert"
-	"testing"
 )
 
+type MockAsset struct {
+	Status MockStatus `json:"Status"`
+}
+
+type MockStatus struct {
+	Name                 string    `json:"Name"`
+	PID                  uuid.UUID `json:"PID"`
+	KW                   float64   `json:"KW"`
+	KVAR                 float64   `json:"KVAR"`
+	RealPositiveCapacity float64   `json:"RealPositiveCapacity"`
+	RealNegativeCapacity float64   `json:"RealNegativeCapacity"`
+}
+
+func (s MockAsset) KW() float64 {
+	return s.Status.KW
+}
+func (s MockAsset) KVAR() float64 {
+	return s.Status.KVAR
+}
+func (s MockAsset) RealPositiveCapacity() float64 {
+	return s.Status.RealPositiveCapacity
+}
+func (s MockAsset) RealNegativeCapacity() float64 {
+	return s.Status.RealNegativeCapacity
+}
+
 func TestNew(t *testing.T) {
-	_, err := New("")
+	_, err := New("./manualdispatch_test_config.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-type MockStatus struct {
-	Real    float64
-	React   float64
-	Realpos float64
-	Realneg float64
-}
-
-func (m MockStatus) RealPositiveCapacity() float64 {
-	return m.Realpos
-}
-
-func (m MockStatus) RealNegativeCapacity() float64 {
-	return m.Realneg
-}
-
-func (m MockStatus) KW() float64 {
-	return m.Real
-}
-func (m MockStatus) KVAR() float64 {
-	return m.React
-}
-
 func TestUpdateStatusSingle(t *testing.T) {
-	dispatch, _ := New("")
+	dispatch, _ := New("./manualdispatch_test_config.json")
 
 	pid, _ := uuid.NewUUID()
 
-	status := MockStatus{10, 20, 30, 40}
+	status := MockAsset{MockStatus{"ESS", pid, 10, 20, 30, 40}}
 	msg := asset.NewMsg(pid, status)
 
 	dispatch.UpdateStatus(msg)
@@ -57,13 +63,13 @@ func TestUpdateStatusSingle(t *testing.T) {
 }
 
 func TestUpdatePowerMulti(t *testing.T) {
-	dispatch, _ := New("")
+	dispatch, _ := New("./manualdispatch_test_config.json")
 
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := MockStatus{11, 22, 33, 44}
-	status2 := MockStatus{55, 66, 77, 88}
+	status1 := MockAsset{MockStatus{"ESS", pid1, 10, 20, 30, 40}}
+	status2 := MockAsset{MockStatus{"Grid", pid2, 40, 50, 60, 70}}
 	msg := asset.NewMsg(pid1, status1)
 	dispatch.UpdateStatus(msg)
 
@@ -88,13 +94,13 @@ func TestUpdatePowerMulti(t *testing.T) {
 }
 
 func TestDropAsset(t *testing.T) {
-	dispatch, _ := New("")
+	dispatch, _ := New("./manualdispatch_test_config.json")
 
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := MockStatus{11, 22, 33, 44}
-	status2 := MockStatus{55, 66, 77, 88}
+	status1 := MockAsset{MockStatus{"ESS", pid1, 11, 22, 33, 44}}
+	status2 := MockAsset{MockStatus{"Grid", pid2, 55, 66, 77, 88}}
 
 	msg1 := asset.NewMsg(pid1, status1)
 	msg2 := asset.NewMsg(pid2, status2)
@@ -112,4 +118,22 @@ func TestDropAsset(t *testing.T) {
 	assert.Assert(t, memberstatus[pid2].KVAR() == status2.KVAR())
 	assert.Assert(t, memberstatus[pid2].RealPositiveCapacity() == status2.RealPositiveCapacity())
 	assert.Assert(t, memberstatus[pid2].RealNegativeCapacity() == status2.RealNegativeCapacity())
+}
+
+func TestUpdateHandler(t *testing.T) {
+	dispatch, _ := New("./manualdispatch_test_config.json")
+
+	pid1, _ := uuid.NewUUID()
+	pid2, _ := uuid.NewUUID()
+
+	asset1 := MockAsset{MockStatus{"ESS", pid1, rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64()}}
+	asset2 := MockAsset{MockStatus{"Grid", pid2, rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64()}}
+
+	msg1 := asset.NewMsg(pid1, asset1.Status)
+	msg2 := asset.NewMsg(pid2, asset2.Status)
+	dispatch.UpdateStatus(msg1)
+	dispatch.UpdateStatus(msg2)
+
+	dispatch.updateHandler()
+
 }

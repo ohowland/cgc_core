@@ -116,8 +116,8 @@ func (a *Asset) Enable(b bool) {
 
 // Status wraps MachineStatus with mutex and state metadata
 type Status struct {
-	calc    CalculatedStatus
-	machine MachineStatus
+	Calc    CalculatedStatus `json:"CalculatedStatus"`
+	Machine MachineStatus    `json:"MachineStatus"`
 }
 
 // CalculatedStatus is a data structure representing asset state information
@@ -126,35 +126,35 @@ type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical ESS status
 type MachineStatus struct {
-	KW                   float64
-	KVAR                 float64
-	Hz                   float64
-	Volt                 float64
-	RealPositiveCapacity float64
-	RealNegativeCapacity float64
-	SOC                  float64
-	Gridforming          bool
-	Online               bool
+	KW                   float64 `json:"KW"`
+	KVAR                 float64 `json:"KVAR"`
+	Hz                   float64 `json:"Hz"`
+	Volt                 float64 `json:"Volt"`
+	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
+	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
+	SOC                  float64 `json:"SOC"`
+	Gridforming          bool    `json:"Gridforming"`
+	Online               bool    `json:"Online"`
 }
 
 // KW returns the asset's measured real power
 func (s Status) KW() float64 {
-	return s.machine.KW
+	return s.Machine.KW
 }
 
 // KVAR returns the asset's measured reactive power
 func (s Status) KVAR() float64 {
-	return s.machine.KVAR
+	return s.Machine.KVAR
 }
 
 // RealPositiveCapacity returns the asset's operative real positive capacity
 func (s Status) RealPositiveCapacity() float64 {
-	return s.machine.RealPositiveCapacity
+	return s.Machine.RealPositiveCapacity
 }
 
 // RealNegativeCapacity returns the asset's operative real negative capacity
 func (s Status) RealNegativeCapacity() float64 {
-	return s.machine.RealNegativeCapacity
+	return s.Machine.RealNegativeCapacity
 }
 
 // MachineControl defines the hardware control interface for the ESS Asset
