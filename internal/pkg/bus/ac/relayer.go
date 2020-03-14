@@ -1,4 +1,4 @@
-package acbus
+package ac
 
 // Relayer is the interface for a bus relayer.
 type Relayer interface {

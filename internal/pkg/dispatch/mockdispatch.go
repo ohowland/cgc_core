@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/mock"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
@@ -29,7 +29,7 @@ func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	for _, Msg := range d.AssetStatus {
-		d.AssetControl[Msg.PID()] = asset.AssertedControl()
+		d.AssetControl[Msg.PID()] = mock.AssertedControl()
 	}
 	return d.AssetControl
 }

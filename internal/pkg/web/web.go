@@ -1,20 +1,29 @@
 package web
 
 import (
-	"bytes"
 	"encoding/json"
 	"io/ioutil"
-	"log"
-	"net/http"
+	"reflect"
+	"sync"
+
+	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 type handler struct {
+	mux    *sync.Mutex
+	pid    uuid.UUID
+	msgs   [][]byte
 	config config
 }
 
 type config struct {
 	URL string
 }
+
+// thinking this gets linked into the asset broadcast
+// so handler would call subscribe and link the channel to
+// publish method, which aggregates
 
 func New(configPath string) (handler, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
@@ -25,9 +34,33 @@ func New(configPath string) (handler, error) {
 	if err := json.Unmarshal(jsonConfig, &cfg); err != nil {
 		return handler{}, err
 	}
-	return handler{config: cfg}, err
+
+	pid, _ := uuid.NewUUID()
+	msgs := make([][]byte, 0)
+
+	return handler{
+		mux:    &sync.Mutex{},
+		pid:    pid,
+		msgs:   msgs,
+		config: cfg}, err
 }
 
+func (h *handler) Publish(ch <-chan msg.Msg) {
+	go func() {
+		for {
+			msg := <-ch
+			h.mux.Lock()
+			switch p := msg.Payload().Type {
+			
+			}
+			
+			append(h.msgs, msg.Payload().([]byte))
+			h.mux.Unlock()
+		}
+	}()
+}
+
+/*
 func (h handler) PostAssetStatus(name string, jsonData []byte) {
 	targetURL := h.config.URL + "/assets/" + name + "/status"
 	//log.Println("TARGET:", targetURL)
@@ -37,6 +70,7 @@ func (h handler) PostAssetStatus(name string, jsonData []byte) {
 		log.Println("[Webservice Handler]", err)
 	}
 }
+*/
 
 /*
 func (h Handler) updateHandler() {s

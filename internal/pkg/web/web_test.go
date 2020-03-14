@@ -2,6 +2,10 @@ package web
 
 import (
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/msg"
+	"gotest.tools/assert"
 )
 
 func TestNewHandler(t *testing.T) {
@@ -19,4 +23,15 @@ func TestNewHandler(t *testing.T) {
 	}
 }
 
-func TestSubscribe(t *testing.T)
+func TestPublish(t *testing.T) {
+	handler, _ := New("./web_handler_config.json")
+
+	pid, _ := uuid.NewUUID()
+	ch := make(chan msg.Msg)
+	handler.Publish(ch)
+
+	data := []byte("hi")
+	ch <- msg.New(pid, data)
+
+	assert.AssertEqual(t, handler.msgs[0], data)
+}

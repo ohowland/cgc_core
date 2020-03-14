@@ -1,4 +1,4 @@
-package asset
+package mock
 
 import (
 	"fmt"

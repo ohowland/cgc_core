@@ -5,6 +5,12 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
+// Asset interface, anything with a name.
+type Asset interface {
+	Controller() Controller
+	Config() Config
+}
+
 // Controller allows an interface to update and request
 // control over Assets (ESS, Grid, PV, etc...)
 type Controller interface {
@@ -12,9 +18,9 @@ type Controller interface {
 	RequestControl(uuid.UUID, <-chan msg.Msg) bool
 }
 
-// Identifier allows an interface for objects to Identify themselves.
-type Identifier interface {
+type Config interface {
 	PID() uuid.UUID
+	Name() string
 }
 
 //

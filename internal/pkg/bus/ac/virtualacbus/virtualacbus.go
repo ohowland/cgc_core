@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
@@ -22,11 +22,11 @@ type VirtualACBus struct {
 	stopProcess   chan bool
 }
 
-// New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
+// New returns an initalized VirtualACBus Asset; this is part of the Asset interface.
+func New(configPath string, dispatch dispatch.Dispatcher) (ac.Bus, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return acbus.ACBus{}, err
+		return ac.Bus{}, err
 	}
 
 	id, _ := uuid.NewUUID()
@@ -39,11 +39,11 @@ func New(configPath string, dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
 		stopProcess:   make(chan bool),
 	}
 
-	return acbus.New(jsonConfig, &virtualsystem, dispatch)
+	return ac.New(jsonConfig, &virtualsystem, dispatch)
 }
 
 // PID is an accessor for the process id
-func (b VirtualACBus) PID() uuid.UUID {
+func (b Bus) PID() uuid.UUID {
 	return b.pid
 }
 

@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
 )
