@@ -31,6 +31,16 @@ func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
+// Name is a getter for the asset Name
+func (a Asset) Name() string {
+	return a.config.machine.Name
+}
+
+// Bus is a getter for the asset's connected Bus
+func (a Asset) Bus() string {
+	return a.config.machine.Bus
+}
+
 // DeviceController returns the hardware abstraction layer struct
 func (a Asset) DeviceController() DeviceController {
 	return a.device
@@ -193,16 +203,6 @@ type MachineConfig struct {
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
 	RatedKWH  float64 `json:"RatedKWH"`
-}
-
-// Name is a getter for the asset Name
-func (c Config) Name() string {
-	return c.machine.Name
-}
-
-// Bus is a getter for the asset's connected Bus
-func (c Config) Bus() string {
-	return c.machine.Bus
 }
 
 // New returns a configured Asset

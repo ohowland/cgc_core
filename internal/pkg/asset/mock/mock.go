@@ -55,6 +55,10 @@ func (d DummyAsset) Name() string {
 	return fmt.Sprintf("DummyAsset-%d", rand.Int())
 }
 
+func (d DummyAsset) Bus() string {
+	return "DummyBus"
+}
+
 func (d DummyAsset) UpdateStatus() {
 	status := msg.New(d.pid, AssertedStatus())
 	d.broadcast <- status

@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Assert(t, feeder.Config().Name() == "TEST_Virtual Feeder")
+	assert.Assert(t, feeder.Name() == "TEST_Virtual Feeder")
 }
 
 func TestLinkToVirtualBus(t *testing.T) {

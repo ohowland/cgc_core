@@ -17,6 +17,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 )
 
@@ -80,7 +81,7 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 	relay1.AddMember(device5)
 	relay1.AddMember(device6)
 
-	go func(*ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ac.ACBus) {
+	go func(*ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ac.Bus) {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
 			<-ticker.C
@@ -165,7 +166,7 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	relay1.AddMember(device2)
 	relay1.AddMember(device3)
 
-	go func(*ess.Asset, *feeder.Asset, *grid.Asset, *ac.ACBus) {
+	go func(*ess.Asset, *feeder.Asset, *grid.Asset, *ac.Bus) {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
 			<-ticker.C
@@ -296,7 +297,7 @@ func TestDispatchCalculatedStatusAggregate(t *testing.T) {
 	relay1.AddMember(device1)
 	relay1.AddMember(device2)
 
-	go func(*ess.Asset, *grid.Asset, *ac.ACBus) {
+	go func(*ess.Asset, *grid.Asset, *ac.Bus) {
 		ticker := time.NewTicker(200 * time.Millisecond)
 		for {
 			<-ticker.C

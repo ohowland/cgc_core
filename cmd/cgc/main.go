@@ -9,6 +9,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
@@ -75,7 +76,7 @@ func launchUpdateLoop(assets map[uuid.UUID]asset.Asset) {
 	for {
 		<-ticker.C
 		for _, asset := range assets {
-			asset.Controller().UpdateStatus()
+			asset.UpdateStatus()
 		}
 	}
 }

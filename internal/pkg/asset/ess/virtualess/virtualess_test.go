@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
@@ -54,7 +55,7 @@ func TestNew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Assert(t, ess.Config().Name() == "TEST_Virtual ESS")
+	assert.Assert(t, ess.Name() == "TEST_Virtual ESS")
 }
 
 func TestLinkToVirtualBus(t *testing.T) {
@@ -158,7 +159,7 @@ func TestWrite(t *testing.T) {
 	go func() {
 		err := device.write(control)
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}()
 
@@ -216,7 +217,7 @@ func TestWriteDeviceControl(t *testing.T) {
 	go func() {
 		err := device.WriteDeviceControl(machineControl)
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}()
 

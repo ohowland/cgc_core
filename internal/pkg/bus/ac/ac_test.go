@@ -7,12 +7,12 @@ import (
 
 	"gotest.tools/assert"
 
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/mock"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
-func newACBus() ACBus {
-	configPath := "./acbus_test_config.json"
+func newACBus() Bus {
+	configPath := "./ac_test_config.json"
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		panic(err)
@@ -42,8 +42,8 @@ func TestNewAcBus(t *testing.T) {
 func TestAddMember(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := asset.NewDummyAsset()
-	asset2 := asset.NewDummyAsset()
+	asset1 := mock.NewDummyAsset()
+	asset2 := mock.NewDummyAsset()
 
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
@@ -57,9 +57,9 @@ func TestAddMember(t *testing.T) {
 func TestRemoveMember(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := asset.NewDummyAsset()
-	asset2 := asset.NewDummyAsset()
-	asset3 := asset.NewDummyAsset()
+	asset1 := mock.NewDummyAsset()
+	asset2 := mock.NewDummyAsset()
+	asset3 := mock.NewDummyAsset()
 
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
@@ -82,8 +82,8 @@ func TestRemoveMember(t *testing.T) {
 func TestUpdateDispatcherUpdate(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := asset.NewDummyAsset()
-	asset2 := asset.NewDummyAsset()
+	asset1 := mock.NewDummyAsset()
+	asset2 := mock.NewDummyAsset()
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
@@ -91,7 +91,7 @@ func TestUpdateDispatcherUpdate(t *testing.T) {
 	// asset.UpdateStatus() initiates the cycle.
 	asset1.UpdateStatus()
 	asset2.UpdateStatus()
-	assertStatus := asset.AssertedStatus()
+	assertStatus := mock.AssertedStatus()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -99,31 +99,31 @@ func TestUpdateDispatcherUpdate(t *testing.T) {
 	// confirm asset status made it to dispatch.
 	d := bus.dispatch.(*dispatch.DummyDispatch)
 	asset1Msg := d.AssetStatus[asset1.PID()]
-	assert.Assert(t, asset1Msg.Payload().(asset.DummyStatus) == assertStatus)
+	assert.Assert(t, asset1Msg.Payload().(mock.DummyStatus) == assertStatus)
 	assert.Assert(t, asset1Msg.PID() == asset1.PID())
 
 	asset2Msg := d.AssetStatus[asset2.PID()]
-	assert.Assert(t, asset2Msg.Payload().(asset.DummyStatus) == assertStatus)
+	assert.Assert(t, asset2Msg.Payload().(mock.DummyStatus) == assertStatus)
 	assert.Assert(t, asset2Msg.PID() == asset2.PID())
 }
 
 func TestUpdateDispatcherControl(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := asset.NewDummyAsset()
-	asset2 := asset.NewDummyAsset()
+	asset1 := mock.NewDummyAsset()
+	asset2 := mock.NewDummyAsset()
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
 	asset1.UpdateStatus()
 	asset2.UpdateStatus()
-	assertControl := asset.AssertedControl()
+	assertControl := mock.AssertedControl()
 
 	time.Sleep(100 * time.Millisecond)
 
 	assetControl := bus.dispatch.GetControl()
-	assert.Assert(t, assetControl[asset1.PID()].(asset.DummyControl) == assertControl)
-	assert.Assert(t, assetControl[asset2.PID()].(asset.DummyControl) == assertControl)
+	assert.Assert(t, assetControl[asset1.PID()].(mock.DummyControl) == assertControl)
+	assert.Assert(t, assetControl[asset2.PID()].(mock.DummyControl) == assertControl)
 }
 
 func TestGetRelay(t *testing.T) {

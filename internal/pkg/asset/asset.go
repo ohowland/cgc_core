@@ -7,9 +7,9 @@ import (
 
 // Asset interface, anything with a name.
 type Asset interface {
-	Controller() Controller
-	Broadcast() msg.Publisher
-	Config() Config
+	Controller
+	msg.Publisher
+	Config
 }
 
 // Controller allows an interface to update and request
@@ -22,6 +22,7 @@ type Controller interface {
 type Config interface {
 	PID() uuid.UUID
 	Name() string
+	Bus() string
 }
 
 //

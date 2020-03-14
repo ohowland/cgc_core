@@ -50,8 +50,8 @@ func (h *handler) Publish(ch <-chan msg.Msg) {
 		for {
 			msg := <-ch
 			h.mux.Lock()
-			switch p := msg.Payload().Type {
-			
+			switch p := msg.Payload().(type) {
+				
 			}
 			
 			append(h.msgs, msg.Payload().([]byte))

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/mock"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
@@ -21,7 +21,7 @@ func TestUpdateStatusSingle(t *testing.T) {
 
 	pid, _ := uuid.NewUUID()
 
-	status := asset.DummyStatus{}
+	status := mock.DummyStatus{}
 	msg := msg.New(pid, status)
 
 	dispatch.UpdateStatus(msg)
@@ -42,8 +42,8 @@ func TestUpdatePowerMulti(t *testing.T) {
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := asset.AssertedStatus()
-	status2 := asset.AssertedStatus()
+	status1 := mock.AssertedStatus()
+	status2 := mock.AssertedStatus()
 
 	msg1 := msg.New(pid1, status1)
 	dispatch.UpdateStatus(msg1)
@@ -74,8 +74,8 @@ func TestDropAsset(t *testing.T) {
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := asset.AssertedStatus()
-	status2 := asset.AssertedStatus()
+	status1 := mock.AssertedStatus()
+	status2 := mock.AssertedStatus()
 
 	msg1 := msg.New(pid1, status1)
 	msg2 := msg.New(pid2, status2)

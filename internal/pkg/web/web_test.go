@@ -33,5 +33,5 @@ func TestPublish(t *testing.T) {
 	data := []byte("hi")
 	ch <- msg.New(pid, data)
 
-	assert.AssertEqual(t, handler.msgs[0], data)
+	assert.Equal(t, handler.msgs[0], data)
 }

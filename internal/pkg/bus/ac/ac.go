@@ -121,14 +121,13 @@ func (b *Bus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
-	pid := a.Config().PID()
 	// subscribe to asset broaccast
-	sub := a.Broadcast().Subscribe(pid)
+	sub := a.Subscribe(a.PID())
 
 	// create a channel for bus to publish to asset control
 	pub := make(chan msg.Msg)
 	if ok := b.requestControl(a, pub); ok {
-		b.members[pid] = pub
+		b.members[a.PID()] = pub
 	}
 
 	// aggregate messages from assets subscription into the bus inbox
