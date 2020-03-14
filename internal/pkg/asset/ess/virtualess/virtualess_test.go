@@ -30,7 +30,7 @@ func newESS() ess.Asset {
 	return ess
 }
 
-func newBus() acbus.ACBus {
+func newBus() ac.Bus {
 	dispatch := dispatch.NewDummyDispatch()
 	configPath := "../../../bus/ac/acbus_test_config.json"
 	bus, err := virtualacbus.New(configPath, dispatch)

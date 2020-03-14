@@ -117,17 +117,18 @@ func (b *Bus) stopProcess() {
 
 // AddMember links an asset to the bus.
 // The bus subscribes to member status updates, and requests control of the asset.
-func (b *Bus) AddMember(asset interface{}) {
+func (b *Bus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
+	pid := a.Config().PID()
 	// subscribe to asset broaccast
-	sub := b.subscribe(asset)
+	sub := a.Broadcast().Subscribe(pid)
 
 	// create a channel for bus to publish to asset control
 	pub := make(chan msg.Msg)
-	if ok := b.requestControl(asset, pub); ok {
-		b.members[pid(asset)] = pub
+	if ok := b.requestControl(a, pub); ok {
+		b.members[pid] = pub
 	}
 
 	// aggregate messages from assets subscription into the bus inbox
@@ -152,10 +153,6 @@ func (b Bus) subscribe(i interface{}) <-chan msg.Msg {
 	s := i.(msg.Publisher)
 	sub := s.Subscribe(b.pid)
 	return sub
-}
-
-func pid(i interface{}) uuid.UUID {
-	return i.(asset.Config().PID())
 }
 
 // removeMember revokes membership of an asset to the bus.

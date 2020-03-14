@@ -43,7 +43,7 @@ func New(configPath string, dispatch dispatch.Dispatcher) (ac.Bus, error) {
 }
 
 // PID is an accessor for the process id
-func (b Bus) PID() uuid.UUID {
+func (b VirtualACBus) PID() uuid.UUID {
 	return b.pid
 }
 

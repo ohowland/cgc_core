@@ -8,6 +8,7 @@ import (
 // Asset interface, anything with a name.
 type Asset interface {
 	Controller() Controller
+	Broadcast() msg.Publisher
 	Config() Config
 }
 

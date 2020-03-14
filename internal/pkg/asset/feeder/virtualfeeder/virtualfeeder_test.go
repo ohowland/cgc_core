@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
@@ -30,9 +31,9 @@ func newFeeder() feeder.Asset {
 	return feeder
 }
 
-func newBus() acbus.ACBus {
+func newBus() ac.Bus {
 	dispatch := dispatch.NewDummyDispatch()
-	configPath := "../../../bus/acbus/acbus_test_config.json"
+	configPath := "../../../bus/ac/ac_test_config.json"
 	bus, err := virtualacbus.New(configPath, dispatch)
 	if err != nil {
 		panic(err)
