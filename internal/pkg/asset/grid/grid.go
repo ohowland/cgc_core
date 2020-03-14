@@ -2,7 +2,6 @@ package grid
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"sync"
 
@@ -22,7 +21,6 @@ type Asset struct {
 	pid          uuid.UUID
 	device       DeviceController
 	broadcast    map[uuid.UUID]chan<- msg.Msg
-	control      <-chan msg.Msg
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -59,8 +57,10 @@ func (a *Asset) Unsubscribe(pid uuid.UUID) {
 func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control = ch
+	// TODO: previous owner needs to stop. how to enforce?
 	a.controlOwner = pid
+	go a.controlHandler(ch)
+
 	return true
 }
 
@@ -89,15 +89,24 @@ func transform(machineStatus MachineStatus) Status {
 	}
 }
 
-// WriteControl requests a physical device write of the data held in the asset machine control field.
-func (a Asset) WriteControl(c interface{}) {
-	control, ok := c.(MachineControl)
-	if !ok {
-		panic(errors.New("Grid bad cast to write control"))
-	}
-	err := a.device.WriteDeviceControl(control)
-	if err != nil {
-		log.Printf("Grid: %v Comm Error\n", err)
+func (a *Asset) controlHandler(ch <-chan msg.Msg) {
+loop:
+	for {
+		msg, ok := <-ch
+		if !ok {
+			log.Println("Feeder controlHandler() stopping")
+			break loop
+		}
+
+		control, ok := msg.Payload().(MachineControl)
+		if !ok {
+			log.Println("Feeder controlHandler() bad type assertion")
+		}
+
+		err := a.device.WriteDeviceControl(control)
+		if err != nil {
+			log.Println("Feeder controlHandler():", err)
+		}
 	}
 }
 
@@ -200,12 +209,11 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
 
 }

@@ -95,12 +95,27 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 		}
 	}(&ess1, &ess2, &ess3, &ess4, &ess5, &ess6, &bus1)
 
-	ess1.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true})
-	ess2.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess3.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess4.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess5.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess6.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	wPID, _ := uuid.NewUUID()
+	writer1 := make(chan msg.Msg)
+	writer2 := make(chan msg.Msg)
+	writer3 := make(chan msg.Msg)
+	writer4 := make(chan msg.Msg)
+	writer5 := make(chan msg.Msg)
+	writer6 := make(chan msg.Msg)
+
+	ess1.RequestControl(wPID, writer1)
+	ess2.RequestControl(wPID, writer2)
+	ess3.RequestControl(wPID, writer3)
+	ess4.RequestControl(wPID, writer4)
+	ess5.RequestControl(wPID, writer5)
+	ess6.RequestControl(wPID, writer6)
+
+	writer1 <- msg.New(wPID, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true})
+	writer2 <- msg.New(wPID, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	writer3 <- msg.New(wPID, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	writer4 <- msg.New(wPID, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	writer5 <- msg.New(wPID, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	writer6 <- msg.New(wPID, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
 
 	time.Sleep(5 * time.Second)
 
@@ -163,9 +178,18 @@ func TestVirtualBusAllAssets(t *testing.T) {
 
 	kwSp := 2.0
 
-	ess1.WriteControl(ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
-	feeder1.WriteControl(feeder.MachineControl{CloseFeeder: true})
-	grid1.WriteControl(grid.MachineControl{CloseIntertie: true})
+	wpid, _ := uuid.NewUUID()
+	essWriter := make(chan msg.Msg)
+	_ = ess1.RequestControl(wpid, essWriter)
+	essWriter <- msg.New(wpid, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+
+	feederWriter := make(chan msg.Msg)
+	_ = feeder1.RequestControl(wpid, feederWriter)
+	feederWriter <- msg.New(wpid, feeder.MachineControl{CloseFeeder: true})
+
+	gridWriter := make(chan msg.Msg)
+	_ = grid1.RequestControl(wpid, gridWriter)
+	gridWriter <- msg.New(wpid, grid.MachineControl{CloseIntertie: true})
 
 	pid, _ := uuid.NewUUID()
 	ch := grid1.Subscribe(pid)
@@ -283,8 +307,16 @@ func TestDispatchCalculatedStatusAggregate(t *testing.T) {
 	}(&ess1, &grid1, &bus1)
 
 	kwSp := 5.0
-	ess1.WriteControl(ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
-	grid1.WriteControl(grid.MachineControl{CloseIntertie: true})
+
+	wpid, _ := uuid.NewUUID()
+	essWriter := make(chan msg.Msg)
+	_ = ess1.RequestControl(wpid, essWriter)
+	essWriter <- msg.New(wpid, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+
+	gridWriter := make(chan msg.Msg)
+	_ = grid1.RequestControl(wpid, gridWriter)
+	gridWriter <- msg.New(wpid, grid.MachineControl{CloseIntertie: true})
+
 	time.Sleep(2000 * time.Millisecond)
 
 	memberStatus := dispatch.GetStatus()

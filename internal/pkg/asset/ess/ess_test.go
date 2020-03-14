@@ -61,14 +61,13 @@ func newESS() (Asset, error) {
 
 	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
 }
 
 func TestReadConfig(t *testing.T) {
@@ -108,41 +107,30 @@ func TestWriteControl(t *testing.T) {
 
 	pid, _ := uuid.NewUUID()
 	write := make(chan msg.Msg)
-	ok := ess.RequestControl(pid, write)
+	_ = ess.RequestControl(pid, write)
 
 	control := MachineControl{true, rand.Float64(), rand.Float64(), true}
-
 	write <- msg.New(pid, control)
 
-	if !ok {
-		t.Error("RequestControl(): FAILED, RequestControl() returned false")
+	device := ess.DeviceController().(*DummyDevice)
+
+	if device.KW != control.KW {
+		t.Errorf("TestWriteControl() pass1: FAILED, %f != %f", device.KW, control.KW)
 	} else {
-		t.Log("RequestControl(): PASSED, RequestControl returned true")
+		t.Logf("TestWriteControl() pass1: PASSED, %f == %f", device.KW, control.KW)
+	}
+
+	rand.Seed(42)
+	control = MachineControl{true, rand.Float64(), rand.Float64(), true}
+	write <- msg.New(pid, control)
+	if device.KW != control.KW {
+		t.Errorf("TestWriteControl() pass2: FAILED, %f != %f", device.KW, control.KW)
+	} else {
+		t.Logf("TestWriteControl() pass2: PASSED, %f == %f", device.KW, control.KW)
 	}
 
 	close(write)
 }
-
-/*
-func TestWriteControl(t *testing.T) {
-	ess, err := newESS()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	control := MachineControl{false, 10, 10, false}
-	ess.WriteControl(control)
-	device := ess.DeviceController()
-	assert.Assert(t, device.(*DummyDevice).KW == control.KW)
-	assert.Assert(t, device.(*DummyDevice).Run == control.Run)
-
-	control = MachineControl{true, 3, 9, true}
-	ess.WriteControl(control)
-	device = ess.DeviceController()
-	assert.Assert(t, device.(*DummyDevice).KW == control.KW)
-	assert.Assert(t, device.(*DummyDevice).Run == control.Run)
-}
-*/
 
 type subscriber struct {
 	pid uuid.UUID

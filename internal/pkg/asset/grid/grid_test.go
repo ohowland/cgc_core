@@ -14,7 +14,9 @@ import (
 	"gotest.tools/assert"
 )
 
-type DummyDevice struct{}
+type DummyDevice struct {
+	CloseIntertie bool
+}
 
 // randMachineStatus returns a closure for random MachineStatus
 func randMachineStatus() func() MachineStatus {
@@ -27,12 +29,13 @@ func randMachineStatus() func() MachineStatus {
 var assertedStatus = randMachineStatus()
 
 func (d DummyDevice) ReadDeviceStatus() (MachineStatus, error) {
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // fuzz
 	return assertedStatus(), nil
 }
 
-func (d DummyDevice) WriteDeviceControl(MachineControl) error {
-	time.Sleep(100 * time.Millisecond)
+func (d *DummyDevice) WriteDeviceControl(c MachineControl) error {
+	d.CloseIntertie = c.CloseIntertie
+	time.Sleep(100 * time.Millisecond) // fuzz
 	return nil
 }
 
@@ -56,14 +59,13 @@ func newGrid() (Asset, error) {
 
 	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
 }
 
 func TestReadConfig(t *testing.T) {
@@ -78,14 +80,54 @@ func TestReadConfig(t *testing.T) {
 	assert.Assert(t, testConfig == assertConfig)
 }
 
-func TestWriteControl(t *testing.T) {
-	grid, err := newGrid()
+func TestRequestControl(t *testing.T) {
+	grid1, err := newGrid()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	control := MachineControl{false}
-	grid.WriteControl(control)
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+
+	ok := grid1.RequestControl(pid, write)
+	if !ok {
+		t.Error("RequestControl(): FAILED, RequestControl() returned false")
+	} else {
+		t.Log("RequestControl(): PASSED, RequestControl returned true")
+	}
+}
+
+func TestWriteControl(t *testing.T) {
+	grid1, err := newGrid()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+	_ = grid1.RequestControl(pid, write)
+
+	control := MachineControl{true}
+	write <- msg.New(pid, control)
+
+	device := grid1.DeviceController().(*DummyDevice)
+
+	if device.CloseIntertie != control.CloseIntertie {
+		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseIntertie, control.CloseIntertie)
+	} else {
+		t.Logf("TestWriteControl() pass1: PASSED, %v == %v", device.CloseIntertie, control.CloseIntertie)
+	}
+
+	rand.Seed(42)
+	control = MachineControl{false}
+	write <- msg.New(pid, control)
+	if device.CloseIntertie != control.CloseIntertie {
+		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseIntertie, control.CloseIntertie)
+	} else {
+		t.Logf("TestWriteControl() pass1: PASSED, %v == %v", device.CloseIntertie, control.CloseIntertie)
+	}
+
+	close(write)
 }
 
 type subscriber struct {

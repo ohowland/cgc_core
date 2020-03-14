@@ -100,10 +100,12 @@ loop:
 			log.Println("ESS controlHandler() stopping")
 			break loop
 		}
+
 		control, ok := msg.Payload().(MachineControl)
 		if !ok {
 			log.Println("ESS controlHandler() bad type assertion")
 		}
+
 		err := a.device.WriteDeviceControl(control)
 		if err != nil {
 			log.Println("ESS controlHandler():", err)
@@ -218,11 +220,10 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
 }

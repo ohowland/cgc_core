@@ -33,7 +33,7 @@ func (d DummyDevice) ReadDeviceStatus() (MachineStatus, error) {
 	return assertedStatus(), nil
 }
 
-func (d DummyDevice) WriteDeviceControl(ctrl MachineControl) error {
+func (d *DummyDevice) WriteDeviceControl(ctrl MachineControl) error {
 	d.CloseFeeder = ctrl.CloseFeeder
 	time.Sleep(100 * time.Millisecond)
 	return nil
@@ -59,14 +59,13 @@ func newFeeder() (Asset, error) {
 
 	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
 
-	var control <-chan msg.Msg
 	controlOwner := PID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
 }
 
 func TestReadConfig(t *testing.T) {
@@ -81,14 +80,53 @@ func TestReadConfig(t *testing.T) {
 	assert.Assert(t, testConfig == assertConfig)
 }
 
-func TestWriteControl(t *testing.T) {
-	feeder, err := newFeeder()
+func TestRequestControl(t *testing.T) {
+	feeder1, err := newFeeder()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	control := MachineControl{false}
-	feeder.WriteControl(control)
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+
+	ok := feeder1.RequestControl(pid, write)
+	if !ok {
+		t.Error("RequestControl(): FAILED, RequestControl() returned false")
+	} else {
+		t.Log("RequestControl(): PASSED, RequestControl returned true")
+	}
+}
+
+func TestWriteControl(t *testing.T) {
+	feeder1, err := newFeeder()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+	_ = feeder1.RequestControl(pid, write)
+
+	control := MachineControl{true}
+	write <- msg.New(pid, control)
+
+	device := feeder1.DeviceController().(*DummyDevice)
+
+	if device.CloseFeeder != control.CloseFeeder {
+		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseFeeder, control.CloseFeeder)
+	} else {
+		t.Logf("TestWriteControl() pass1: PASSED, %v == %v", device.CloseFeeder, control.CloseFeeder)
+	}
+
+	control = MachineControl{false}
+	write <- msg.New(pid, control)
+	if device.CloseFeeder != control.CloseFeeder {
+		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseFeeder, control.CloseFeeder)
+	} else {
+		t.Logf("TestWriteControl() pass1: PASSED, %v == %v", device.CloseFeeder, control.CloseFeeder)
+	}
+
+	close(write)
 }
 
 type subscriber struct {
