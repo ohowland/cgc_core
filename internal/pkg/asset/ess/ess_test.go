@@ -83,6 +83,47 @@ func TestReadConfig(t *testing.T) {
 	assert.Assert(t, testConfig == assertConfig)
 }
 
+func TestRequestControl(t *testing.T) {
+	ess, err := newESS()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+
+	ok := ess.RequestControl(pid, write)
+	if !ok {
+		t.Error("RequestControl(): FAILED, RequestControl() returned false")
+	} else {
+		t.Log("RequestControl(): PASSED, RequestControl returned true")
+	}
+}
+
+func TestWriteControl(t *testing.T) {
+	ess, err := newESS()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+	ok := ess.RequestControl(pid, write)
+
+	control := MachineControl{true, rand.Float64(), rand.Float64(), true}
+
+	write <- msg.New(pid, control)
+
+	if !ok {
+		t.Error("RequestControl(): FAILED, RequestControl() returned false")
+	} else {
+		t.Log("RequestControl(): PASSED, RequestControl returned true")
+	}
+
+	close(write)
+}
+
+/*
 func TestWriteControl(t *testing.T) {
 	ess, err := newESS()
 	if err != nil {
@@ -101,6 +142,7 @@ func TestWriteControl(t *testing.T) {
 	assert.Assert(t, device.(*DummyDevice).KW == control.KW)
 	assert.Assert(t, device.(*DummyDevice).Run == control.Run)
 }
+*/
 
 type subscriber struct {
 	pid uuid.UUID

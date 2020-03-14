@@ -86,7 +86,6 @@ loop:
 		case <-poll.C:
 			assetControls := b.dispatch.GetControl()
 			for pid, control := range assetControls {
-
 				select {
 				case b.members[pid] <- msg.New(pid, control):
 				default:

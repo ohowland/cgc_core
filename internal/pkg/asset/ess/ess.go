@@ -2,7 +2,6 @@ package ess
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"sync"
 
@@ -22,7 +21,6 @@ type Asset struct {
 	pid          uuid.UUID
 	device       DeviceController
 	broadcast    map[uuid.UUID]chan<- msg.Msg
-	control      <-chan msg.Msg
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -62,8 +60,10 @@ func (a *Asset) Unsubscribe(pid uuid.UUID) {
 func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control = ch
+	// TODO: previous owner needs to stop. how to enforce?
 	a.controlOwner = pid
+	go a.controlHandler(ch)
+
 	return true
 }
 
@@ -92,15 +92,22 @@ func transform(machineStatus MachineStatus) Status {
 	}
 }
 
-// WriteControl requests a physical device write of the data held in the asset machine control field.
-func (a Asset) WriteControl(c interface{}) {
-	control, ok := c.(MachineControl)
-	if !ok {
-		panic(errors.New("ESS bad cast to write control"))
-	}
-	err := a.device.WriteDeviceControl(control)
-	if err != nil {
-		log.Printf("ESS: %v Comm Error\n", err)
+func (a *Asset) controlHandler(ch <-chan msg.Msg) {
+loop:
+	for {
+		msg, ok := <-ch
+		if !ok {
+			log.Println("ESS controlHandler() stopping")
+			break loop
+		}
+		control, ok := msg.Payload().(MachineControl)
+		if !ok {
+			log.Println("ESS controlHandler() bad type assertion")
+		}
+		err := a.device.WriteDeviceControl(control)
+		if err != nil {
+			log.Println("ESS controlHandler():", err)
+		}
 	}
 }
 
