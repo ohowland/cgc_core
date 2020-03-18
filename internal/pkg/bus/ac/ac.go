@@ -84,10 +84,10 @@ loop:
 				b.dispatch.UpdateStatus(msg)
 			}
 		case <-poll.C:
-			assetControls := b.dispatch.GetControl()
-			for pid, control := range assetControls {
+			for pid, ch := range b.members {
+				ctrl := b.dispatch.GetControl(pid)
 				select {
-				case b.members[pid] <- msg.New(pid, control):
+				case ch <- msg.New(pid, msg.CONTROL, ctrl):
 				default:
 				}
 			}
@@ -124,18 +124,21 @@ func (b *Bus) AddMember(a asset.Asset) {
 	// subscribe to asset broaccast
 	sub := a.Subscribe(a.PID())
 
-	// create a channel for bus to publish to asset control
-	pub := make(chan msg.Msg)
-	if ok := b.requestControl(a, pub); ok {
-		b.members[a.PID()] = pub
-	}
-
 	// aggregate messages from assets subscription into the bus inbox
 	go func(sub <-chan msg.Msg, inbox chan<- msg.Msg) {
 		for msg := range sub {
 			inbox <- msg
 		}
 	}(sub, b.inbox)
+
+	// request configuration broadcast from device
+	a.UpdateConfig()
+
+	// create a channel for bus to publish to asset control
+	pub := make(chan msg.Msg)
+	if ok := b.requestControl(a, pub); ok {
+		b.members[a.PID()] = pub
+	}
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()

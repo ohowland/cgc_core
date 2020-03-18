@@ -25,13 +25,13 @@ func (d *DummyDispatch) DropAsset(uuid.UUID) error {
 	return nil
 }
 
-func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
+func (d DummyDispatch) GetControl(pid uuid.UUID) interface{} {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	for _, Msg := range d.AssetStatus {
 		d.AssetControl[Msg.PID()] = mock.AssertedControl()
 	}
-	return d.AssetControl
+	return d.AssetControl[pid]
 }
 
 func NewDummyDispatch() Dispatcher {

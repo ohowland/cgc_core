@@ -108,7 +108,7 @@ func TestWriteControl(t *testing.T) {
 	_ = feeder1.RequestControl(pid, write)
 
 	control := MachineControl{true}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.CONTROL, control)
 
 	device := feeder1.DeviceController().(*DummyDevice)
 
@@ -119,7 +119,7 @@ func TestWriteControl(t *testing.T) {
 	}
 
 	control = MachineControl{false}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.CONTROL, control)
 	if device.CloseFeeder != control.CloseFeeder {
 		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseFeeder, control.CloseFeeder)
 	} else {

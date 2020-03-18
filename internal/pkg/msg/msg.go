@@ -8,23 +8,38 @@ type Publisher interface {
 	Unsubscribe(uuid.UUID)
 }
 
+type Topic int
+
+const (
+	STATUS Topic = iota
+	CONTROL
+	CONFIG
+	JSON
+)
+
 // Msg is
 type Msg struct {
 	sender  uuid.UUID
+	topic   Topic
 	payload interface{}
 }
 
 // New is the Msg factor function
-func New(sender uuid.UUID, payload interface{}) Msg {
-	return Msg{sender, payload}
+func New(sender uuid.UUID, topic Topic, payload interface{}) Msg {
+	return Msg{sender, topic, payload}
 }
 
 // PID returns the sender's PID
-func (v Msg) PID() uuid.UUID {
-	return v.sender
+func (m Msg) PID() uuid.UUID {
+	return m.sender
+}
+
+// Topic returns the message type
+func (m Msg) Topic() Topic {
+	return m.topic
 }
 
 // Payload returns the message data
-func (v Msg) Payload() interface{} {
-	return v.payload
+func (m Msg) Payload() interface{} {
+	return m.payload
 }

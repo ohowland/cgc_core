@@ -63,7 +63,7 @@ func (a Asset) UpdateStatus() {
 	defer a.mux.Unlock()
 	for _, ch := range a.broadcast {
 		select {
-		case ch <- msg.New(a.PID(), status):
+		case ch <- msg.New(a.PID(), msg.STATUS, status):
 		default:
 		}
 	}

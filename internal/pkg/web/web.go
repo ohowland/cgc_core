@@ -1,10 +1,13 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
-	"reflect"
+	"log"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/msg"
@@ -13,7 +16,7 @@ import (
 type handler struct {
 	mux    *sync.Mutex
 	pid    uuid.UUID
-	msgs   [][]byte
+	msgs   []json.RawMessage
 	config config
 }
 
@@ -36,7 +39,7 @@ func New(configPath string) (handler, error) {
 	}
 
 	pid, _ := uuid.NewUUID()
-	msgs := make([][]byte, 0)
+	msgs := make([]json.RawMessage, 0)
 
 	return handler{
 		mux:    &sync.Mutex{},
@@ -48,29 +51,61 @@ func New(configPath string) (handler, error) {
 func (h *handler) Publish(ch <-chan msg.Msg) {
 	go func() {
 		for {
-			msg := <-ch
-			h.mux.Lock()
-			switch p := msg.Payload().(type) {
-				
+			data := <-ch
+			switch data.Topic() {
+			case msg.JSON:
+				bytes, ok := data.Payload().(json.RawMessage)
+				if !ok {
+					continue
+				}
+				h.enqueue(bytes)
+
+			default:
 			}
-			
-			append(h.msgs, msg.Payload().([]byte))
-			h.mux.Unlock()
 		}
 	}()
 }
 
-/*
-func (h handler) PostAssetStatus(name string, jsonData []byte) {
+func (h *handler) enqueue(bytes json.RawMessage) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	h.msgs = append(h.msgs, bytes)
+}
+
+func (h *handler) transport() {
+	go func() {
+		for {
+			if len(h.msgs) > 0 {
+				send := h.dequeue()
+				for 
+				h.PostAssetStatus(send)
+			} else {
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+	}()
+}
+
+func (h *handler) dequeue() []json.RawMessage {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
+	var send []json.RawMessage
+	copy(send[:], h.msgs)
+	h.msgs = nil
+	return send
+}
+
+func (h handler) PostAssetStatus(bytes ) {
+	name := "hmm"
 	targetURL := h.config.URL + "/assets/" + name + "/status"
 	//log.Println("TARGET:", targetURL)
 	//log.Println("JSON:", b)
-	_, err := http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(jsonData))
+	_, err := http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(bytes))
 	if err != nil {
 		log.Println("[Webservice Handler]", err)
 	}
 }
-*/
 
 /*
 func (h Handler) updateHandler() {s

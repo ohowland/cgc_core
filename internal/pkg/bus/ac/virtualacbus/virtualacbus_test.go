@@ -234,8 +234,8 @@ func TestProcessMessage(t *testing.T) {
 	bus.AddMember(asset1)
 	bus.AddMember(asset2)
 
-	msg1 := msg.New(asset1.PID(), asset1.status)
-	msg2 := msg.New(asset2.PID(), asset2.status)
+	msg1 := msg.New(asset1.PID(), msg.STATUS, asset1.status)
+	msg2 := msg.New(asset2.PID(), msg.STATUS, asset2.status)
 
 	agg := make(map[uuid.UUID]asset.VirtualStatus)
 	agg = bus.processMsg(msg1, agg)

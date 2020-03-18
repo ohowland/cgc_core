@@ -16,6 +16,7 @@ type Asset interface {
 // control over Assets (ESS, Grid, PV, etc...)
 type Controller interface {
 	UpdateStatus()
+	UpdateConfig()
 	RequestControl(uuid.UUID, <-chan msg.Msg) bool
 }
 

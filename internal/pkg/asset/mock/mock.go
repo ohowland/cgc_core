@@ -3,6 +3,7 @@ package mock
 import (
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/msg"
@@ -10,21 +11,33 @@ import (
 
 // randDummyStatus returns a closure for random DummyAsset Status
 func randDummyStatus() func() DummyStatus {
-	status := DummyStatus{MachineDummyStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}}
 	return func() DummyStatus {
+		rand.Seed(time.Hour.Nanoseconds())
+		status := DummyStatus{MachineDummyStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}}
 		return status
 	}
 }
 
 func randDummyControl() func() DummyControl {
+	rand.Seed(time.Hour.Nanoseconds())
 	control := DummyControl{rand.Float64(), rand.Float64()}
 	return func() DummyControl {
 		return control
 	}
 }
 
+func randDummyConfig() func() DummyConfig {
+	rand.Seed(time.Hour.Nanoseconds())
+	name := fmt.Sprintf("DummyAsset-%d", rand.Int())
+	config := DummyConfig{name, "DummyBus"}
+	return func() DummyConfig {
+		return config
+	}
+}
+
 var AssertedStatus = randDummyStatus()
 var AssertedControl = randDummyControl()
+var AssertedConfig = randDummyConfig()
 
 type DummyAsset struct {
 	pid          uuid.UUID
@@ -60,8 +73,13 @@ func (d DummyAsset) Bus() string {
 }
 
 func (d DummyAsset) UpdateStatus() {
-	status := msg.New(d.pid, AssertedStatus())
+	status := msg.New(d.pid, msg.STATUS, AssertedStatus())
 	d.broadcast <- status
+}
+
+func (d DummyAsset) UpdateConfig() {
+	config := msg.New(d.pid, msg.CONFIG, AssertedConfig())
+	d.broadcast <- config
 }
 
 func (d DummyAsset) RequestContol(uuid.UUID, <-chan msg.Msg) bool {
@@ -83,6 +101,11 @@ func (c DummyControl) KVAR() float64 {
 
 type DummyStatus struct {
 	machine MachineDummyStatus
+}
+
+type DummyConfig struct {
+	Name string
+	Bus  string
 }
 
 type MachineDummyStatus struct {

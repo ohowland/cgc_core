@@ -77,7 +77,7 @@ func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	return true
 }
 
-// UpdateStatus requests a physical device read, then updates MachineStatus field.
+// UpdateStatus requests a physical device read, then broadcasts results
 func (a Asset) UpdateStatus() {
 	machineStatus, err := a.device.ReadDeviceStatus()
 	if err != nil {
@@ -89,7 +89,19 @@ func (a Asset) UpdateStatus() {
 	defer a.mux.Unlock()
 	for _, broadcast := range a.broadcast {
 		select {
-		case broadcast <- msg.New(a.PID(), status):
+		case broadcast <- msg.New(a.PID(), msg.STATUS, status):
+		default:
+		}
+	}
+}
+
+// UpdateConfig requests component broadcast current configuration
+func (a Asset) UpdateConfig() {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	for _, broadcast := range a.broadcast {
+		select {
+		case broadcast <- msg.New(a.PID(), msg.CONFIG, a.Config()):
 		default:
 		}
 	}
@@ -105,20 +117,23 @@ func transform(machineStatus MachineStatus) Status {
 func (a *Asset) controlHandler(ch <-chan msg.Msg) {
 loop:
 	for {
-		msg, ok := <-ch
+		data, ok := <-ch
 		if !ok {
 			log.Println("ESS controlHandler() stopping")
 			break loop
 		}
+		if data.Topic() == msg.CONTROL {
+			control, ok := data.Payload().(MachineControl)
+			if !ok {
+				log.Println("ESS controlHandler() bad type assertion")
+			}
 
-		control, ok := msg.Payload().(MachineControl)
-		if !ok {
-			log.Println("ESS controlHandler() bad type assertion")
-		}
-
-		err := a.device.WriteDeviceControl(control)
-		if err != nil {
-			log.Println("ESS controlHandler():", err)
+			err := a.device.WriteDeviceControl(control)
+			if err != nil {
+				log.Println("ESS controlHandler():", err)
+			}
+		} else {
+			log.Println("ESS controlHandler(): recieved control message that is not of topic 'CONTROL'")
 		}
 	}
 }

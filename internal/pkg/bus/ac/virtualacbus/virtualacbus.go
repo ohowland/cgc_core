@@ -69,10 +69,10 @@ func (b *VirtualACBus) AddMember(a asset.VirtualAsset) {
 	// aggregate messages from assets into the busReciever channel, which is read in the Process loop.
 	go func(pid uuid.UUID, assetSender <-chan asset.VirtualStatus, inbox chan<- msg.Msg) {
 		for status := range assetSender {
-			inbox <- msg.New(pid, status)
+			inbox <- msg.New(pid, msg.STATUS, status)
 		}
-		b.removeMember(a.PID())           // on channel close revoke membership
-		inbox <- msg.New(pid, Template{}) // and clear contribuiton.
+		b.removeMember(a.PID())                       // on channel close revoke membership
+		inbox <- msg.New(pid, msg.STATUS, Template{}) // and clear contribuiton.
 	}(a.PID(), assetSender, b.inbox)
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.

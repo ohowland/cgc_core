@@ -110,7 +110,7 @@ func TestWriteControl(t *testing.T) {
 	_ = ess.RequestControl(pid, write)
 
 	control := MachineControl{true, rand.Float64(), rand.Float64(), true}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.CONTROL, control)
 
 	device := ess.DeviceController().(*DummyDevice)
 
@@ -122,7 +122,7 @@ func TestWriteControl(t *testing.T) {
 
 	rand.Seed(42)
 	control = MachineControl{true, rand.Float64(), rand.Float64(), true}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.CONTROL, control)
 	if device.KW != control.KW {
 		t.Errorf("TestWriteControl() pass2: FAILED, %f != %f", device.KW, control.KW)
 	} else {
