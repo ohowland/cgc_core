@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/lib/asset/ess/virtualess"
+	"github.com/ohowland/cgc/internal/lib/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc/internal/lib/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 )

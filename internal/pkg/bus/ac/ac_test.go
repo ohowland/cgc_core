@@ -26,7 +26,7 @@ func newACBus() Bus {
 }
 
 func TestNewAcBus(t *testing.T) {
-	configPath := "./acbus_test_config.json"
+	configPath := "./ac_test_config.json"
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
@@ -121,9 +121,10 @@ func TestUpdateDispatcherControl(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	assetControl := bus.dispatch.GetControl()
-	assert.Assert(t, assetControl[asset1.PID()].(mock.DummyControl) == assertControl)
-	assert.Assert(t, assetControl[asset2.PID()].(mock.DummyControl) == assertControl)
+	assetControl1 := bus.dispatch.GetControl(asset1.PID())
+	assetControl2 := bus.dispatch.GetControl(asset2.PID())
+	assert.Assert(t, assetControl1.(mock.DummyControl) == assertControl)
+	assert.Assert(t, assetControl2.(mock.DummyControl) == assertControl)
 }
 
 func TestGetRelay(t *testing.T) {

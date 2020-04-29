@@ -85,10 +85,12 @@ loop:
 			}
 		case <-poll.C:
 			for pid, ch := range b.members {
-				ctrl := b.dispatch.GetControl(pid)
-				select {
-				case ch <- msg.New(pid, msg.CONTROL, ctrl):
-				default:
+				ctrl, ok := b.dispatch.GetControl(pid)
+				if ok {
+					select {
+					case ch <- msg.New(pid, msg.CONTROL, ctrl):
+					default:
+					}
 				}
 			}
 		case <-b.stop:

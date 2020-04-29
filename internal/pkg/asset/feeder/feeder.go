@@ -92,6 +92,18 @@ func (a Asset) UpdateStatus() {
 	}
 }
 
+// UpdateConfig requests component broadcast current configuration
+func (a Asset) UpdateConfig() {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	for _, broadcast := range a.broadcast {
+		select {
+		case broadcast <- msg.New(a.PID(), msg.CONFIG, a.Config()):
+		default:
+		}
+	}
+}
+
 func transform(machineStatus MachineStatus) Status {
 	return Status{
 		CalculatedStatus{},

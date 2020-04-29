@@ -92,6 +92,18 @@ func (a Asset) UpdateStatus() {
 	}
 }
 
+// UpdateConfig requests component broadcast current configuration
+func (a Asset) UpdateConfig() {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	for _, broadcast := range a.broadcast {
+		select {
+		case broadcast <- msg.New(a.PID(), msg.CONFIG, a.Config()):
+		default:
+		}
+	}
+}
+
 func transform(machineStatus MachineStatus) Status {
 	return Status{
 		CalculatedStatus{},
@@ -102,20 +114,21 @@ func transform(machineStatus MachineStatus) Status {
 func (a *Asset) controlHandler(ch <-chan msg.Msg) {
 loop:
 	for {
-		msg, ok := <-ch
+		data, ok := <-ch
 		if !ok {
-			log.Println("Feeder controlHandler() stopping")
+			log.Println("Grid controlHandler() stopping")
 			break loop
 		}
+		if data.Topic() == msg.CONTROL {
+			control, ok := data.Payload().(MachineControl)
+			if !ok {
+				log.Println("Grid controlHandler() bad type assertion")
+			}
 
-		control, ok := msg.Payload().(MachineControl)
-		if !ok {
-			log.Println("Feeder controlHandler() bad type assertion")
-		}
-
-		err := a.device.WriteDeviceControl(control)
-		if err != nil {
-			log.Println("Feeder controlHandler():", err)
+			err := a.device.WriteDeviceControl(control)
+			if err != nil {
+				log.Println("Grid controlHandler():", err)
+			}
 		}
 	}
 }

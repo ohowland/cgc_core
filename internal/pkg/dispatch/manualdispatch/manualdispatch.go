@@ -64,13 +64,15 @@ func (c *ManualDispatch) DropAsset(pid uuid.UUID) error {
 }
 
 // GetControl ...
-func (c ManualDispatch) GetControl(pid uuid.UUID) interface{} {
-	return c.memberState[pid].Control
+func (c ManualDispatch) GetControl(pid uuid.UUID) (interface{}, bool) {
+	state, ok := c.memberState[pid]
+	return state.Control, ok
 }
 
 // GetStatus ...
-func (c ManualDispatch) GetStatus(pid uuid.UUID) interface{} {
-	return c.memberState[pid].Status
+func (c ManualDispatch) GetStatus(pid uuid.UUID) (interface{}, bool) {
+	state, ok := c.memberState[pid]
+	return state.Status, ok
 }
 
 // GetCalcStatus ...

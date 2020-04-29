@@ -126,6 +126,7 @@ loop:
 			control, ok := data.Payload().(MachineControl)
 			if !ok {
 				log.Println("ESS controlHandler() bad type assertion")
+				continue
 			}
 
 			err := a.device.WriteDeviceControl(control)
