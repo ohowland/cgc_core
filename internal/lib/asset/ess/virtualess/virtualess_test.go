@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
 )

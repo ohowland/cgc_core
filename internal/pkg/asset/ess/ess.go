@@ -17,10 +17,11 @@ type DeviceController interface {
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
-	mux          *sync.Mutex
-	pid          uuid.UUID
-	device       DeviceController
-	broadcast    map[uuid.UUID]chan<- msg.Msg
+	mux       *sync.Mutex
+	pid       uuid.UUID
+	device    DeviceController
+	publisher *msg.PubSub
+	//broadcast    map[uuid.UUID]chan<- msg.Msg
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -46,24 +47,15 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-// Subscribe returns a read only channel for the asset's status.
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan msg.Msg {
-	ch := make(chan msg.Msg)
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.broadcast[pid] = ch
+// Subscribe to boradcasts on topic
+func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) <-chan msg.Msg {
+	ch := a.publisher.Subscribe(pid, topic)
 	return ch
 }
 
-// Unsubscribe closes the broadcast channel associated with the pid parameter.
-func (a *Asset) Unsubscribe(pid uuid.UUID) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	if ch, ok := a.broadcast[pid]; ok {
-		delete(a.broadcast, pid)
-		close(ch)
-	}
-
+// Unsubscribe from broadcasts
+func (a Asset) Unsubscribe(pid uuid.UUID) {
+	a.publisher.Unsubscribe(pid)
 }
 
 // RequestControl connects the asset control to the read only channel parameter.
@@ -81,30 +73,16 @@ func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 func (a Asset) UpdateStatus() {
 	machineStatus, err := a.device.ReadDeviceStatus()
 	if err != nil {
-		log.Printf("ESS: %v Comm Error\n", err)
+		// Read Error Handler Path
 		return
 	}
 	status := transform(machineStatus)
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	for _, broadcast := range a.broadcast {
-		select {
-		case broadcast <- msg.New(a.PID(), msg.STATUS, status):
-		default:
-		}
-	}
+	a.publisher.Publish(msg.Status, status)
 }
 
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	for _, broadcast := range a.broadcast {
-		select {
-		case broadcast <- msg.New(a.PID(), msg.CONFIG, a.Config()):
-		default:
-		}
-	}
+	a.publisher.Publish(msg.Config, a.Config())
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -122,19 +100,15 @@ loop:
 			log.Println("ESS controlHandler() stopping")
 			break loop
 		}
-		if data.Topic() == msg.CONTROL {
-			control, ok := data.Payload().(MachineControl)
-			if !ok {
-				log.Println("ESS controlHandler() bad type assertion")
-				continue
-			}
-
-			err := a.device.WriteDeviceControl(control)
-			if err != nil {
-				log.Println("ESS controlHandler():", err)
-			}
-		} else {
-			log.Println("ESS controlHandler(): recieved control message that is not of topic 'CONTROL'")
+		control, ok := data.Payload().(MachineControl)
+		if !ok {
+			log.Println("ESS controlHandler() bad type assertion")
+			continue
+		}
+		err := a.device.WriteDeviceControl(control)
+		if err != nil {
+			// TODO: Write Error Handler Path
+			log.Println("ESS controlHandler():", err)
 		}
 	}
 }
@@ -229,17 +203,17 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	PID, err := uuid.NewUUID()
+	pid, err := uuid.NewUUID()
 	if err != nil {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
+	publisher := msg.NewPublisher(pid)
 
-	controlOwner := PID
+	controlOwner := pid
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
 }

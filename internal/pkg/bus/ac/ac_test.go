@@ -121,8 +121,8 @@ func TestUpdateDispatcherControl(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	assetControl1 := bus.dispatch.GetControl(asset1.PID())
-	assetControl2 := bus.dispatch.GetControl(asset2.PID())
+	assetControl1, _ := bus.dispatch.GetControl(asset1.PID())
+	assetControl2, _ := bus.dispatch.GetControl(asset2.PID())
 	assert.Assert(t, assetControl1.(mock.DummyControl) == assertControl)
 	assert.Assert(t, assetControl2.(mock.DummyControl) == assertControl)
 }

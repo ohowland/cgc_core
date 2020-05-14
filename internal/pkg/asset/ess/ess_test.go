@@ -54,20 +54,20 @@ func newESS() (Asset, error) {
 		return Asset{}, err
 	}
 
-	PID, err := uuid.NewUUID()
+	pid, err := uuid.NewUUID()
 	if err != nil {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
+	publisher := msg.NewPublisher(pid)
 
-	controlOwner := PID
+	controlOwner := pid
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
 	device := &DummyDevice{}
 
-	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
 }
 
 func TestReadConfig(t *testing.T) {
@@ -110,7 +110,7 @@ func TestWriteControl(t *testing.T) {
 	_ = ess.RequestControl(pid, write)
 
 	control := MachineControl{true, rand.Float64(), rand.Float64(), true}
-	write <- msg.New(pid, msg.CONTROL, control)
+	write <- msg.New(pid, control)
 
 	device := ess.DeviceController().(*DummyDevice)
 
@@ -122,7 +122,7 @@ func TestWriteControl(t *testing.T) {
 
 	rand.Seed(42)
 	control = MachineControl{true, rand.Float64(), rand.Float64(), true}
-	write <- msg.New(pid, msg.CONTROL, control)
+	write <- msg.New(pid, control)
 	if device.KW != control.KW {
 		t.Errorf("TestWriteControl() pass2: FAILED, %f != %f", device.KW, control.KW)
 	} else {
@@ -144,7 +144,7 @@ func TestUpdateStatus(t *testing.T) {
 	}
 
 	pid, _ := uuid.NewUUID()
-	ch := ess.Subscribe(pid)
+	ch := ess.Subscribe(pid, msg.Status)
 	sub := subscriber{pid, ch}
 
 	go func() {
@@ -163,7 +163,7 @@ func TestUpdateStatus(t *testing.T) {
 	ess.UpdateStatus()
 }
 
-func TestBroadcast(t *testing.T) {
+func TestPublisher(t *testing.T) {
 	ess, err := newESS()
 	if err != nil {
 		log.Fatal(err)
@@ -173,7 +173,7 @@ func TestBroadcast(t *testing.T) {
 	subs := make([]subscriber, n)
 	for i := 0; i < n; i++ {
 		pid, _ := uuid.NewUUID()
-		ch := ess.Subscribe(pid)
+		ch := ess.Subscribe(pid, msg.Status)
 		subs[i] = subscriber{pid, ch}
 	}
 

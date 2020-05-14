@@ -8,8 +8,8 @@ import (
 // Asset interface, anything with a name.
 type Asset interface {
 	Controller
-	msg.Publisher
 	Config
+	msg.Publisher
 }
 
 // Controller allows an interface to update and request
@@ -30,6 +30,18 @@ type Config interface {
 type Power interface {
 	KW() float64
 	KVAR() float64
+}
+
+type Voltage interface {
+	Volt() float64
+}
+
+type Frequency interface {
+	Hz() float64
+}
+
+type Gridforming interface {
+	Gridforming() float64
 }
 
 //

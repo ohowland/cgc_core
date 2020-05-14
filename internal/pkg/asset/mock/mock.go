@@ -46,7 +46,7 @@ type DummyAsset struct {
 	controlOwner uuid.UUID
 }
 
-func (d *DummyAsset) Subscribe(uuid.UUID) <-chan msg.Msg {
+func (d *DummyAsset) Subscribe(pid uuid.UUID, topic msg.Topic) <-chan msg.Msg {
 	ch := make(chan msg.Msg, 1)
 	d.broadcast = ch
 	return ch
@@ -73,12 +73,12 @@ func (d DummyAsset) Bus() string {
 }
 
 func (d DummyAsset) UpdateStatus() {
-	status := msg.New(d.pid, msg.STATUS, AssertedStatus())
+	status := msg.New(d.pid, AssertedStatus())
 	d.broadcast <- status
 }
 
 func (d DummyAsset) UpdateConfig() {
-	config := msg.New(d.pid, msg.CONFIG, AssertedConfig())
+	config := msg.New(d.pid, AssertedConfig())
 	d.broadcast <- config
 }
 
