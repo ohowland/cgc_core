@@ -35,7 +35,11 @@ func New(configPath string) (ManualDispatch, error) {
 }
 
 // UpdateStatus ...
+<<<<<<< HEAD
 func (c *ManualDispatch) UpdateStatus(m msg.Msg) {
+=======
+func (c *ManualDispatch) UpdateStatus(msg msg.Msg) {
+>>>>>>> master
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	switch m.Topic() {
