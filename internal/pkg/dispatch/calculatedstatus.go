@@ -1,8 +1,6 @@
 package dispatch
 
 import (
-	"log"
-	"reflect"
 	"sync"
 
 	"github.com/google/uuid"
@@ -16,9 +14,14 @@ type CalculatedStatus struct {
 }
 
 type Status struct {
-	power    power
-	capacity capacity
+	Power    power
+	Capacity capacity
 }
+
+func (s Status) KW() float64                   { return s.Power.kW }
+func (s Status) KVAR() float64                 { return s.Power.kVAR }
+func (s Status) RealPositiveCapacity() float64 { return s.Capacity.realPositiveCapacity }
+func (s Status) RealNegativeCapacity() float64 { return s.Capacity.realNegativeCapacity }
 
 type capacity struct {
 	realPositiveCapacity float64
@@ -30,27 +33,20 @@ type power struct {
 	kVAR float64
 }
 
-func (s Status) KW() float64 {
-	return s.power.kW
-}
-
-func (s Status) KVAR() float64 {
-	return s.power.kVAR
-}
-
-func (s Status) RealPositiveCapacity() float64 {
-	return s.capacity.realPositiveCapacity
-}
-
-func (s Status) RealNegativeCapacity() float64 {
-	return s.capacity.realNegativeCapacity
-}
-
 func NewCalculatedStatus() (CalculatedStatus, error) {
 	memberStatus := make(map[uuid.UUID]Status)
 	return CalculatedStatus{&sync.Mutex{}, memberStatus}, nil
 }
 
+<<<<<<< HEAD
+func (b *CalculatedStatus) AggregateMemberStatus(m msg.Msg) {
+	status := b.memberStatus[m.PID()]
+
+	if assetStatus, ok := m.Payload().(asset.Power); ok {
+		status.Power = power{
+			kW:   assetStatus.KW(),
+			kVAR: assetStatus.KVAR(),
+=======
 func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 	status := b.memberStatus[msg.PID()]
 	switch p := msg.Payload().(type) {
@@ -58,20 +54,28 @@ func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 		status.capacity = capacity{
 			realPositiveCapacity: p.RealPositiveCapacity(),
 			realNegativeCapacity: p.RealNegativeCapacity(),
+>>>>>>> master
 		}
-		status.power = power{
-			kW:   p.KW(),
-			kVAR: p.KVAR(),
-		}
-	default:
-		log.Println("Calculated Status Rejected:", reflect.TypeOf(msg.Payload()))
 	}
-	b.memberStatus[msg.PID()] = status
+
+	if assetStatus, ok := m.Payload().(asset.Capacity); ok {
+		status.Capacity = capacity{
+			realPositiveCapacity: assetStatus.RealPositiveCapacity(),
+			realNegativeCapacity: assetStatus.RealNegativeCapacity(),
+		}
+	}
+	b.memberStatus[m.PID()] = status
+
 }
 
+<<<<<<< HEAD
+func (b *CalculatedStatus) AggregateMemberConfig(m msg.Msg) {}
+
+=======
+>>>>>>> master
 func (b CalculatedStatus) updateBusStatus(msg msg.Msg, memberStatus map[uuid.UUID]Status) Status {
 	return Status{
-		capacity: aggregateCapacity(memberStatus),
+		Capacity: aggregateCapacity(memberStatus),
 	}
 }
 
@@ -85,8 +89,8 @@ func aggregateCapacity(memberStatus map[uuid.UUID]Status) capacity {
 	var realPositiveCapacity float64
 	var realNegativeCapacity float64
 	for _, status := range memberStatus {
-		realPositiveCapacity += status.capacity.realPositiveCapacity
-		realNegativeCapacity += status.capacity.realNegativeCapacity
+		realPositiveCapacity += status.Capacity.realPositiveCapacity
+		realNegativeCapacity += status.Capacity.realNegativeCapacity
 	}
 	return capacity{
 		realPositiveCapacity,

@@ -5,11 +5,47 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
-// Asset is the interface for all physical devices that make up dispatchable sources/sinks in the power system.
+// Asset interface, anything with a name.
 type Asset interface {
-	PID() uuid.UUID
-	Subscribe(uuid.UUID) <-chan msg.Msg
-	Unsubscribe(uuid.UUID)
+	Controller
+	Config
+	msg.Publisher
+}
+
+// Controller allows an interface to update and request
+// control over Assets (ESS, Grid, PV, etc...)
+type Controller interface {
 	UpdateStatus()
+	UpdateConfig()
 	RequestControl(uuid.UUID, <-chan msg.Msg) bool
+}
+
+type Config interface {
+	PID() uuid.UUID
+	Name() string
+	Bus() string
+}
+
+//
+type Power interface {
+	KW() float64
+	KVAR() float64
+}
+
+type Voltage interface {
+	Volt() float64
+}
+
+type Frequency interface {
+	Hz() float64
+}
+
+type Gridforming interface {
+	Gridforming() float64
+}
+
+//
+type Capacity interface {
+	RealPositiveCapacity() float64
+	RealNegativeCapacity() float64
 }

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
 )
@@ -31,9 +31,9 @@ func newFeeder() feeder.Asset {
 	return feeder
 }
 
-func newBus() acbus.ACBus {
+func newBus() ac.Bus {
 	dispatch := dispatch.NewDummyDispatch()
-	configPath := "../../../bus/acbus/acbus_test_config.json"
+	configPath := "../../../bus/ac/ac_test_config.json"
 	bus, err := virtualacbus.New(configPath, dispatch)
 	if err != nil {
 		panic(err)
@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Assert(t, feeder.Config().Name() == "TEST_Virtual Feeder")
+	assert.Assert(t, feeder.Name() == "TEST_Virtual Feeder")
 }
 
 func TestLinkToVirtualBus(t *testing.T) {

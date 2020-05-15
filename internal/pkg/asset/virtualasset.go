@@ -11,9 +11,8 @@ type VirtualAsset interface {
 }
 
 type VirtualStatus interface {
-	KW() float64
-	KVAR() float64
-	Hz() float64
-	Volt() float64
-	Gridforming() bool
+	Power
+	Voltage
+	Frequency
+	Gridforming
 }

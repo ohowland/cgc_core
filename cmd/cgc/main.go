@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/lib/asset/ess/virtualess"
+	"github.com/ohowland/cgc/internal/lib/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc/internal/lib/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 )
@@ -20,7 +20,7 @@ func buildDispatch() (dispatch.Dispatcher, error) {
 	return &dispatch, err
 }
 
-func buildBuses(dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
+func buildBuses(dispatch dispatch.Dispatcher) (ac.Bus, error) {
 	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json", dispatch)
 	return vrBus, err
 }
@@ -31,7 +31,7 @@ func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
 }
 */
 
-func buildAssets(bus *acbus.ACBus) (map[uuid.UUID]asset.Asset, error) {
+func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
 	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
 

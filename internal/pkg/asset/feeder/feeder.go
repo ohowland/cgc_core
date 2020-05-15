@@ -2,7 +2,6 @@ package feeder
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"sync"
 
@@ -21,8 +20,7 @@ type Asset struct {
 	mux          *sync.Mutex
 	pid          uuid.UUID
 	device       DeviceController
-	broadcast    map[uuid.UUID]chan<- msg.Msg
-	control      <-chan msg.Msg
+	publisher    *msg.PubSub
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -33,34 +31,40 @@ func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
+// Name is a getter for the asset Name
+func (a Asset) Name() string {
+	return a.config.machine.Name
+}
+
+// BusName is a getter for the asset's connected Bus
+func (a Asset) BusName() string {
+	return a.config.machine.BusName
+}
+
 // DeviceController returns the hardware abstraction layer struct
 func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-// Subscribe returns a read only channel for the asset's status.
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan msg.Msg {
-	ch := make(chan msg.Msg)
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.broadcast[pid] = ch
+// Subscribe returns a channel on which the specified topic is broadcast
+func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) <-chan msg.Msg {
+	ch := a.publisher.Subscribe(pid, topic)
 	return ch
 }
 
-func (a *Asset) Unsubscribe(pid uuid.UUID) {
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	ch := a.broadcast[pid]
-	delete(a.broadcast, pid)
-	close(ch)
+// Unsubscribe pid from all topic broadcasts
+func (a Asset) Unsubscribe(pid uuid.UUID) {
+	a.publisher.Unsubscribe(pid)
 }
 
 // RequestControl connects the asset control to the read only channel parameter.
 func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	a.control = ch
+	// TODO: previous owner needs to stop. how to enforce?
 	a.controlOwner = pid
+	go a.controlHandler(ch)
+
 	return true
 }
 
@@ -68,18 +72,16 @@ func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
 func (a Asset) UpdateStatus() {
 	machineStatus, err := a.device.ReadDeviceStatus()
 	if err != nil {
-		log.Printf("Feeder: %v Comm Error\n", err)
+		// Read Error Handler Path
 		return
 	}
 	status := transform(machineStatus)
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	for _, broadcast := range a.broadcast {
-		select {
-		case broadcast <- msg.New(a.PID(), status):
-		default:
-		}
-	}
+	a.publisher.Publish(msg.Status, status)
+}
+
+// UpdateConfig requests component broadcast current configuration
+func (a Asset) UpdateConfig() {
+	a.publisher.Publish(msg.Config, a.Config())
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -89,26 +91,30 @@ func transform(machineStatus MachineStatus) Status {
 	}
 }
 
-// WriteControl requests a physical device write of the data held in the asset machine control field.
-func (a Asset) WriteControl(c interface{}) {
-	control, ok := c.(MachineControl)
-	if !ok {
-		panic(errors.New("Feeder bad cast to write control"))
-	}
-	err := a.device.WriteDeviceControl(control)
-	if err != nil {
-		log.Printf("Feeder: %v Comm Error\n", err)
+func (a *Asset) controlHandler(ch <-chan msg.Msg) {
+loop:
+	for {
+		msg, ok := <-ch
+		if !ok {
+			log.Println("Feeder controlHandler() stopping")
+			break loop
+		}
+
+		control, ok := msg.Payload().(MachineControl)
+		if !ok {
+			log.Println("Feeder controlHandler() bad type assertion")
+		}
+
+		err := a.device.WriteDeviceControl(control)
+		if err != nil {
+			log.Println("Feeder controlHandler():", err)
+		}
 	}
 }
 
 //Config returns the archetypical configuration for the feeder asset.
-func (a Asset) Config() Config {
-	return a.config
-}
-
-// Enable is an settor for the asset enable state
-func (a Asset) Enable(b bool) {
-	a.supervisory.enable = b
+func (a Asset) Config() MachineConfig {
+	return a.config.machine
 }
 
 // Status is a data structure representing an architypical Feeder status
@@ -140,16 +146,6 @@ func (s Status) KVAR() float64 {
 	return s.Machine.KVAR
 }
 
-// RealPositiveCapacity returns the asset's operative real positive capacity
-func (s Status) RealPositiveCapacity() float64 {
-	return 0.0
-}
-
-// RealNegativeCapacity returns the asset's operative real negative capacity
-func (s Status) RealNegativeCapacity() float64 {
-	return 0.0
-}
-
 // MachineControl defines the hardware control interface for the feeder Asset
 type MachineControl struct {
 	CloseFeeder bool
@@ -170,19 +166,9 @@ type Config struct {
 // MachineConfig holds the ESS asset configuration parameters
 type MachineConfig struct {
 	Name      string  `json:"Name"`
-	Bus       string  `json:"Bus"`
+	BusName   string  `json:"BusName"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
-}
-
-// Name is a getter for the asset Name
-func (c Config) Name() string {
-	return c.machine.Name
-}
-
-// Bus is a getter for the asset's connected Bus
-func (c Config) Bus() string {
-	return c.machine.Bus
 }
 
 // New returns a configured Asset
@@ -193,17 +179,15 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 		return Asset{}, err
 	}
 
-	PID, err := uuid.NewUUID()
+	pid, err := uuid.NewUUID()
 	if err != nil {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
-
-	var control <-chan msg.Msg
-	controlOwner := PID
+	publisher := msg.NewPublisher(pid)
+	var controlOwner uuid.UUID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
 }

@@ -3,7 +3,7 @@ acbus.go Representation of a single AC bus. Data structures that implement the A
 may join as members.
 */
 
-package acbus
+package ac
 
 import (
 	"encoding/json"
@@ -17,12 +17,13 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
-// ACBus represents a single electrical AC power system bus.
-type ACBus struct {
-	mux      *sync.Mutex
-	pid      uuid.UUID
-	relay    Relayer
-	inbox    chan msg.Msg
+// Bus represents a single electrical AC power system bus.
+type Bus struct {
+	mux   *sync.Mutex
+	pid   uuid.UUID
+	relay Relayer
+	inbox chan msg.Msg
+	//publisher *msg.PubSub
 	members  map[uuid.UUID]chan<- msg.Msg
 	dispatch dispatch.Dispatcher
 	config   Config
@@ -38,24 +39,24 @@ type Config struct {
 }
 
 // New configures and returns an ACbus data structure.
-func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus, error) {
+func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (Bus, error) {
 
 	config := Config{}
 	err := json.Unmarshal(jsonConfig, &config)
 	if err != nil {
-		return ACBus{}, err
+		return Bus{}, err
 	}
 
 	PID, err := uuid.NewUUID()
 	if err != nil {
-		return ACBus{}, err
+		return Bus{}, err
 	}
 
 	inbox := make(chan msg.Msg)
 	stop := make(chan bool)
 	members := make(map[uuid.UUID]chan<- msg.Msg)
 
-	return ACBus{
+	return Bus{
 		&sync.Mutex{},
 		PID,
 		relay,
@@ -67,7 +68,7 @@ func New(jsonConfig []byte, relay Relayer, dispatch dispatch.Dispatcher) (ACBus,
 }
 
 // Process aggregates information from members, while members exist.
-func (b *ACBus) Process() {
+func (b *Bus) Process() {
 	log.Println("ACBus Process: Loop Started")
 	defer close(b.inbox)
 	poll := time.NewTicker(b.config.Pollrate * time.Millisecond)
@@ -84,12 +85,13 @@ loop:
 				b.dispatch.UpdateStatus(msg)
 			}
 		case <-poll.C:
-			assetControls := b.dispatch.GetControl()
-			for pid, control := range assetControls {
-
-				select {
-				case b.members[pid] <- msg.New(pid, control):
-				default:
+			for pid, ch := range b.members {
+				ctrl, ok := b.dispatch.GetControl(pid)
+				if ok {
+					select {
+					case ch <- msg.New(pid, ctrl):
+					default:
+					}
 				}
 			}
 		case <-b.stop:
@@ -100,7 +102,7 @@ loop:
 }
 
 // stopProcess terminates the bus. This method is used during a controlled shutdown.
-func (b *ACBus) stopProcess() {
+func (b *Bus) stopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	allPIDs := make([]uuid.UUID, len(b.members))
@@ -118,32 +120,59 @@ func (b *ACBus) stopProcess() {
 
 // AddMember links an asset to the bus.
 // The bus subscribes to member status updates, and requests control of the asset.
-func (b *ACBus) AddMember(a asset.Asset) {
+func (b *Bus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
-	sub := a.Subscribe(b.pid)
-
-	// create a channel for bus to publish to asset control
-	pub := make(chan msg.Msg)
-	if ok := a.RequestControl(b.pid, pub); ok {
-		b.members[a.PID()] = pub
-	}
+	// subscribe to asset status broadcast
+	subStatus := a.Subscribe(b.PID(), msg.Status)
 
 	// aggregate messages from assets subscription into the bus inbox
-	go func(sub <-chan msg.Msg, inbox chan<- msg.Msg) {
-		for msg := range sub {
+	go func(subStatus <-chan msg.Msg, inbox chan<- msg.Msg) {
+		for msg := range subStatus {
 			inbox <- msg
 		}
-	}(sub, b.inbox)
+	}(subStatus, b.inbox)
+
+	// subscribe to asset config broadcast
+	subConfig := a.Subscribe(b.PID(), msg.Config)
+
+	go func(subConfig <-chan msg.Msg, inbox chan<- msg.Msg) {
+		for msg := range subConfig {
+			inbox <- msg
+		}
+	}(subConfig, b.inbox)
+
+	// request configuration broadcast from device
+	a.UpdateConfig()
+
+	// create a channel for bus to publish to asset control
+	pubControl := make(chan msg.Msg)
+	if ok := b.requestControl(a, pubControl); ok {
+		b.members[a.PID()] = pubControl
+	}
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
 }
 
+func (b Bus) requestControl(i interface{}, pub chan msg.Msg) bool {
+	c := i.(asset.Controller)
+	ok := c.RequestControl(b.pid, pub)
+	return ok
+}
+
+/*
+func (b Bus) subscribe(i interface{}) <-chan msg.Msg {
+	s := i.(msg.Publisher)
+	sub := s.Subscribe(b.pid)
+	return sub
+}
+*/
+
 // removeMember revokes membership of an asset to the bus.
-func (b *ACBus) removeMember(pid uuid.UUID) {
+func (b *Bus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	if ch, ok := b.members[pid]; ok {
@@ -157,12 +186,12 @@ func (b *ACBus) removeMember(pid uuid.UUID) {
 }
 
 // hasMember verifies the membership of an asset.
-func (b ACBus) hasMember(pid uuid.UUID) bool {
+func (b Bus) hasMember(pid uuid.UUID) bool {
 	return b.members[pid] != nil
 }
 
 // Energized returns the state of the bus.
-func (b ACBus) Energized() bool {
+func (b Bus) Energized() bool {
 	hzOk := b.Relayer().Hz() > b.config.RatedHz*0.5
 	voltOk := b.Relayer().Volt() > b.config.RatedVolt*0.5
 	return hzOk && voltOk
@@ -171,16 +200,16 @@ func (b ACBus) Energized() bool {
 // Name is an accessor for the ACBus's configured name.
 // Use this only when displaying information to customer.
 // PID is used internally.
-func (b ACBus) Name() string {
+func (b Bus) Name() string {
 	return b.config.Name
 }
 
 // PID is an accessor for the ACBus's process id.
-func (b ACBus) PID() uuid.UUID {
+func (b Bus) PID() uuid.UUID {
 	return b.pid
 }
 
 // Relayer is an accessor for the assigned bus relay.
-func (b ACBus) Relayer() Relayer {
+func (b Bus) Relayer() Relayer {
 	return b.relay
 }

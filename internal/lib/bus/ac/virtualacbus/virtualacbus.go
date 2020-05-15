@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
@@ -22,11 +22,11 @@ type VirtualACBus struct {
 	stopProcess   chan bool
 }
 
-// New returns an initalized VirtualESS Asset; this is part of the Asset interface.
-func New(configPath string, dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
+// New returns an initalized VirtualACBus Asset; this is part of the Asset interface.
+func New(configPath string, dispatch dispatch.Dispatcher) (ac.Bus, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return acbus.ACBus{}, err
+		return ac.Bus{}, err
 	}
 
 	id, _ := uuid.NewUUID()
@@ -39,7 +39,7 @@ func New(configPath string, dispatch dispatch.Dispatcher) (acbus.ACBus, error) {
 		stopProcess:   make(chan bool),
 	}
 
-	return acbus.New(jsonConfig, &virtualsystem, dispatch)
+	return ac.New(jsonConfig, &virtualsystem, dispatch)
 }
 
 // PID is an accessor for the process id
@@ -69,10 +69,17 @@ func (b *VirtualACBus) AddMember(a asset.VirtualAsset) {
 	// aggregate messages from assets into the busReciever channel, which is read in the Process loop.
 	go func(pid uuid.UUID, assetSender <-chan asset.VirtualStatus, inbox chan<- msg.Msg) {
 		for status := range assetSender {
+<<<<<<< HEAD:internal/lib/bus/ac/virtualacbus/virtualacbus.go
+			inbox <- msg.New(pid, msg.STATUS, status)
+		}
+		b.removeMember(a.PID())                       // on channel close revoke membership
+		inbox <- msg.New(pid, msg.STATUS, Template{}) // and clear contribuiton.
+=======
 			inbox <- msg.New(pid, status)
 		}
 		b.removeMember(a.PID())           // on channel close revoke membership
 		inbox <- msg.New(pid, Template{}) // and clear contribuiton.
+>>>>>>> master:internal/pkg/bus/acbus/virtualacbus/virtualacbus.go
 	}(a.PID(), assetSender, b.inbox)
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.

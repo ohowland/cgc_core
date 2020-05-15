@@ -8,5 +8,5 @@ import (
 type Dispatcher interface {
 	UpdateStatus(msg.Msg)
 	DropAsset(uuid.UUID) error
-	GetControl() map[uuid.UUID]interface{}
+	GetControl(uuid.UUID) (interface{}, bool)
 }

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
 )
@@ -31,9 +31,9 @@ func newESS() ess.Asset {
 	return ess
 }
 
-func newBus() acbus.ACBus {
+func newBus() ac.Bus {
 	dispatch := dispatch.NewDummyDispatch()
-	configPath := "../../../bus/acbus/acbus_test_config.json"
+	configPath := "../../../bus/ac/acbus_test_config.json"
 	bus, err := virtualacbus.New(configPath, dispatch)
 	if err != nil {
 		panic(err)
@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Assert(t, ess.Config().Name() == "TEST_Virtual ESS")
+	assert.Assert(t, ess.Name() == "TEST_Virtual ESS")
 }
 
 func TestLinkToVirtualBus(t *testing.T) {
@@ -159,7 +159,7 @@ func TestWrite(t *testing.T) {
 	go func() {
 		err := device.write(control)
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}()
 
@@ -217,7 +217,7 @@ func TestWriteDeviceControl(t *testing.T) {
 	go func() {
 		err := device.WriteDeviceControl(machineControl)
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}()
 

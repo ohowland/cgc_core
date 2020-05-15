@@ -3,7 +3,6 @@ package grid
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"sync"
 	"testing"
@@ -14,7 +13,9 @@ import (
 	"gotest.tools/assert"
 )
 
-type DummyDevice struct{}
+type DummyDevice struct {
+	CloseIntertie bool
+}
 
 // randMachineStatus returns a closure for random MachineStatus
 func randMachineStatus() func() MachineStatus {
@@ -27,12 +28,15 @@ func randMachineStatus() func() MachineStatus {
 var assertedStatus = randMachineStatus()
 
 func (d DummyDevice) ReadDeviceStatus() (MachineStatus, error) {
-	time.Sleep(100 * time.Millisecond)
+	rand.Seed(time.Now().UnixNano())
+	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
 	return assertedStatus(), nil
 }
 
-func (d DummyDevice) WriteDeviceControl(MachineControl) error {
-	time.Sleep(100 * time.Millisecond)
+func (d *DummyDevice) WriteDeviceControl(c MachineControl) error {
+	d.CloseIntertie = c.CloseIntertie
+	rand.Seed(time.Now().UnixNano())
+	time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
 	return nil
 }
 
@@ -43,30 +47,10 @@ func newGrid() (Asset, error) {
 		return Asset{}, err
 	}
 
-	machineConfig := MachineConfig{}
-	err = json.Unmarshal(jsonConfig, &machineConfig)
-	if err != nil {
-		return Asset{}, err
-	}
-
-	PID, err := uuid.NewUUID()
-	if err != nil {
-		return Asset{}, err
-	}
-
-	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
-
-	var control <-chan msg.Msg
-	controlOwner := PID
-
-	supervisory := SupervisoryControl{&sync.Mutex{}, false}
-	config := Config{&sync.Mutex{}, machineConfig}
-	device := &DummyDevice{}
-
-	return Asset{&sync.Mutex{}, PID, device, broadcast, control, controlOwner, supervisory, config}, err
+	return New(jsonConfig, &DummyDevice{})
 }
 
-func TestReadConfig(t *testing.T) {
+func TestReadConfigFile(t *testing.T) {
 	testConfig := MachineConfig{}
 	jsonConfig, err := ioutil.ReadFile("./grid_test_config.json")
 	err = json.Unmarshal(jsonConfig, &testConfig)
@@ -78,14 +62,54 @@ func TestReadConfig(t *testing.T) {
 	assert.Assert(t, testConfig == assertConfig)
 }
 
+func TestReadConfigMem(t *testing.T) {
+	grid, err := newGrid()
+	assert.NilError(t, err)
+
+	assert.Equal(t, grid.PID(), grid.pid)
+	assert.Equal(t, grid.Name(), "TEST_Virtual Grid")
+	assert.Equal(t, grid.BusName(), "Virtual Bus")
+}
+
+func TestRequestControl(t *testing.T) {
+	grid, err := newGrid()
+	assert.NilError(t, err)
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+
+	ok := grid.RequestControl(pid, write)
+	assert.Equal(t, ok, true, "RequestControl failed to return ok==true")
+
+}
+
 func TestWriteControl(t *testing.T) {
 	grid, err := newGrid()
-	if err != nil {
-		log.Fatal(err)
+	assert.NilError(t, err)
+
+	pid, _ := uuid.NewUUID()
+	write := make(chan msg.Msg)
+	_ = grid.RequestControl(pid, write)
+
+	control := MachineControl{true}
+	write <- msg.New(pid, control)
+
+	device := grid.DeviceController().(*DummyDevice)
+
+	if device.CloseIntertie != control.CloseIntertie {
+		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseIntertie, control.CloseIntertie)
+	} else {
+		t.Logf("TestWriteControl() pass1: PASSED, %v == %v", device.CloseIntertie, control.CloseIntertie)
 	}
 
-	control := MachineControl{false}
-	grid.WriteControl(control)
+	control = MachineControl{false}
+	write <- msg.New(pid, control)
+	if device.CloseIntertie != control.CloseIntertie {
+		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseIntertie, control.CloseIntertie)
+	} else {
+		t.Logf("TestWriteControl() pass1: PASSED, %v == %v", device.CloseIntertie, control.CloseIntertie)
+	}
+
+	close(write)
 }
 
 type subscriber struct {
@@ -95,15 +119,16 @@ type subscriber struct {
 
 func TestUpdateStatus(t *testing.T) {
 	grid, err := newGrid()
-	if err != nil {
-		log.Fatal(err)
-	}
+	assert.NilError(t, err)
 
 	pid, _ := uuid.NewUUID()
-	ch := grid.Subscribe(pid)
+	ch := grid.Subscribe(pid, msg.Status)
 	sub := subscriber{pid, ch}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		msg, ok := <-sub.ch
 		status := msg.Payload().(Status)
 
@@ -117,19 +142,18 @@ func TestUpdateStatus(t *testing.T) {
 	}()
 
 	grid.UpdateStatus()
+	wg.Wait()
 }
 
-func TestBroadcast(t *testing.T) {
+func TestSubscribeToPublisherStatus(t *testing.T) {
 	grid, err := newGrid()
-	if err != nil {
-		log.Fatal(err)
-	}
+	assert.NilError(t, err)
 
 	n := 3
 	subs := make([]subscriber, n)
 	for i := 0; i < n; i++ {
 		pid, _ := uuid.NewUUID()
-		ch := grid.Subscribe(pid)
+		ch := grid.Subscribe(pid, msg.Status)
 		subs[i] = subscriber{pid, ch}
 
 	}
@@ -139,18 +163,114 @@ func TestBroadcast(t *testing.T) {
 		assertedStatus(),
 	}
 
+	var wg sync.WaitGroup
 	for _, sub := range subs {
-		go func(sub subscriber) {
+		wg.Add(1)
+		go func(sub subscriber, wg *sync.WaitGroup) {
+			wg.Done()
 			msg, ok := <-sub.ch
 			status := msg.Payload().(Status)
 			assert.Assert(t, ok == true)
 			assert.Assert(t, status == assertedStatus)
-		}(sub)
+		}(sub, &wg)
 	}
 
 	grid.UpdateStatus()
+	wg.Wait()
+}
+
+func TestSubscribeToPublisherConfig(t *testing.T) {
+	grid, err := newGrid()
+	assert.NilError(t, err)
+
+	n := 3
+	subs := make([]subscriber, n)
+	for i := 0; i < n; i++ {
+		pid, _ := uuid.NewUUID()
+		ch := grid.Subscribe(pid, msg.Config)
+		subs[i] = subscriber{pid, ch}
+	}
+
+	assertConfig := MachineConfig{"TEST_Virtual Grid", "Virtual Bus", 20, 19}
+
+	var wg sync.WaitGroup
+	for _, sub := range subs {
+		wg.Add(1)
+		go func(sub subscriber, wg *sync.WaitGroup) {
+			defer wg.Done()
+			msg, ok := <-sub.ch
+			config := msg.Payload().(MachineConfig)
+			assert.Assert(t, ok == true)
+			assert.Equal(t, config, assertConfig)
+		}(sub, &wg)
+	}
+
+	grid.UpdateConfig()
+	wg.Wait()
+}
+
+func TestUnsubscribeFromPublisher(t *testing.T) {
+	grid, err := newGrid()
+	assert.NilError(t, err)
+
+	rand.Seed(time.Now().UnixNano())
+	nSubs := rand.Intn(9) + 1
+	subs := make([]subscriber, nSubs)
+	for i := 0; i < nSubs; i++ {
+		pid, _ := uuid.NewUUID()
+		ch := grid.Subscribe(pid, msg.Status)
+		subs[i] = subscriber{pid, ch}
+	}
+
+	assertedStatus := Status{
+		CalculatedStatus{},
+		assertedStatus(),
+	}
+
+	unsub := rand.Intn(nSubs)
+	grid.Unsubscribe(subs[unsub].pid)
+
+	var wg sync.WaitGroup
+	for i, sub := range subs {
+		wg.Add(1)
+		go func(sub subscriber, i int, wg *sync.WaitGroup) {
+			defer wg.Done()
+			msg, ok := <-sub.ch
+			if !ok {
+				assert.Assert(t, i == unsub)
+				return
+			}
+			status := msg.Payload().(Status)
+			assert.Assert(t, status == assertedStatus)
+		}(sub, i, &wg)
+	}
+
+	grid.UpdateStatus()
+	wg.Wait()
 }
 
 func TestTransform(t *testing.T) {
+	machineStatus := assertedStatus()
 
+	assertedStatus := Status{
+		CalculatedStatus{},
+		machineStatus,
+	}
+
+	status := transform(machineStatus)
+	assert.Assert(t, status == assertedStatus)
+}
+
+func TestStatusAccessors(t *testing.T) {
+	machineStatus := assertedStatus()
+
+	assertedStatus := Status{
+		CalculatedStatus{},
+		machineStatus,
+	}
+
+	assert.Equal(t, assertedStatus.KW(), machineStatus.KW)
+	assert.Equal(t, assertedStatus.KVAR(), machineStatus.KVAR)
+	assert.Equal(t, assertedStatus.RealPositiveCapacity(), machineStatus.RealPositiveCapacity)
+	assert.Equal(t, assertedStatus.RealNegativeCapacity(), machineStatus.RealNegativeCapacity)
 }

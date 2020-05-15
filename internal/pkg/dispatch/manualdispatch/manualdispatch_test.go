@@ -2,37 +2,16 @@ package manualdispatch
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+<<<<<<< HEAD
+	"github.com/ohowland/cgc/internal/pkg/asset/mock"
+=======
+>>>>>>> master
 	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
-
-type MockAsset struct {
-	Status MockStatus `json:"Status"`
-}
-
-type MockStatus struct {
-	Name                 string    `json:"Name"`
-	PID                  uuid.UUID `json:"PID"`
-	KW                   float64   `json:"KW"`
-	KVAR                 float64   `json:"KVAR"`
-	RealPositiveCapacity float64   `json:"RealPositiveCapacity"`
-	RealNegativeCapacity float64   `json:"RealNegativeCapacity"`
-}
-
-func (s MockAsset) KW() float64 {
-	return s.Status.KW
-}
-func (s MockAsset) KVAR() float64 {
-	return s.Status.KVAR
-}
-func (s MockAsset) RealPositiveCapacity() float64 {
-	return s.Status.RealPositiveCapacity
-}
-func (s MockAsset) RealNegativeCapacity() float64 {
-	return s.Status.RealNegativeCapacity
-}
 
 func TestNew(t *testing.T) {
 	_, err := New("./manualdispatch_test_config.json")
@@ -46,19 +25,41 @@ func TestUpdateStatusSingle(t *testing.T) {
 
 	pid, _ := uuid.NewUUID()
 
+<<<<<<< HEAD
+	status := mock.AssertedStatus()
+	msg := msg.New(pid, msg.STATUS, status)
+=======
 	status := MockAsset{MockStatus{"ESS", pid, 10, 20, 30, 40}}
 	msg := msg.New(pid, status)
+>>>>>>> master
 
 	dispatch.UpdateStatus(msg)
 
 	memberstatus := dispatch.calcStatus.MemberStatus()
 
-	assert.Assert(t, memberstatus[pid].KW() == status.KW())
-	assert.Assert(t, memberstatus[pid].KVAR() == status.KVAR())
-	assert.Assert(t, memberstatus[pid].RealPositiveCapacity() ==
-		status.RealPositiveCapacity())
-	assert.Assert(t, memberstatus[pid].RealNegativeCapacity() ==
-		status.RealNegativeCapacity())
+	if memberstatus[pid].KW() != status.KW() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid].KW(), status.KW())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid].KW(), status.KW())
+	}
+
+	if memberstatus[pid].KVAR() != status.KVAR() {
+		t.Errorf("UpdateStatus(): FAILED. %f kVAR != %f kVAR", memberstatus[pid].KVAR(), status.KVAR())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kVAR == %f kVAR", memberstatus[pid].KVAR(), status.KVAR())
+	}
+
+	if memberstatus[pid].RealPositiveCapacity() != status.RealPositiveCapacity() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid].RealPositiveCapacity(), status.RealPositiveCapacity())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid].RealPositiveCapacity(), status.RealPositiveCapacity())
+	}
+
+	if memberstatus[pid].RealNegativeCapacity() != status.RealNegativeCapacity() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid].RealNegativeCapacity(), status.RealNegativeCapacity())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid].RealNegativeCapacity(), status.RealNegativeCapacity())
+	}
 }
 
 func TestUpdatePowerMulti(t *testing.T) {
@@ -67,6 +68,17 @@ func TestUpdatePowerMulti(t *testing.T) {
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
+<<<<<<< HEAD
+	status1 := mock.AssertedStatus()
+	time.Sleep(100 * time.Millisecond)
+	status2 := mock.AssertedStatus()
+
+	msg1 := msg.New(pid1, msg.STATUS, status1)
+	dispatch.UpdateStatus(msg1)
+
+	msg2 := msg.New(pid2, msg.STATUS, status2)
+	dispatch.UpdateStatus(msg2)
+=======
 	status1 := MockAsset{MockStatus{"ESS", pid1, 10, 20, 30, 40}}
 	status2 := MockAsset{MockStatus{"Grid", pid2, 40, 50, 60, 70}}
 	msg := msg.New(pid1, status1)
@@ -74,22 +86,57 @@ func TestUpdatePowerMulti(t *testing.T) {
 
 	msg = msg.New(pid2, status2)
 	dispatch.UpdateStatus(msg)
+>>>>>>> master
 
 	memberstatus := dispatch.calcStatus.MemberStatus()
 
-	assert.Assert(t, memberstatus[pid1].KW() == status1.KW())
-	assert.Assert(t, memberstatus[pid1].KVAR() == status1.KVAR())
-	assert.Assert(t, memberstatus[pid1].RealPositiveCapacity() ==
-		status1.RealPositiveCapacity())
-	assert.Assert(t, memberstatus[pid1].RealNegativeCapacity() ==
-		status1.RealNegativeCapacity())
+	if memberstatus[pid1].KW() != status1.KW() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid1].KW(), status1.KW())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid1].KW(), status1.KW())
+	}
 
-	assert.Assert(t, memberstatus[pid2].KW() == status2.KW())
-	assert.Assert(t, memberstatus[pid2].KVAR() == status2.KVAR())
-	assert.Assert(t, memberstatus[pid2].RealPositiveCapacity() ==
-		status2.RealPositiveCapacity())
-	assert.Assert(t, memberstatus[pid2].RealNegativeCapacity() ==
-		status2.RealNegativeCapacity())
+	if memberstatus[pid1].KVAR() != status1.KVAR() {
+		t.Errorf("UpdateStatus(): FAILED. %f kVAR != %f kVAR", memberstatus[pid1].KVAR(), status1.KVAR())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kVAR == %f kVAR", memberstatus[pid1].KVAR(), status1.KVAR())
+	}
+
+	if memberstatus[pid1].RealPositiveCapacity() != status1.RealPositiveCapacity() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid1].RealPositiveCapacity(), status1.RealPositiveCapacity())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid1].RealPositiveCapacity(), status1.RealPositiveCapacity())
+	}
+
+	if memberstatus[pid1].RealNegativeCapacity() != status1.RealNegativeCapacity() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid1].RealNegativeCapacity(), status1.RealNegativeCapacity())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid1].RealNegativeCapacity(), status1.RealNegativeCapacity())
+	}
+
+	if memberstatus[pid2].KW() != status2.KW() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid2].KW(), status2.KW())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid2].KW(), status2.KW())
+	}
+
+	if memberstatus[pid2].KVAR() != status2.KVAR() {
+		t.Errorf("UpdateStatus(): FAILED. %f kVAR != %f kVAR", memberstatus[pid2].KVAR(), status2.KVAR())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kVAR == %f kVAR", memberstatus[pid2].KVAR(), status2.KVAR())
+	}
+
+	if memberstatus[pid2].RealPositiveCapacity() != status1.RealPositiveCapacity() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid2].RealPositiveCapacity(), status2.RealPositiveCapacity())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid2].RealPositiveCapacity(), status2.RealPositiveCapacity())
+	}
+
+	if memberstatus[pid2].RealNegativeCapacity() != status2.RealNegativeCapacity() {
+		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid2].RealNegativeCapacity(), status2.RealNegativeCapacity())
+	} else {
+		t.Logf("UpdateStatus(): PASSED. %f kW == %f kW", memberstatus[pid2].RealNegativeCapacity(), status2.RealNegativeCapacity())
+	}
 }
 
 func TestDropAsset(t *testing.T) {
@@ -98,11 +145,17 @@ func TestDropAsset(t *testing.T) {
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
-	status1 := MockAsset{MockStatus{"ESS", pid1, 11, 22, 33, 44}}
-	status2 := MockAsset{MockStatus{"Grid", pid2, 55, 66, 77, 88}}
+	status1 := mock.AssertedStatus()
+	status2 := mock.AssertedStatus()
 
+	msg1 := msg.New(pid1, msg.STATUS, status1)
+	msg2 := msg.New(pid2, msg.STATUS, status2)
+
+<<<<<<< HEAD
+=======
 	msg1 := msg.New(pid1, status1)
 	msg2 := msg.New(pid2, status2)
+>>>>>>> master
 	dispatch.UpdateStatus(msg1)
 	dispatch.UpdateStatus(msg2)
 
@@ -113,6 +166,11 @@ func TestDropAsset(t *testing.T) {
 	_, ok := memberstatus[pid1]
 	assert.Assert(t, !ok)
 
+	if memberstatus[pid2].KW() != status2.KW() {
+		t.Errorf("DropAsset(): FAILED. %f != %f", memberstatus[pid2].KW(), status2.KW())
+	} else {
+		t.Logf("DropAsset(): PASSED. %f == %f", memberstatus[pid2].KW(), status2.KW())
+	}
 	assert.Assert(t, memberstatus[pid2].KW() == status2.KW())
 	assert.Assert(t, memberstatus[pid2].KVAR() == status2.KVAR())
 	assert.Assert(t, memberstatus[pid2].RealPositiveCapacity() == status2.RealPositiveCapacity())

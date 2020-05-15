@@ -8,7 +8,7 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 
@@ -18,7 +18,8 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
-	"github.com/ohowland/cgc/internal/pkg/bus/acbus/virtualacbus"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 )
 
 func TestVirtualBusVirtualEss(t *testing.T) {
@@ -81,7 +82,7 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 	relay1.AddMember(device5)
 	relay1.AddMember(device6)
 
-	go func(*ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *acbus.ACBus) {
+	go func(*ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ess.Asset, *ac.Bus) {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
 			<-ticker.C
@@ -95,12 +96,31 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 		}
 	}(&ess1, &ess2, &ess3, &ess4, &ess5, &ess6, &bus1)
 
-	ess1.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true})
-	ess2.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess3.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess4.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess5.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
-	ess6.WriteControl(ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	/*
+		This doesn't work. Dispatch needs to generate the control
+
+		wPID, _ := uuid.NewUUID()
+		writer1 := make(chan msg.Msg)
+		writer2 := make(chan msg.Msg)
+		writer3 := make(chan msg.Msg)
+		writer4 := make(chan msg.Msg)
+		writer5 := make(chan msg.Msg)
+		writer6 := make(chan msg.Msg)
+
+		ess1.RequestControl(wPID, writer1)
+		ess2.RequestControl(wPID, writer2)
+		ess3.RequestControl(wPID, writer3)
+		ess4.RequestControl(wPID, writer4)
+		ess5.RequestControl(wPID, writer5)
+		ess6.RequestControl(wPID, writer6)
+
+		writer1 <- msg.New(wPID, msg.CONTROL, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true})
+		writer2 <- msg.New(wPID, msg.CONTROL, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+		writer3 <- msg.New(wPID, msg.CONTROL, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+		writer4 <- msg.New(wPID, msg.CONTROL, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+		writer5 <- msg.New(wPID, msg.CONTROL, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+		writer6 <- msg.New(wPID, msg.CONTROL, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false})
+	*/
 
 	time.Sleep(5 * time.Second)
 
@@ -151,7 +171,7 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	relay1.AddMember(device2)
 	relay1.AddMember(device3)
 
-	go func(*ess.Asset, *feeder.Asset, *grid.Asset, *acbus.ACBus) {
+	go func(*ess.Asset, *feeder.Asset, *grid.Asset, *ac.Bus) {
 		ticker := time.NewTicker(1 * time.Second)
 		for {
 			<-ticker.C
@@ -163,9 +183,18 @@ func TestVirtualBusAllAssets(t *testing.T) {
 
 	kwSp := 2.0
 
-	ess1.WriteControl(ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
-	feeder1.WriteControl(feeder.MachineControl{CloseFeeder: true})
-	grid1.WriteControl(grid.MachineControl{CloseIntertie: true})
+	wpid, _ := uuid.NewUUID()
+	essWriter := make(chan msg.Msg)
+	_ = ess1.RequestControl(wpid, essWriter)
+	essWriter <- msg.New(wpid, msg.CONTROL, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+
+	feederWriter := make(chan msg.Msg)
+	_ = feeder1.RequestControl(wpid, feederWriter)
+	feederWriter <- msg.New(wpid, msg.CONTROL, feeder.MachineControl{CloseFeeder: true})
+
+	gridWriter := make(chan msg.Msg)
+	_ = grid1.RequestControl(wpid, gridWriter)
+	gridWriter <- msg.New(wpid, msg.CONTROL, grid.MachineControl{CloseIntertie: true})
 
 	pid, _ := uuid.NewUUID()
 	ch := grid1.Subscribe(pid)
@@ -181,34 +210,12 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 }
 
-type MockDispatch struct {
-	msgList    []msg.Msg
-	controlMap map[uuid.UUID]interface{}
-}
-
-func newMockDispatch() MockDispatch {
-	msgList := make([]msg.Msg, 0)
-	controlMap := make(map[uuid.UUID]interface{})
-	return MockDispatch{msgList, controlMap}
-}
-
-func (d *MockDispatch) UpdateStatus(msg msg.Msg) {
-	d.msgList = append(d.msgList, msg)
-}
-
-func (d *MockDispatch) DropAsset(uuid.UUID) error {
-	return nil
-}
-
-func (d MockDispatch) GetControl() map[uuid.UUID]interface{} {
-	return d.controlMap
-}
-
 func TestBusDispatchForwarding(t *testing.T) {
 
-	dispatch := newMockDispatch()
+	d := dispatch.NewDummyDispatch()
+	mockDispatch := d.(*dispatch.DummyDispatch)
 
-	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json", &dispatch)
+	bus1, err := virtualacbus.New("../../config/bus/virtualACBus.json", d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,11 +240,11 @@ func TestBusDispatchForwarding(t *testing.T) {
 		}
 	}(&ess1)
 
-	for len(dispatch.msgList) < 1 {
+	for len(mockDispatch.MsgList()) < 1 {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	assert.Assert(t, dispatch.msgList[0].PID() == ess1.PID())
+	assert.Assert(t, mockDispatch.MsgList()[0].PID() == ess1.PID())
 }
 
 func TestDispatchCalculatedStatusAggregate(t *testing.T) {
@@ -273,7 +280,7 @@ func TestDispatchCalculatedStatusAggregate(t *testing.T) {
 	relay1.AddMember(device1)
 	relay1.AddMember(device2)
 
-	go func(*ess.Asset, *grid.Asset, *acbus.ACBus) {
+	go func(*ess.Asset, *grid.Asset, *ac.Bus) {
 		ticker := time.NewTicker(200 * time.Millisecond)
 		for {
 			<-ticker.C
@@ -283,11 +290,19 @@ func TestDispatchCalculatedStatusAggregate(t *testing.T) {
 	}(&ess1, &grid1, &bus1)
 
 	kwSp := 5.0
-	ess1.WriteControl(ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
-	grid1.WriteControl(grid.MachineControl{CloseIntertie: true})
+
+	wpid, _ := uuid.NewUUID()
+	essWriter := make(chan msg.Msg)
+	_ = ess1.RequestControl(wpid, essWriter)
+	essWriter <- msg.New(wpid, msg.CONTROL, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+
+	gridWriter := make(chan msg.Msg)
+	_ = grid1.RequestControl(wpid, gridWriter)
+	gridWriter <- msg.New(wpid, msg.CONTROL, grid.MachineControl{CloseIntertie: true})
+
 	time.Sleep(2000 * time.Millisecond)
 
-	memberStatus := dispatch.GetStatus()
+	memberStatus, _ := dispatch.GetStatus(ess1.PID())
 	log.Println(memberStatus)
 
 	//assert.Assert(t, memberStatus[ess1.PID()].(asset.Status).KW() == kwSp)
