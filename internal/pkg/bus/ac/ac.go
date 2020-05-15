@@ -124,6 +124,26 @@ func (b *Bus) AddMember(a asset.Asset) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
+	b.subscribeStatus(a)
+	b.subscribeConfig(a)
+
+	// request configuration broadcast from device
+	a.UpdateConfig()
+
+	// create a channel for bus to publish to asset control
+	if ch, ok := b.requestControl(a); ok {
+		b.members[a.PID()] = ch
+		log.Printf("New %v member: %v", b.Name(), a.Name())
+	} else {
+		log.Printf("%v failed to add new member: %v", b.Name(), a.Name())
+	}
+
+	if len(b.members) == 1 { // if this is the first member, start the bus process.
+		go b.Process()
+	}
+}
+
+func (b *Bus) subscribeStatus(a asset.Asset) {
 	// subscribe to asset status broadcast
 	subStatus := a.Subscribe(b.PID(), msg.Status)
 
@@ -133,7 +153,9 @@ func (b *Bus) AddMember(a asset.Asset) {
 			inbox <- msg
 		}
 	}(subStatus, b.inbox)
+}
 
+func (b *Bus) subscribeConfig(a asset.Asset) {
 	// subscribe to asset config broadcast
 	subConfig := a.Subscribe(b.PID(), msg.Config)
 
@@ -142,34 +164,14 @@ func (b *Bus) AddMember(a asset.Asset) {
 			inbox <- msg
 		}
 	}(subConfig, b.inbox)
-
-	// request configuration broadcast from device
-	a.UpdateConfig()
-
-	// create a channel for bus to publish to asset control
-	pubControl := make(chan msg.Msg)
-	if ok := b.requestControl(a, pubControl); ok {
-		b.members[a.PID()] = pubControl
-	}
-
-	if len(b.members) == 1 { // if this is the first member, start the bus process.
-		go b.Process()
-	}
 }
 
-func (b Bus) requestControl(i interface{}, pub chan msg.Msg) bool {
-	c := i.(asset.Controller)
-	ok := c.RequestControl(b.pid, pub)
-	return ok
+func (b *Bus) requestControl(a asset.Asset) (chan<- msg.Msg, bool) {
+	ch := make(chan msg.Msg)
+	ac := a.(asset.Controller)
+	ok := ac.RequestControl(b.pid, ch)
+	return ch, ok
 }
-
-/*
-func (b Bus) subscribe(i interface{}) <-chan msg.Msg {
-	s := i.(msg.Publisher)
-	sub := s.Subscribe(b.pid)
-	return sub
-}
-*/
 
 // removeMember revokes membership of an asset to the bus.
 func (b *Bus) removeMember(pid uuid.UUID) {

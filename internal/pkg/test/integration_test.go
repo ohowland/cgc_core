@@ -12,14 +12,14 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 
+	"github.com/ohowland/cgc/internal/lib/asset/ess/virtualess"
+	"github.com/ohowland/cgc/internal/lib/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc/internal/lib/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess/virtualess"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder/virtualfeeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid/virtualgrid"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
 )
 
 func TestVirtualBusVirtualEss(t *testing.T) {
@@ -186,15 +186,15 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	wpid, _ := uuid.NewUUID()
 	essWriter := make(chan msg.Msg)
 	_ = ess1.RequestControl(wpid, essWriter)
-	essWriter <- msg.New(wpid, msg.CONTROL, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+	essWriter <- msg.New(wpid, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
 
 	feederWriter := make(chan msg.Msg)
 	_ = feeder1.RequestControl(wpid, feederWriter)
-	feederWriter <- msg.New(wpid, msg.CONTROL, feeder.MachineControl{CloseFeeder: true})
+	feederWriter <- msg.New(wpid, feeder.MachineControl{CloseFeeder: true})
 
 	gridWriter := make(chan msg.Msg)
 	_ = grid1.RequestControl(wpid, gridWriter)
-	gridWriter <- msg.New(wpid, msg.CONTROL, grid.MachineControl{CloseIntertie: true})
+	gridWriter <- msg.New(wpid, grid.MachineControl{CloseIntertie: true})
 
 	pid, _ := uuid.NewUUID()
 	ch := grid1.Subscribe(pid)
@@ -294,11 +294,11 @@ func TestDispatchCalculatedStatusAggregate(t *testing.T) {
 	wpid, _ := uuid.NewUUID()
 	essWriter := make(chan msg.Msg)
 	_ = ess1.RequestControl(wpid, essWriter)
-	essWriter <- msg.New(wpid, msg.CONTROL, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+	essWriter <- msg.New(wpid, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
 
 	gridWriter := make(chan msg.Msg)
 	_ = grid1.RequestControl(wpid, gridWriter)
-	gridWriter <- msg.New(wpid, msg.CONTROL, grid.MachineControl{CloseIntertie: true})
+	gridWriter <- msg.New(wpid, grid.MachineControl{CloseIntertie: true})
 
 	time.Sleep(2000 * time.Millisecond)
 

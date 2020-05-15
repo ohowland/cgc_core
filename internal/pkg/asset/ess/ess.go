@@ -81,7 +81,7 @@ func (a Asset) UpdateStatus() {
 
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
-	a.publisher.Publish(msg.Config, a.Config())
+	a.publisher.Publish(msg.Config, a.config())
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -113,7 +113,7 @@ loop:
 }
 
 //Config returns the archetypical configuration for the energy storage system asset.
-func (a Asset) Config() MachineConfig {
+func (a Asset) config() MachineConfig {
 	return a.config.machine
 }
 
