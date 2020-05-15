@@ -26,22 +26,27 @@ func NewPublisher(pid uuid.UUID) *PubSub {
 	return p
 }
 
+// Subscribe returns a channel on which the pubisher writes the specified topic
 func (p *PubSub) Subscribe(pid uuid.UUID, topic Topic) <-chan Msg {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
-	ch := make(chan Msg)
+	// Subscribers given a buffer of 1 msg
+	ch := make(chan Msg, 1)
 	p.subs[topic][pid] = ch
 	return ch
 }
 
+// Unsubscribe closes all channels associated with a PID
 func (p *PubSub) Unsubscribe(pid uuid.UUID) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
 	for _, topic := range p.subs {
-		close(topic[pid])
-		delete(topic, pid)
+		if _, ok := topic[pid]; ok {
+			close(topic[pid])
+			delete(topic, pid)
+		}
 	}
 }
 
