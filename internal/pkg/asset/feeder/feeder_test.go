@@ -3,7 +3,6 @@ package feeder
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"sync"
 	"testing"
@@ -46,71 +45,51 @@ func newFeeder() (Asset, error) {
 		return Asset{}, err
 	}
 
-	machineConfig := MachineConfig{}
-	err = json.Unmarshal(jsonConfig, &machineConfig)
-	if err != nil {
-		return Asset{}, err
-	}
-
-	PID, err := uuid.NewUUID()
-	if err != nil {
-		return Asset{}, err
-	}
-
-	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
-
-	controlOwner := PID
-
-	supervisory := SupervisoryControl{&sync.Mutex{}, false}
-	config := Config{&sync.Mutex{}, machineConfig}
-	device := &DummyDevice{}
-
-	return Asset{&sync.Mutex{}, PID, device, broadcast, controlOwner, supervisory, config}, err
+	return New(jsonConfig, &DummyDevice{})
 }
 
-func TestReadConfig(t *testing.T) {
+func TestReadConfigFile(t *testing.T) {
 	testConfig := MachineConfig{}
 	jsonConfig, err := ioutil.ReadFile("./feeder_test_config.json")
 	err = json.Unmarshal(jsonConfig, &testConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NilError(t, err)
 
 	assertConfig := MachineConfig{"TEST_Virtual Feeder", "Virtual Bus", 20, 18}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
+func TestReadConfigMem(t *testing.T) {
+	feeder, err := newFeeder()
+	assert.NilError(t, err)
+
+	assert.Equal(t, feeder.PID(), feeder.pid)
+	assert.Equal(t, feeder.Name(), "TEST_Virtual Feeder")
+	assert.Equal(t, feeder.BusName(), "Virtual Bus")
+}
+
 func TestRequestControl(t *testing.T) {
-	feeder1, err := newFeeder()
-	if err != nil {
-		log.Fatal(err)
-	}
+	feeder, err := newFeeder()
+	assert.NilError(t, err)
 
 	pid, _ := uuid.NewUUID()
 	write := make(chan msg.Msg)
 
-	ok := feeder1.RequestControl(pid, write)
-	if !ok {
-		t.Error("RequestControl(): FAILED, RequestControl() returned false")
-	} else {
-		t.Log("RequestControl(): PASSED, RequestControl returned true")
-	}
+	ok := feeder.RequestControl(pid, write)
+	assert.Equal(t, ok, true, "RequestControl failed to return ok==true")
 }
 
 func TestWriteControl(t *testing.T) {
-	feeder1, err := newFeeder()
-	if err != nil {
-		log.Fatal(err)
-	}
+	feeder, err := newFeeder()
+	assert.NilError(t, err)
 
 	pid, _ := uuid.NewUUID()
 	write := make(chan msg.Msg)
-	_ = feeder1.RequestControl(pid, write)
+	_ = feeder.RequestControl(pid, write)
 
 	control := MachineControl{true}
-	write <- msg.New(pid, msg.CONTROL, control)
+	write <- msg.New(pid, control)
 
-	device := feeder1.DeviceController().(*DummyDevice)
+	device := feeder.DeviceController().(*DummyDevice)
 
 	if device.CloseFeeder != control.CloseFeeder {
 		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseFeeder, control.CloseFeeder)
@@ -119,7 +98,7 @@ func TestWriteControl(t *testing.T) {
 	}
 
 	control = MachineControl{false}
-	write <- msg.New(pid, msg.CONTROL, control)
+	write <- msg.New(pid, control)
 	if device.CloseFeeder != control.CloseFeeder {
 		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseFeeder, control.CloseFeeder)
 	} else {
@@ -136,15 +115,16 @@ type subscriber struct {
 
 func TestUpdateStatus(t *testing.T) {
 	feeder, err := newFeeder()
-	if err != nil {
-		log.Fatal(err)
-	}
+	assert.NilError(t, err)
 
 	pid, _ := uuid.NewUUID()
-	ch := feeder.Subscribe(pid)
+	ch := feeder.Subscribe(pid, msg.Status)
 	sub := subscriber{pid, ch}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		msg, ok := <-sub.ch
 		status := msg.Payload().(Status)
 
@@ -158,19 +138,18 @@ func TestUpdateStatus(t *testing.T) {
 	}()
 
 	feeder.UpdateStatus()
+	wg.Wait()
 }
 
-func TestBroadcast(t *testing.T) {
+func TestSubscribeToPublisherStatus(t *testing.T) {
 	feeder, err := newFeeder()
-	if err != nil {
-		log.Fatal(err)
-	}
+	assert.NilError(t, err)
 
 	n := 3
 	subs := make([]subscriber, n)
 	for i := 0; i < n; i++ {
 		pid, _ := uuid.NewUUID()
-		ch := feeder.Subscribe(pid)
+		ch := feeder.Subscribe(pid, msg.Status)
 		subs[i] = subscriber{pid, ch}
 
 	}
@@ -180,14 +159,90 @@ func TestBroadcast(t *testing.T) {
 		assertedStatus(),
 	}
 
+	var wg sync.WaitGroup
 	for _, sub := range subs {
-		go func(sub subscriber) {
+		wg.Add(1)
+		go func(sub subscriber, wg *sync.WaitGroup) {
+			defer wg.Done()
 			msg, ok := <-sub.ch
 			status := msg.Payload().(Status)
 			assert.Assert(t, ok == true)
 			assert.Assert(t, status == assertedStatus)
-		}(sub)
+		}(sub, &wg)
 	}
+
+	feeder.UpdateStatus()
+	wg.Wait()
+}
+
+func TestSubscribeToPublisherConfig(t *testing.T) {
+	feeder, err := newFeeder()
+	assert.NilError(t, err)
+
+	n := 3
+	subs := make([]subscriber, n)
+	for i := 0; i < n; i++ {
+		pid, _ := uuid.NewUUID()
+		ch := feeder.Subscribe(pid, msg.Config)
+		subs[i] = subscriber{pid, ch}
+	}
+
+	assertConfig := MachineConfig{"TEST_Virtual Feeder", "Virtual Bus", 20, 18}
+
+	var wg sync.WaitGroup
+	for _, sub := range subs {
+		wg.Add(1)
+		go func(sub subscriber, wg *sync.WaitGroup) {
+			defer wg.Done()
+			msg, ok := <-sub.ch
+			config := msg.Payload().(MachineConfig)
+			assert.Assert(t, ok == true)
+			assert.Equal(t, config, assertConfig)
+		}(sub, &wg)
+	}
+
+	feeder.UpdateConfig()
+	wg.Wait()
+}
+
+func TestUnsubscribeFromPublisher(t *testing.T) {
+	feeder, err := newFeeder()
+	assert.NilError(t, err)
+
+	rand.Seed(time.Now().UnixNano())
+	nSubs := rand.Intn(9) + 1
+	subs := make([]subscriber, nSubs)
+	for i := 0; i < nSubs; i++ {
+		pid, _ := uuid.NewUUID()
+		ch := feeder.Subscribe(pid, msg.Status)
+		subs[i] = subscriber{pid, ch}
+	}
+
+	assertedStatus := Status{
+		CalculatedStatus{},
+		assertedStatus(),
+	}
+
+	unsub := rand.Intn(nSubs)
+	feeder.Unsubscribe(subs[unsub].pid)
+
+	var wg sync.WaitGroup
+	for i, sub := range subs {
+		wg.Add(1)
+		go func(sub subscriber, i int, wg *sync.WaitGroup) {
+			defer wg.Done()
+			msg, ok := <-sub.ch
+			if !ok {
+				assert.Assert(t, i == unsub)
+				return
+			}
+			status := msg.Payload().(Status)
+			assert.Assert(t, status == assertedStatus)
+		}(sub, i, &wg)
+	}
+
+	feeder.UpdateStatus()
+	wg.Wait()
 }
 
 func TestTransform(t *testing.T) {
@@ -200,4 +255,16 @@ func TestTransform(t *testing.T) {
 
 	status := transform(machineStatus)
 	assert.Assert(t, status == assertedStatus)
+}
+
+func TestStatusAccessors(t *testing.T) {
+	machineStatus := assertedStatus()
+
+	assertedStatus := Status{
+		CalculatedStatus{},
+		machineStatus,
+	}
+
+	assert.Equal(t, assertedStatus.KW(), machineStatus.KW)
+	assert.Equal(t, assertedStatus.KVAR(), machineStatus.KVAR)
 }

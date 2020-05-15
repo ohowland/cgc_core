@@ -17,11 +17,10 @@ type DeviceController interface {
 
 // Asset is a data structure for an ESS Asset
 type Asset struct {
-	mux       *sync.Mutex
-	pid       uuid.UUID
-	device    DeviceController
-	publisher *msg.PubSub
-	//broadcast    map[uuid.UUID]chan<- msg.Msg
+	mux          *sync.Mutex
+	pid          uuid.UUID
+	device       DeviceController
+	publisher    *msg.PubSub
 	controlOwner uuid.UUID
 	supervisory  SupervisoryControl
 	config       Config
@@ -37,9 +36,9 @@ func (a Asset) Name() string {
 	return a.config.machine.Name
 }
 
-// Bus is a getter for the asset's connected Bus
-func (a Asset) Bus() string {
-	return a.config.machine.Bus
+// BusName is a getter for the asset's connected Bus
+func (a Asset) BusName() string {
+	return a.config.machine.BusName
 }
 
 // DeviceController returns the hardware abstraction layer struct
@@ -47,13 +46,13 @@ func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-// Subscribe to boradcasts on topic
+// Subscribe returns a channel on which the specified topic is broadcast
 func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) <-chan msg.Msg {
 	ch := a.publisher.Subscribe(pid, topic)
 	return ch
 }
 
-// Unsubscribe from broadcasts
+// Unsubscribe pid from all topic broadcasts
 func (a Asset) Unsubscribe(pid uuid.UUID) {
 	a.publisher.Unsubscribe(pid)
 }
@@ -114,13 +113,8 @@ loop:
 }
 
 //Config returns the archetypical configuration for the energy storage system asset.
-func (a Asset) Config() Config {
-	return a.config
-}
-
-// Enable is an settor for the asset enable state
-func (a *Asset) Enable(b bool) {
-	a.supervisory.enable = b
+func (a Asset) Config() MachineConfig {
+	return a.config.machine
 }
 
 // Status wraps MachineStatus with mutex and state metadata
@@ -189,7 +183,7 @@ type Config struct {
 // MachineConfig holds the ESS asset configuration parameters
 type MachineConfig struct {
 	Name      string  `json:"Name"`
-	Bus       string  `json:"Bus"`
+	BusName   string  `json:"BusName"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
 	RatedKWH  float64 `json:"RatedKWH"`
@@ -210,7 +204,7 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 
 	publisher := msg.NewPublisher(pid)
 
-	controlOwner := pid
+	var controlOwner uuid.UUID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
 	config := Config{&sync.Mutex{}, machineConfig}
