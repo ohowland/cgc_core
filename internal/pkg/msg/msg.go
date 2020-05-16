@@ -7,7 +7,7 @@ import (
 )
 
 type Publisher interface {
-	Subscribe(pid uuid.UUID, topic Topic) <-chan Msg
+	Subscribe(pid uuid.UUID, topic Topic) (<-chan Msg, error)
 	Unsubscribe(pid uuid.UUID)
 }
 
@@ -27,14 +27,14 @@ func NewPublisher(pid uuid.UUID) *PubSub {
 }
 
 // Subscribe returns a channel on which the pubisher writes the specified topic
-func (p *PubSub) Subscribe(pid uuid.UUID, topic Topic) <-chan Msg {
+func (p *PubSub) Subscribe(pid uuid.UUID, topic Topic) (<-chan Msg, error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
 	// Subscribers given a buffer of 1 msg
 	ch := make(chan Msg, 1)
 	p.subs[topic][pid] = ch
-	return ch
+	return ch, nil
 }
 
 // Unsubscribe closes all channels associated with a PID
@@ -55,6 +55,18 @@ func (p *PubSub) Publish(topic Topic, payload interface{}) {
 	defer p.mux.RUnlock()
 
 	msg := New(p.owner, payload)
+	for _, ch := range p.subs[topic] {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
+func (p *PubSub) Forward(topic Topic, msg Msg) {
+	p.mux.RLock()
+	defer p.mux.RUnlock()
+
 	for _, ch := range p.subs[topic] {
 		select {
 		case ch <- msg:

@@ -2,6 +2,7 @@ package mock
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 
@@ -41,24 +42,43 @@ var AssertedConfig = randDummyConfig()
 
 type DummyAsset struct {
 	pid          uuid.UUID
-	broadcast    chan<- msg.Msg
-	control      <-chan msg.Msg
+	publisher    *msg.PubSub
 	controlOwner uuid.UUID
+	Control      DummyControl
 }
 
-func (d *DummyAsset) Subscribe(pid uuid.UUID, topic msg.Topic) <-chan msg.Msg {
-	ch := make(chan msg.Msg, 1)
-	d.broadcast = ch
-	return ch
+func (a DummyAsset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+	ch, err := a.publisher.Subscribe(pid, topic)
+	return ch, err
 }
 
-func (d *DummyAsset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
-	d.control = ch
+// Unsubscribe pid from all topic broadcasts
+func (a DummyAsset) Unsubscribe(pid uuid.UUID) {
+	a.publisher.Unsubscribe(pid)
+}
+
+func (d *DummyAsset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	d.controlOwner = pid
-	return true
+	go d.controlHandler(ch)
+	return nil
 }
 
-func (d DummyAsset) Unsubscribe(uuid.UUID) {}
+func (d *DummyAsset) controlHandler(ch <-chan msg.Msg) {
+loop:
+	for {
+		data, ok := <-ch
+		if !ok {
+			log.Println("DummyAsset controlHandler() stopping")
+			break loop
+		}
+		control, ok := data.Payload().(DummyControl)
+		if !ok {
+			log.Println("DummyAsset controlHandler() bad type assertion")
+			break loop
+		}
+		d.Control = control
+	}
+}
 
 func (d DummyAsset) PID() uuid.UUID {
 	return d.pid
@@ -73,17 +93,11 @@ func (d DummyAsset) Bus() string {
 }
 
 func (d DummyAsset) UpdateStatus() {
-	status := msg.New(d.pid, AssertedStatus())
-	d.broadcast <- status
+	d.publisher.Publish(msg.Status, AssertedStatus())
 }
 
 func (d DummyAsset) UpdateConfig() {
-	config := msg.New(d.pid, AssertedConfig())
-	d.broadcast <- config
-}
-
-func (d DummyAsset) RequestContol(uuid.UUID, <-chan msg.Msg) bool {
-	return true
+	d.publisher.Publish(msg.Config, AssertedConfig())
 }
 
 type DummyControl struct {
@@ -119,8 +133,9 @@ type MachineDummyStatus struct {
 }
 
 func NewDummyAsset() DummyAsset {
-	ch := make(chan msg.Msg, 1)
-	return DummyAsset{pid: uuid.New(), broadcast: ch}
+	pid, _ := uuid.NewUUID()
+	publisher := msg.NewPublisher(pid)
+	return DummyAsset{pid, publisher, uuid.UUID{}, DummyControl{}}
 }
 
 func (s DummyStatus) KW() float64 {

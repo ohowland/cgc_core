@@ -17,7 +17,7 @@ type Asset interface {
 type Controller interface {
 	UpdateStatus()
 	UpdateConfig()
-	RequestControl(uuid.UUID, <-chan msg.Msg) bool
+	RequestControl(uuid.UUID, <-chan msg.Msg) error
 }
 
 type Config interface {

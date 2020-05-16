@@ -47,9 +47,9 @@ func (a Asset) DeviceController() DeviceController {
 }
 
 // Subscribe returns a channel on which the specified topic is broadcast
-func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) <-chan msg.Msg {
-	ch := a.publisher.Subscribe(pid, topic)
-	return ch
+func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+	ch, err := a.publisher.Subscribe(pid, topic)
+	return ch, err
 }
 
 // Unsubscribe pid from all topic broadcasts
@@ -81,7 +81,7 @@ func (a Asset) UpdateStatus() {
 
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
-	a.publisher.Publish(msg.Config, a.Config())
+	a.publisher.Publish(msg.Config, a.config.machine)
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -109,11 +109,6 @@ loop:
 			log.Println("Grid controlHandler():", err)
 		}
 	}
-}
-
-//Config returns the archetypical configuration for the energy storage system asset.
-func (a Asset) Config() MachineConfig {
-	return a.config.machine
 }
 
 // Status wraps MachineStatus with mutex and state metadata

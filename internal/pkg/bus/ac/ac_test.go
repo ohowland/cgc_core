@@ -7,8 +7,9 @@ import (
 
 	"gotest.tools/assert"
 
+	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset/mock"
-	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 func newACBus() Bus {
@@ -18,7 +19,7 @@ func newACBus() Bus {
 		panic(err)
 	}
 
-	bus, err := New(jsonConfig, NewDummyRelay(), dispatch.NewDummyDispatch())
+	bus, err := New(jsonConfig, NewDummyRelay())
 	if err != nil {
 		panic(err)
 	}
@@ -31,7 +32,7 @@ func TestNewAcBus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bus, err := New(jsonConfig, DummyRelay{}, dispatch.NewDummyDispatch())
+	bus, err := New(jsonConfig, DummyRelay{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,9 +78,17 @@ func TestRemoveMember(t *testing.T) {
 		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
 		assert.Assert(t, pid != asset2.PID())
 	}
+
+	bus.removeMember(asset1.PID())
+	bus.removeMember(asset3.PID())
+
+	for range bus.members {
+		assert.Assert(t, false) // if members is empty this loop will not run.
+	}
+
 }
 
-func TestUpdateDispatcherUpdate(t *testing.T) {
+func TestUpdateMemberStatus(t *testing.T) {
 	bus := newACBus()
 
 	asset1 := mock.NewDummyAsset()
@@ -89,25 +98,25 @@ func TestUpdateDispatcherUpdate(t *testing.T) {
 
 	// assets status is pushed to the bus process, which pushes to dispatch
 	// asset.UpdateStatus() initiates the cycle.
-	asset1.UpdateStatus()
-	asset2.UpdateStatus()
+
+	pid, err := uuid.NewUUID()
+	assert.NilError(t, err)
+
+	ch, err := bus.Subscribe(pid, msg.Status)
+	assert.NilError(t, err)
+
 	assertStatus := mock.AssertedStatus()
 
-	time.Sleep(100 * time.Millisecond)
+	asset1.UpdateStatus()
+	m := <-ch
+	assert.Equal(t, m.Payload().(mock.DummyStatus), assertStatus)
 
-	// check the internals of the mock object DummyDispatch.
-	// confirm asset status made it to dispatch.
-	d := bus.dispatch.(*dispatch.DummyDispatch)
-	asset1Msg := d.AssetStatus[asset1.PID()]
-	assert.Assert(t, asset1Msg.Payload().(mock.DummyStatus) == assertStatus)
-	assert.Assert(t, asset1Msg.PID() == asset1.PID())
-
-	asset2Msg := d.AssetStatus[asset2.PID()]
-	assert.Assert(t, asset2Msg.Payload().(mock.DummyStatus) == assertStatus)
-	assert.Assert(t, asset2Msg.PID() == asset2.PID())
+	asset2.UpdateStatus()
+	m = <-ch
+	assert.Equal(t, m.Payload().(mock.DummyStatus), assertStatus)
 }
 
-func TestUpdateDispatcherControl(t *testing.T) {
+func TestPushControl(t *testing.T) {
 	bus := newACBus()
 
 	asset1 := mock.NewDummyAsset()
@@ -115,16 +124,17 @@ func TestUpdateDispatcherControl(t *testing.T) {
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
-	asset1.UpdateStatus()
-	asset2.UpdateStatus()
 	assertControl := mock.AssertedControl()
 
-	time.Sleep(100 * time.Millisecond)
+	pid, _ := uuid.NewUUID()
+	ch := make(chan msg.Msg)
+	bus.RequestControl(pid, ch)
 
-	assetControl1, _ := bus.dispatch.GetControl(asset1.PID())
-	assetControl2, _ := bus.dispatch.GetControl(asset2.PID())
-	assert.Assert(t, assetControl1.(mock.DummyControl) == assertControl)
-	assert.Assert(t, assetControl2.(mock.DummyControl) == assertControl)
+	ch <- msg.New(pid, msg.New(asset1.PID(), assertControl))
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Assert(t, asset1.Control == assertControl, "Failed: %v != %v", asset1.Control, assertControl)
+
 }
 
 func TestGetRelay(t *testing.T) {
@@ -150,4 +160,43 @@ func TestEnergized(t *testing.T) {
 	} else {
 		assert.Assert(t, bus.Energized() == false)
 	}
+}
+
+func TestStop(t *testing.T) {
+	bus := newACBus()
+
+	asset1 := mock.NewDummyAsset()
+	asset2 := mock.NewDummyAsset()
+	bus.AddMember(&asset1)
+	bus.AddMember(&asset2)
+
+	n := 0
+	for range bus.members {
+		n++
+	}
+	assert.Equal(t, n, 2)
+
+	bus.stopProcess()
+
+	n = 0
+	for range bus.members {
+		n++
+	}
+	assert.Equal(t, n, 0)
+
+}
+
+func TestHasMember(t *testing.T) {
+	bus := newACBus()
+
+	asset1 := mock.NewDummyAsset()
+	asset2 := mock.NewDummyAsset()
+	asset3 := mock.NewDummyAsset()
+
+	bus.AddMember(&asset1)
+	bus.AddMember(&asset3)
+
+	assert.Assert(t, bus.hasMember(asset1.PID()))
+	assert.Assert(t, !bus.hasMember(asset2.PID()))
+	assert.Assert(t, bus.hasMember(asset3.PID()))
 }
