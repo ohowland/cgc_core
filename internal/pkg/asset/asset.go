@@ -1,6 +1,8 @@
 package asset
 
 import (
+	"sync"
+
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
@@ -18,6 +20,7 @@ type Controller interface {
 	UpdateStatus()
 	UpdateConfig()
 	RequestControl(uuid.UUID, <-chan msg.Msg) error
+	Shutdown(*sync.WaitGroup) error
 }
 
 type Config interface {

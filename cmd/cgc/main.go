@@ -2,6 +2,10 @@ package main
 
 import (
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,8 +14,10 @@ import (
 	"github.com/ohowland/cgc/internal/lib/asset/grid/virtualgrid"
 	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/dispatch"
 )
 
 /*
@@ -21,7 +27,7 @@ func buildDispatch() (dispatch.Dispatcher, error) {
 }
 */
 
-func buildBus(dispatch dispatch.Dispatcher) (ac.Bus, error) {
+func buildBus() (ac.Bus, error) {
 	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json")
 	return vrBus, err
 }
@@ -34,65 +40,54 @@ func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
 
 func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
 	assets := make(map[uuid.UUID]asset.Asset)
-	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
 
-	grid, err := virtualgrid.New("./config/asset/virtualGrid.json")
-	if err != nil {
-		panic(err)
-	}
+	grid := buildVirtualGridAsset(bus)
+	ess := buildVirtualESSAsset(bus)
+	feeder := buildVirtualFeederAsset(bus)
 
-	assets[grid.PID()] = &grid
-	bus.AddMember(&grid)
+	assets[ess.PID()] = ess
+	assets[grid.PID()] = grid
+	assets[feeder.PID()] = feeder
 
-	vrGrid := grid.DeviceController().(*virtualgrid.VirtualGrid)
-	vrBus.AddMember(vrGrid)
-
-	ess, err := virtualess.New("./config/asset/virtualESS.json")
-	if err != nil {
-		panic(err)
-	}
-
-	assets[ess.PID()] = &ess
-	bus.AddMember(&ess)
-
-	vrEss := ess.DeviceController().(*virtualess.VirtualESS)
-	vrBus.AddMember(vrEss)
-
-	feeder, err := virtualfeeder.New("./config/asset/virtualFeeder.json")
-	if err != nil {
-		panic(err)
-	}
-
-	assets[feeder.PID()] = &feeder
-	bus.AddMember(&feeder)
-
-	vrFeeder := feeder.DeviceController().(*virtualfeeder.VirtualFeeder)
-	vrBus.AddMember(vrFeeder)
-
-	return assets, err
+	return assets, nil
 }
 
-func launchUpdateLoop(assets map[uuid.UUID]asset.Asset) {
+func launchUpdateLoop(assets map[uuid.UUID]asset.Asset, sigs chan os.Signal) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
-		<-ticker.C
-		for _, asset := range assets {
-			asset.UpdateStatus()
+		select {
+		case <-ticker.C:
+			for _, asset := range assets {
+				asset.UpdateStatus()
+			}
+		case <-sigs:
+			var wg sync.WaitGroup
+			for _, asset := range assets {
+				go asset.Shutdown(&wg)
+			}
+			wg.Wait()
+			time.Sleep(1 * time.Second)
+			return
 		}
 	}
 }
 
 func main() {
-	log.Println("Starting CGC v0.1")
+	log.Println("Starting CGC v0.1.1")
+	sigs := make(chan os.Signal, 1)
 
-	log.Println("[MAIN] Building Dispatch")
-	dispatch, err := buildDispatch()
-	if err != nil {
-		panic(err)
-	}
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	/*
+		log.Println("[MAIN] Building Dispatch")
+		dispatch, err := buildDispatch()
+		if err != nil {
+			panic(err)
+		}
+	*/
 
 	log.Println("[MAIN] Building Buses")
-	bus, err := buildBuses(dispatch)
+	bus, err := buildBus()
 	if err != nil {
 		panic(err)
 	}
@@ -127,7 +122,7 @@ func main() {
 	*/
 
 	log.Println("[MAIN] Starting update loops")
-	launchUpdateLoop(assets)
+	launchUpdateLoop(assets, sigs)
 
 	/*
 		log.Println("Starting Datalogging")
@@ -140,4 +135,49 @@ func main() {
 	*/
 
 	log.Println("[MAIN] Stopping system")
+}
+
+func buildVirtualGridAsset(bus *ac.Bus) *grid.Asset {
+	grid, err := virtualgrid.New("./config/asset/virtualGrid.json")
+	if err != nil {
+		panic(err)
+	}
+
+	bus.AddMember(&grid)
+
+	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
+	vrGrid := grid.DeviceController().(*virtualgrid.VirtualGrid)
+	vrBus.AddMember(vrGrid)
+
+	return &grid
+}
+
+func buildVirtualESSAsset(bus *ac.Bus) *ess.Asset {
+	ess, err := virtualess.New("./config/asset/virtualESS.json")
+	if err != nil {
+		panic(err)
+	}
+
+	bus.AddMember(&ess)
+
+	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
+	vrEss := ess.DeviceController().(*virtualess.VirtualESS)
+	vrBus.AddMember(vrEss)
+
+	return &ess
+}
+
+func buildVirtualFeederAsset(bus *ac.Bus) *feeder.Asset {
+	feeder, err := virtualfeeder.New("./config/asset/virtualFeeder.json")
+	if err != nil {
+		panic(err)
+	}
+
+	bus.AddMember(&feeder)
+
+	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
+	vrFeeder := feeder.DeviceController().(*virtualfeeder.VirtualFeeder)
+	vrBus.AddMember(vrFeeder)
+
+	return &feeder
 }

@@ -145,12 +145,12 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 
 	assert.Assert(t, bus1.Energized() == true)
 
-	device1.StopProcess()
-	device2.StopProcess()
-	device3.StopProcess()
-	device4.StopProcess()
-	device5.StopProcess()
-	device6.StopProcess()
+	device1.Stop()
+	device2.Stop()
+	device3.Stop()
+	device4.Stop()
+	device5.Stop()
+	device6.Stop()
 	time.Sleep(500 * time.Millisecond)
 }
 
@@ -221,9 +221,9 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	assert.Assert(t, gridstatus.Payload().(grid.Status).KW() == -1*kwSp)
 	assert.Assert(t, bus1.Energized() == true)
 
-	device1.StopProcess()
-	device2.StopProcess()
-	device3.StopProcess()
+	device1.Stop()
+	device2.Stop()
+	device3.Stop()
 	time.Sleep(500 * time.Millisecond)
 }
 

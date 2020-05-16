@@ -156,7 +156,9 @@ func (a *VirtualGrid) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.V
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
-	a.StopProcess()
+	if err := a.Stop(); err != nil {
+		panic(err)
+	}
 	a.startProcess()
 	return busOut
 }
@@ -168,11 +170,13 @@ func (a *VirtualGrid) startProcess() {
 	go Process(a.pid, a.comm, a.bus)
 }
 
-// StopProcess stops the virtual machine loop by closing it's communication channels.
-func (a *VirtualGrid) StopProcess() {
+// Stop the virtual machine loop by closing it's communication channels.
+func (a *VirtualGrid) Stop() error {
 	if a.comm.send != nil {
+		//log.Println("[VirtualGrid-Device] Stopping")
 		close(a.comm.send)
 	}
+	return nil
 }
 
 // Process is an asynchronous routine representing the hardware device.
@@ -204,7 +208,7 @@ loop:
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("VirtualGrid-Device shutdown")
+	log.Println("[VirtualGrid-Device] Shutdown")
 }
 
 type stateMachine struct {

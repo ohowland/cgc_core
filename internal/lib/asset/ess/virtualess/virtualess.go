@@ -169,7 +169,10 @@ func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.Vi
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
-	a.StopProcess()
+	if err := a.Stop(); err != nil {
+		panic(err)
+	}
+
 	a.startProcess()
 	return busOut
 }
@@ -182,11 +185,13 @@ func (a *VirtualESS) startProcess() {
 	go Process(a.pid, a.comm, a.bus)
 }
 
-// StopProcess stops the virtual machine loop by closing it's communication channels.
-func (a *VirtualESS) StopProcess() {
+// Stop stops the virtual machine loop by closing it's communication channels.
+func (a *VirtualESS) Stop() error {
 	if a.comm.send != nil {
+		//log.Println("[VirtualESS-Device] Stopping")
 		close(a.comm.send)
 	}
+	return nil
 }
 
 // Process is the virtual hardware update loop
@@ -221,7 +226,7 @@ loop:
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("VirtualESS-Device shutdown")
+	log.Println("[VirtualESS-Device] Shutdown")
 }
 
 type stateMachine struct {

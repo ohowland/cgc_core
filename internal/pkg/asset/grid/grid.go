@@ -13,6 +13,7 @@ import (
 type DeviceController interface {
 	ReadDeviceStatus() (MachineStatus, error)
 	WriteDeviceControl(MachineControl) error
+	Stop() error
 }
 
 // Asset is a datastructure for an Energy Storage System Asset
@@ -82,6 +83,13 @@ func (a Asset) UpdateStatus() {
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
 	a.publisher.Publish(msg.Config, a.config.machine)
+}
+
+// Shutdown instructs the asset to cleanup all resources
+func (a Asset) Shutdown(wg *sync.WaitGroup) error {
+	wg.Add(1)
+	defer wg.Done()
+	return a.device.Stop()
 }
 
 func transform(machineStatus MachineStatus) Status {

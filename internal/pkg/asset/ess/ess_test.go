@@ -42,6 +42,10 @@ func (d *DummyDevice) WriteDeviceControl(ctrl MachineControl) error {
 	return nil
 }
 
+func (d *DummyDevice) Stop() error {
+	return nil
+}
+
 func newESS() (Asset, error) {
 	configPath := "./ess_test_config.json"
 	jsonConfig, err := ioutil.ReadFile(configPath)
@@ -123,7 +127,8 @@ func TestUpdateStatus(t *testing.T) {
 	assert.NilError(t, err)
 
 	pid, _ := uuid.NewUUID()
-	ch := ess.Subscribe(pid, msg.Status)
+	ch, err := ess.Subscribe(pid, msg.Status)
+	assert.NilError(t, err)
 	sub := subscriber{pid, ch}
 
 	var wg sync.WaitGroup
@@ -154,7 +159,9 @@ func TestSubscribeToPublisherStatus(t *testing.T) {
 	subs := make([]subscriber, n)
 	for i := 0; i < n; i++ {
 		pid, _ := uuid.NewUUID()
-		ch := ess.Subscribe(pid, msg.Status)
+		ch, err := ess.Subscribe(pid, msg.Status)
+		assert.NilError(t, err)
+
 		subs[i] = subscriber{pid, ch}
 	}
 
@@ -187,7 +194,9 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 	subs := make([]subscriber, n)
 	for i := 0; i < n; i++ {
 		pid, _ := uuid.NewUUID()
-		ch := ess.Subscribe(pid, msg.Config)
+		ch, err := ess.Subscribe(pid, msg.Config)
+		assert.NilError(t, err)
+
 		subs[i] = subscriber{pid, ch}
 	}
 
@@ -218,7 +227,9 @@ func TestUnsubscribeFromPublisher(t *testing.T) {
 	subs := make([]subscriber, nSubs)
 	for i := 0; i < nSubs; i++ {
 		pid, _ := uuid.NewUUID()
-		ch := ess.Subscribe(pid, msg.Status)
+		ch, err := ess.Subscribe(pid, msg.Status)
+		assert.NilError(t, err)
+
 		subs[i] = subscriber{pid, ch}
 	}
 

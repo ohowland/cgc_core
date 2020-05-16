@@ -13,6 +13,7 @@ import (
 type DeviceController interface {
 	ReadDeviceStatus() (MachineStatus, error)
 	WriteDeviceControl(MachineControl) error
+	Stop() error
 }
 
 // Asset is a data structure for an ESS Asset
@@ -89,6 +90,13 @@ func transform(machineStatus MachineStatus) Status {
 		CalculatedStatus{},
 		machineStatus,
 	}
+}
+
+// Shutdown instructs the asset to cleanup all resources
+func (a Asset) Shutdown(wg *sync.WaitGroup) error {
+	wg.Add(1)
+	defer wg.Done()
+	return a.device.Stop()
 }
 
 func (a *Asset) controlHandler(ch <-chan msg.Msg) {

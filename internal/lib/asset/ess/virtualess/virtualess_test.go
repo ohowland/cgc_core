@@ -62,7 +62,7 @@ func TestLinkToVirtualBus(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	relay.AddMember(device)
 
@@ -94,7 +94,7 @@ func TestLinkToVirtualBus(t *testing.T) {
 	assert.Assert(t, targetSend.KVAR() == targetRecieve.KVAR())
 }
 
-func TestStartStopProcess(t *testing.T) {
+func TestStartStop(t *testing.T) {
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
 
@@ -102,7 +102,7 @@ func TestStartStopProcess(t *testing.T) {
 	device := ess.DeviceController().(*VirtualESS)
 
 	relay.AddMember(device)
-	device.StopProcess()
+	device.Stop()
 
 	_, ok := <-device.comm.send
 	assert.Assert(t, !ok)
@@ -115,7 +115,7 @@ func TestRead(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	relay.AddMember(device)
 
@@ -145,7 +145,7 @@ func TestWrite(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	relay.AddMember(device)
 
@@ -171,7 +171,7 @@ func TestReadDeviceStatus(t *testing.T) {
 
 	newESS := newESS()
 	device := newESS.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	relay.AddMember(device)
 
@@ -195,7 +195,7 @@ func TestReadDeviceStatus(t *testing.T) {
 func TestWriteDeviceControl(t *testing.T) {
 	newESS := newESS()
 	device := newESS.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -283,7 +283,7 @@ func TestTransitionOffToPQ(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -325,7 +325,7 @@ func TestTransitionPQToOff(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -386,7 +386,7 @@ func TestTransitionOffToHzV(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -423,7 +423,7 @@ func TestTransitionHzVToOff(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -475,7 +475,7 @@ func TestTransitionPQToHzV(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -527,7 +527,7 @@ func TestTransitionHzVToPQ(t *testing.T) {
 
 	ess := newESS()
 	device := ess.DeviceController().(*VirtualESS)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)

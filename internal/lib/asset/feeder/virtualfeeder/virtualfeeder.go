@@ -153,7 +153,10 @@ func (a *VirtualFeeder) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
-	a.StopProcess()
+	if err := a.Stop(); err != nil {
+		panic(err)
+	}
+
 	a.startProcess()
 	return busOut
 }
@@ -165,11 +168,13 @@ func (a *VirtualFeeder) startProcess() {
 	go Process(a.pid, a.comm, a.bus)
 }
 
-// StopProcess stops the virtual machine loop by closing it's communication channels.
-func (a *VirtualFeeder) StopProcess() {
+// Stop the virtual machine loop by closing it's communication channels.
+func (a *VirtualFeeder) Stop() error {
 	if a.comm.send != nil {
+		//log.Println("[VirtualFeeder-Device] Stopping")
 		close(a.comm.send)
 	}
+	return nil
 }
 
 // Process is the virtual hardware update loop
@@ -204,7 +209,7 @@ loop:
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("VirtualFeeder-Device shutdown")
+	log.Println("[VirtualFeeder-Device] Shutdown")
 }
 
 type stateMachine struct {

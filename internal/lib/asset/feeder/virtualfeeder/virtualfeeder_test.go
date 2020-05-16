@@ -62,7 +62,7 @@ func TestLinkToVirtualBus(t *testing.T) {
 
 	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	relay.AddMember(device)
 
@@ -95,7 +95,7 @@ func TestStartStopProcess(t *testing.T) {
 	device := feeder.DeviceController().(*VirtualFeeder)
 
 	relay.AddMember(device)
-	device.StopProcess()
+	device.Stop()
 
 	_, ok := <-device.comm.send
 	assert.Assert(t, !ok)
@@ -107,7 +107,7 @@ func TestRead(t *testing.T) {
 
 	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	relay.AddMember(device)
 
@@ -130,7 +130,7 @@ func TestRead(t *testing.T) {
 func TestWrite(t *testing.T) {
 	feeder := newFeeder()
 	device := feeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -144,9 +144,7 @@ func TestWrite(t *testing.T) {
 
 	go func() {
 		err := device.write(control)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NilError(t, err)
 	}()
 
 	testControl := <-intercept
@@ -156,7 +154,7 @@ func TestWrite(t *testing.T) {
 func TestReadDeviceStatus(t *testing.T) {
 	newfeeder := newFeeder()
 	device := newfeeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -179,7 +177,7 @@ func TestReadDeviceStatus(t *testing.T) {
 func TestWriteDeviceControl(t *testing.T) {
 	newfeeder := newFeeder()
 	device := newfeeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -189,13 +187,11 @@ func TestWriteDeviceControl(t *testing.T) {
 	intercept := make(chan Control)
 	device.comm.send = intercept
 
-	machineControl := feeder.MachineControl{true}
+	machineControl := feeder.MachineControl{CloseFeeder: true}
 
 	go func() {
 		err := device.WriteDeviceControl(machineControl)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NilError(t, err)
 	}()
 
 	testControl := <-intercept
@@ -244,7 +240,7 @@ func TestTransitionOffToOn(t *testing.T) {
 
 	newFeeder := newFeeder()
 	device := newFeeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
@@ -281,7 +277,7 @@ func TestTransitionOnToOff(t *testing.T) {
 
 	newFeeder := newFeeder()
 	device := newFeeder.DeviceController().(*VirtualFeeder)
-	defer device.StopProcess()
+	defer device.Stop()
 
 	bus := newBus()
 	relay := bus.Relayer().(*virtualacbus.VirtualACBus)
