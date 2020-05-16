@@ -88,7 +88,7 @@ func (d DummyAsset) Name() string {
 	return fmt.Sprintf("DummyAsset-%d", rand.Int())
 }
 
-func (d DummyAsset) Bus() string {
+func (d DummyAsset) BusName() string {
 	return "DummyBus"
 }
 

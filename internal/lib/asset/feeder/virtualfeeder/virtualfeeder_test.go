@@ -5,10 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac/virtualacbus"
-	"github.com/ohowland/cgc/internal/pkg/dispatch"
 	"gotest.tools/assert"
 )
 
@@ -23,7 +22,7 @@ func randStatus() func() Status {
 var assertedStatus = randStatus()
 
 func newFeeder() feeder.Asset {
-	configPath := "../feeder_test_config.json"
+	configPath := "../../../../pkg/asset/feeder/feeder_test_config.json"
 	feeder, err := New(configPath)
 	if err != nil {
 		panic(err)
@@ -32,9 +31,8 @@ func newFeeder() feeder.Asset {
 }
 
 func newBus() ac.Bus {
-	dispatch := dispatch.NewDummyDispatch()
-	configPath := "../../../bus/ac/ac_test_config.json"
-	bus, err := virtualacbus.New(configPath, dispatch)
+	configPath := "../../../../pkg/bus/ac/ac_test_config.json"
+	bus, err := virtualacbus.New(configPath)
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +47,7 @@ func newLinkedFeeder(bus *virtualacbus.VirtualACBus) *feeder.Asset {
 }
 
 func TestNew(t *testing.T) {
-	configPath := "../feeder_test_config.json"
+	configPath := "../../../../pkg/asset/feeder/feeder_test_config.json"
 	feeder, err := New(configPath)
 	if err != nil {
 		t.Fatal(err)

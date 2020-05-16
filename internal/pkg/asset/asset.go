@@ -23,7 +23,7 @@ type Controller interface {
 type Config interface {
 	PID() uuid.UUID
 	Name() string
-	Bus() string
+	BusName() string
 }
 
 //
@@ -41,7 +41,7 @@ type Frequency interface {
 }
 
 type Gridforming interface {
-	Gridforming() float64
+	Gridforming() bool
 }
 
 //

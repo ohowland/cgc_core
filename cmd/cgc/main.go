@@ -12,16 +12,17 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
-	"github.com/ohowland/cgc/internal/pkg/dispatch/manualdispatch"
 )
 
+/*
 func buildDispatch() (dispatch.Dispatcher, error) {
 	dispatch, err := manualdispatch.New("./config/dispatch/manualdispatch.json")
 	return &dispatch, err
 }
+*/
 
-func buildBuses(dispatch dispatch.Dispatcher) (ac.Bus, error) {
-	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json", dispatch)
+func buildBus(dispatch dispatch.Dispatcher) (ac.Bus, error) {
+	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json")
 	return vrBus, err
 }
 

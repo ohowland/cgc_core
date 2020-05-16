@@ -58,14 +58,14 @@ func (a Asset) Unsubscribe(pid uuid.UUID) {
 }
 
 // RequestControl connects the asset control to the read only channel parameter.
-func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) bool {
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	// TODO: previous owner needs to stop. how to enforce?
 	a.controlOwner = pid
 	go a.controlHandler(ch)
 
-	return true
+	return nil
 }
 
 // UpdateStatus requests a physical device read, then updates MachineStatus field.

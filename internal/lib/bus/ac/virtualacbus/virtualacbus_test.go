@@ -81,8 +81,8 @@ func newDummyAsset() *DummyAsset {
 }
 
 func newVirtualBus() *VirtualACBus {
-	configPath := "../acbus_test_config.json"
-	bus, err := New(configPath, nil)
+	configPath := "../../../../pkg/bus/ac/ac_test_config.json"
+	bus, err := New(configPath)
 	if err != nil {
 		panic(err)
 	}
@@ -92,8 +92,8 @@ func newVirtualBus() *VirtualACBus {
 }
 
 func TestNewVirtualACBus(t *testing.T) {
-	configPath := "../acbus_test_config.json"
-	bus, err := New(configPath, nil)
+	configPath := "../../../../pkg/bus/ac/ac_test_config.json"
+	bus, err := New(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,13 +234,8 @@ func TestProcessMessage(t *testing.T) {
 	bus.AddMember(asset1)
 	bus.AddMember(asset2)
 
-<<<<<<< HEAD:internal/lib/bus/ac/virtualacbus/virtualacbus_test.go
-	msg1 := msg.New(asset1.PID(), msg.STATUS, asset1.status)
-	msg2 := msg.New(asset2.PID(), msg.STATUS, asset2.status)
-=======
 	msg1 := msg.New(asset1.PID(), asset1.status)
 	msg2 := msg.New(asset2.PID(), asset2.status)
->>>>>>> master:internal/pkg/bus/acbus/virtualacbus/virtualacbus_test.go
 
 	agg := make(map[uuid.UUID]asset.VirtualStatus)
 	agg = bus.processMsg(msg1, agg)
