@@ -78,8 +78,8 @@ func TestRequestControl(t *testing.T) {
 	pid, _ := uuid.NewUUID()
 	write := make(chan msg.Msg)
 
-	ok := feeder.RequestControl(pid, write)
-	assert.Equal(t, ok, true, "RequestControl failed to return ok==true")
+	err = feeder.RequestControl(pid, write)
+	assert.NilError(t, err)
 }
 
 func TestWriteControl(t *testing.T) {

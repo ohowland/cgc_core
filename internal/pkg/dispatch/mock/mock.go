@@ -1,4 +1,4 @@
-package dispatch
+package mock
 
 import (
 	"sync"
@@ -33,7 +33,7 @@ func (d *DummyDispatch) GetControl() map[uuid.UUID]interface{} {
 	return d.assetControl
 }
 
-func NewDummyDispatch() Dispatcher {
+func NewDummyDispatch() dispatch.Dispatcher {
 	status := make(map[uuid.UUID]msg.Msg)
 	control := make(map[uuid.UUID]interface{})
 	pid, _ := uuid.NewUUID()

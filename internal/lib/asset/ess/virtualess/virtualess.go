@@ -200,7 +200,7 @@ func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
-
+	log.Println("[VirtualESS-Device] Starting")
 loop:
 	for {
 		select {
@@ -226,7 +226,7 @@ loop:
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("[VirtualESS-Device] Shutdown")
+	log.Println("[VirtualESS-Device] Stopped")
 }
 
 type stateMachine struct {

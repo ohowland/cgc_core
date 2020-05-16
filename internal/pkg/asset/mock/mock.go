@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,19 +48,24 @@ type DummyAsset struct {
 	Control      DummyControl
 }
 
-func (a DummyAsset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
-	ch, err := a.publisher.Subscribe(pid, topic)
+func (d DummyAsset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+	ch, err := d.publisher.Subscribe(pid, topic)
 	return ch, err
 }
 
 // Unsubscribe pid from all topic broadcasts
-func (a DummyAsset) Unsubscribe(pid uuid.UUID) {
-	a.publisher.Unsubscribe(pid)
+func (d DummyAsset) Unsubscribe(pid uuid.UUID) {
+	d.publisher.Unsubscribe(pid)
 }
 
 func (d *DummyAsset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	d.controlOwner = pid
 	go d.controlHandler(ch)
+	return nil
+}
+
+// Shutdown asset processes and cleanup resources
+func (d *DummyAsset) Shutdown(*sync.WaitGroup) error {
 	return nil
 }
 

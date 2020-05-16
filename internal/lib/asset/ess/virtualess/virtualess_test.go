@@ -22,7 +22,7 @@ func randStatus() func() Status {
 var assertedStatus = randStatus()
 
 func newESS() ess.Asset {
-	configPath := "../ess_test_config.json"
+	configPath := "../../../../pkg/asset/ess/ess_test_config.json"
 	ess, err := New(configPath)
 	if err != nil {
 		panic(err)
@@ -31,7 +31,7 @@ func newESS() ess.Asset {
 }
 
 func newBus() ac.Bus {
-	configPath := "../../../bus/ac/acbus_test_config.json"
+	configPath := "../../../../pkg/bus/ac/ac_test_config.json"
 	bus, err := virtualacbus.New(configPath)
 	if err != nil {
 		panic(err)

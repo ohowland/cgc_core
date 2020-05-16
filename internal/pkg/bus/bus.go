@@ -1,11 +1,23 @@
 package bus
 
-// Bus is the interface for power system connectivity graph.
-type Bus interface{}
+import (
+	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/msg"
+)
 
 type Graph struct {
-	rootNode       Bus
-	adjacentcyList map[Bus][]Bus
+	adjacentcyList map[Bus][]Node
+}
+
+type Bus interface {
+	Node
+	AddMember(Node)
+}
+
+type Node interface {
+	msg.Publisher
+	RequestControl(uuid.UUID, <-chan msg.Msg) error
+	PID() uuid.UUID
 }
 
 /*
@@ -22,13 +34,6 @@ func NewBusGraph(buses map[uuid.UUID]Bus) BusGraph {
 		busList[0],
 		busAdjList,
 	}
-}
-
-
-type BusGroup interface {
-	PID() uuid.UUID
-	BusGraph() BusGraph
-	Energized() bool
 }
 
 type BusGraph interface {

@@ -23,7 +23,9 @@ func TestSubscribe(t *testing.T) {
 		pid, err = uuid.NewUUID()
 		assert.NilError(t, err)
 		pids = append(pids, pid)
-		chs = append(chs, pubsub.Subscribe(pid, Status))
+		ch, err := pubsub.Subscribe(pid, Status)
+		assert.NilError(t, err)
+		chs = append(chs, ch)
 	}
 
 	randValue := rand.Float64()
@@ -54,7 +56,9 @@ func TestUnsubscribe(t *testing.T) {
 		pid, err = uuid.NewUUID()
 		assert.NilError(t, err)
 		pids = append(pids, pid)
-		chs = append(chs, pubsub.Subscribe(pid, Status))
+		ch, err := pubsub.Subscribe(pid, Status)
+		assert.NilError(t, err)
+		chs = append(chs, ch)
 	}
 
 	unsub := rand.Intn(nSubs)

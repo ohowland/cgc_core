@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
@@ -35,7 +35,7 @@ type msgHandler struct {
 }
 
 type member struct {
-	asset      asset.Asset
+	node       bus.Node
 	controller chan<- msg.Msg
 }
 
@@ -112,7 +112,7 @@ loop:
 
 // AddMember links the asset parameter to the bus. Asset update status and update
 // configuration events will publish to the bus
-func (b *Bus) AddMember(a asset.Asset) {
+func (b *Bus) AddMember(a bus.Node) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
@@ -181,31 +181,30 @@ func (b *Bus) stopProcess() {
 	b.stop <- true
 }
 
-func (b *Bus) newMember(a asset.Asset) (member, error) {
-	chIn, err := a.Subscribe(b.PID(), msg.Status)
+func (b *Bus) newMember(node bus.Node) (member, error) {
+	chIn, err := node.Subscribe(b.PID(), msg.Status)
 	if err != nil {
 		return member{}, err
 	}
 	go redirectMsg(chIn, b.inbox.status)
 
-	chIn, err = a.Subscribe(b.PID(), msg.Config)
+	chIn, err = node.Subscribe(b.PID(), msg.Config)
 	if err != nil {
 		return member{}, err
 	}
 	go redirectMsg(chIn, b.inbox.config)
 
-	chOut, err := b.requestControl(a)
+	chOut, err := b.requestControl(node)
 	if err != nil {
 		return member{}, err
 	}
 
-	return member{a, chOut}, nil
+	return member{node, chOut}, nil
 }
 
-func (b Bus) requestControl(a asset.Asset) (chan<- msg.Msg, error) {
+func (b Bus) requestControl(node bus.Node) (chan<- msg.Msg, error) {
 	ch := make(chan msg.Msg)
-	ac := a.(asset.Controller)
-	err := ac.RequestControl(b.pid, ch)
+	err := node.RequestControl(b.pid, ch)
 	return ch, err
 }
 
@@ -214,7 +213,7 @@ func (b *Bus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	if member, ok := b.members[pid]; ok {
-		member.asset.Unsubscribe(b.PID())
+		member.node.Unsubscribe(b.PID())
 	}
 	delete(b.members, pid)
 

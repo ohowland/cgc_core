@@ -38,15 +38,6 @@ func NewCalculatedStatus() (CalculatedStatus, error) {
 	return CalculatedStatus{&sync.Mutex{}, memberStatus}, nil
 }
 
-<<<<<<< HEAD
-func (b *CalculatedStatus) AggregateMemberStatus(m msg.Msg) {
-	status := b.memberStatus[m.PID()]
-
-	if assetStatus, ok := m.Payload().(asset.Power); ok {
-		status.Power = power{
-			kW:   assetStatus.KW(),
-			kVAR: assetStatus.KVAR(),
-=======
 func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 	status := b.memberStatus[msg.PID()]
 	switch p := msg.Payload().(type) {
@@ -54,7 +45,6 @@ func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 		status.capacity = capacity{
 			realPositiveCapacity: p.RealPositiveCapacity(),
 			realNegativeCapacity: p.RealNegativeCapacity(),
->>>>>>> master
 		}
 	}
 
@@ -68,11 +58,6 @@ func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 
 }
 
-<<<<<<< HEAD
-func (b *CalculatedStatus) AggregateMemberConfig(m msg.Msg) {}
-
-=======
->>>>>>> master
 func (b CalculatedStatus) updateBusStatus(msg msg.Msg, memberStatus map[uuid.UUID]Status) Status {
 	return Status{
 		Capacity: aggregateCapacity(memberStatus),
