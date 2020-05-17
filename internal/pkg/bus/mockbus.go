@@ -1,32 +1,31 @@
-package mockbus
+package bus
 
 import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 type MockBus struct {
-	mux          *sync.Mutex
-	pid          uuid.UUID
-	Members      map[uuid.UUID]bus.Node
-	ControlOwner uuid.UUID
-	Control      <-chan msg.Msg
-	publisher    *msg.PubSub
+	mux            *sync.Mutex
+	pid            uuid.UUID
+	Members        map[uuid.UUID]Node
+	ControlOwner   uuid.UUID
+	LastControlMsg msg.Msg
+	publisher      *msg.PubSub
 }
 
 func NewMockBus() (MockBus, error) {
 	pid, _ := uuid.NewUUID()
-	m := make(map[uuid.UUID]bus.Node)
+	m := make(map[uuid.UUID]Node)
 	pub := msg.NewPublisher(pid)
-	return MockBus{&sync.Mutex{}, pid, m, uuid.UUID{}, nil, pub}, nil
+	return MockBus{&sync.Mutex{}, pid, m, uuid.UUID{}, msg.Msg{}, pub}, nil
 }
 
 // AddMember links the asset parameter to the bus. Asset update status and update
 // configuration events will publish to the bus
-func (b *MockBus) AddMember(n bus.Node) {
+func (b *MockBus) AddMember(n Node) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	b.Members[n.PID()] = n
@@ -49,8 +48,16 @@ func (b *MockBus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	defer b.mux.Unlock()
 	// TODO: previous owner needs to stop. how to enforce?
 	b.ControlOwner = pid
-	b.Control = ch
+	go b.controlHandler(ch)
 	return nil
+}
+
+func (b *MockBus) controlHandler(ch <-chan msg.Msg) {
+	ctrlMsg, ok := <-ch
+	if !ok {
+		return
+	}
+	b.LastControlMsg = ctrlMsg
 }
 
 // PID process id
