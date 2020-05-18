@@ -2,5 +2,4 @@
     "Name": "TEST_Virtual Bus",
     "RatedVolt": 600,
     "RatedHz": 50,
-    "Pollrate": 100
 }

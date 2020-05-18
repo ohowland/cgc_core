@@ -8,8 +8,8 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset/mock"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/mock"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 func newACBus() Bus {

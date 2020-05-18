@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 // DeviceController is the hardware abstraction layer

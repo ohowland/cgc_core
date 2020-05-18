@@ -1,8 +1,8 @@
 package dispatch
 
 import (
-	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 type Dispatcher interface {

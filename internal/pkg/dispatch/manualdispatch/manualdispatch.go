@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/dispatch"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 // ManualDispatch is the core datastructure
