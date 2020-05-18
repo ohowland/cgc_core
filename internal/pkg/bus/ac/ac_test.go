@@ -8,8 +8,8 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc_core/internal/pkg/asset/mock"
-	"github.com/ohowland/cgc_core/internal/pkg/msg"
+	"github.com/ohowland/cgc/internal/pkg/asset/mockasset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 func newACBus() Bus {
@@ -43,8 +43,8 @@ func TestNewAcBus(t *testing.T) {
 func TestAddMember(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := mock.NewDummyAsset()
-	asset2 := mock.NewDummyAsset()
+	asset1 := mockasset.New()
+	asset2 := mockasset.New()
 
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
@@ -58,9 +58,9 @@ func TestAddMember(t *testing.T) {
 func TestRemoveMember(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := mock.NewDummyAsset()
-	asset2 := mock.NewDummyAsset()
-	asset3 := mock.NewDummyAsset()
+	asset1 := mockasset.New()
+	asset2 := mockasset.New()
+	asset3 := mockasset.New()
 
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
@@ -91,8 +91,8 @@ func TestRemoveMember(t *testing.T) {
 func TestUpdateMemberStatus(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := mock.NewDummyAsset()
-	asset2 := mock.NewDummyAsset()
+	asset1 := mockasset.New()
+	asset2 := mockasset.New()
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
@@ -105,26 +105,26 @@ func TestUpdateMemberStatus(t *testing.T) {
 	ch, err := bus.Subscribe(pid, msg.Status)
 	assert.NilError(t, err)
 
-	assertStatus := mock.AssertedStatus()
+	assertStatus := mockasset.AssertedStatus()
 
 	asset1.UpdateStatus()
 	m := <-ch
-	assert.Equal(t, m.Payload().(mock.DummyStatus), assertStatus)
+	assert.Equal(t, m.Payload().(mockasset.Status), assertStatus)
 
 	asset2.UpdateStatus()
 	m = <-ch
-	assert.Equal(t, m.Payload().(mock.DummyStatus), assertStatus)
+	assert.Equal(t, m.Payload().(mockasset.Status), assertStatus)
 }
 
 func TestPushControl(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := mock.NewDummyAsset()
-	asset2 := mock.NewDummyAsset()
+	asset1 := mockasset.New()
+	asset2 := mockasset.New()
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
-	assertControl := mock.AssertedControl()
+	assertControl := mockasset.AssertedControl()
 
 	pid, _ := uuid.NewUUID()
 	ch := make(chan msg.Msg)
@@ -165,8 +165,8 @@ func TestEnergized(t *testing.T) {
 func TestStop(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := mock.NewDummyAsset()
-	asset2 := mock.NewDummyAsset()
+	asset1 := mockasset.New()
+	asset2 := mockasset.New()
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
@@ -189,9 +189,9 @@ func TestStop(t *testing.T) {
 func TestHasMember(t *testing.T) {
 	bus := newACBus()
 
-	asset1 := mock.NewDummyAsset()
-	asset2 := mock.NewDummyAsset()
-	asset3 := mock.NewDummyAsset()
+	asset1 := mockasset.New()
+	asset2 := mockasset.New()
+	asset3 := mockasset.New()
 
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset3)

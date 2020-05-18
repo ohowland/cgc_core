@@ -5,37 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc_core/internal/lib/bus/ac/virtualacbus"
-	"github.com/ohowland/cgc_core/internal/pkg/msg"
+	"github.com/ohowland/cgc/internal/pkg/asset/mockasset"
 	"gotest.tools/assert"
 )
-
-type NilBus struct {
-	pid uuid.UUID
-}
-
-func (b *NilBus) AddMember(n Node) {}
-
-// Subscribe placeholder
-func (b *NilBus) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
-	ch := make(chan msg.Msg)
-	return ch, nil
-}
-
-// Unsubscribe placeholder
-func (b *NilBus) Unsubscribe(pid uuid.UUID) {}
-
-// RequestControl placeholder
-func (b *NilBus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error { return nil }
-
-// PID placeholder
-func (b NilBus) PID() uuid.UUID {
-	return b.pid
-}
-
-func (b NilBus) Name() string {
-	return "NilBus"
-}
 
 // BEGIN --- Graph Tests
 
@@ -47,8 +19,7 @@ func TestNewGraph(t *testing.T) {
 
 func TestAddNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1 := NilBus{}
-
+	bus1, _ := NewMockBus()
 	err := g.AddNode(&bus1)
 	assert.NilError(t, err)
 
@@ -58,8 +29,8 @@ func TestAddNode(t *testing.T) {
 
 func TestAddMultipleNodes(t *testing.T) {
 	g, _ := NewGraph()
-	bus1 := NilBus{}
-	bus2 := NilBus{}
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	err := g.AddNode(&bus1)
 	assert.NilError(t, err)
@@ -77,20 +48,20 @@ func TestAddMultipleNodes(t *testing.T) {
 
 func TestRejectDuplicateNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1 := &NilBus{}
+	bus1, _ := NewMockBus()
 
-	err := g.AddNode(bus1)
+	err := g.AddNode(&bus1)
 	assert.NilError(t, err)
-	err = g.AddNode(bus1)
-	assertError := fmt.Sprintf("node %p already exists in graph.", bus1)
+	err = g.AddNode(&bus1)
+	assertError := fmt.Sprintf("node %p already exists in graph.", &bus1)
 	assert.Error(t, err, assertError)
 
 }
 
 func TestAddDirectedEdge(t *testing.T) {
 	g, _ := NewGraph()
-	bus1 := NilBus{}
-	bus2 := NilBus{}
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	g.AddNode(&bus1)
 	g.AddNode(&bus2)
@@ -121,8 +92,8 @@ func TestAddDirectedEdge(t *testing.T) {
 
 func TestAddDirectedEdgeMissingStartNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1 := NilBus{}
-	bus2 := NilBus{}
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	// g.AddNode(&bus1) <- Missing Start Node.
 	g.AddNode(&bus2)
@@ -134,8 +105,8 @@ func TestAddDirectedEdgeMissingStartNode(t *testing.T) {
 
 func TestAddDirectedEdgeMissingEndNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1 := NilBus{}
-	bus2 := NilBus{}
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	g.AddNode(&bus1)
 	// g.AddNode(&bus2) <- Missing End Node.
@@ -151,20 +122,50 @@ func TestAddDirectedEdgeMissingEndNode(t *testing.T) {
 
 func TestSetRootBus(t *testing.T) {
 	g, _ := NewBusGraph()
-	b := NilBus{}
+	bus1, _ := NewMockBus()
 
-	g.setRootBus(&b)
+	g.setRootBus(&bus1)
 
-	assert.Assert(t, g.rootBus.(*NilBus) == &b)
+	assert.Assert(t, g.rootBus == &bus1)
 }
 
-func TestAddMember(t *testing.T) {
+func TestAddBusMember(t *testing.T) {
 	g, _ := NewBusGraph()
+	bus1, _ := NewMockBus()
 
-	bus1, err := virtualacbus.New("../../../config/bus/virtualACBus.json")
+	err := g.AddMember(&bus1)
 	assert.NilError(t, err)
+	assert.Assert(t, g.rootBus.(*MockBus) == &bus1)
+}
+
+func TestMemberBuses(t *testing.T) {
+	g, _ := NewBusGraph()
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
+	bus3, _ := NewMockBus()
 
 	g.AddMember(&bus1)
+	g.AddMember(&bus2)
+	g.AddMember(&bus3)
+
+	for _, bus := range g.nodeList() {
+		fmt.Printf("bus %p", &bus)
+	}
+
+}
+func TestFindAssetBus(t *testing.T) {}
+
+func TestAddAssetMember(t *testing.T) {
+	g, _ := NewBusGraph()
+	bus1, _ := NewMockBus()
+	asset1 := mockasset.New()
+
+	err := g.AddMember(&bus1)
+	assert.NilError(t, err)
+
+	err = g.AddMember(&asset1)
+	assert.NilError(t, err)
+
 }
 
 // --- END BusGraph Tests

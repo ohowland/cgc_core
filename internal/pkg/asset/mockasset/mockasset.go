@@ -1,4 +1,4 @@
-package mock
+package mockasset
 
 import (
 	"fmt"
@@ -8,68 +8,68 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc_core/internal/pkg/msg"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // randDummyStatus returns a closure for random DummyAsset Status
-func randDummyStatus() func() DummyStatus {
-	return func() DummyStatus {
+func randMockStatus() func() Status {
+	return func() Status {
 		rand.Seed(time.Hour.Nanoseconds())
-		status := DummyStatus{MachineDummyStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}}
+		status := Status{MachineStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false}}
 		return status
 	}
 }
 
-func randDummyControl() func() DummyControl {
+func randMockControl() func() Control {
 	rand.Seed(time.Hour.Nanoseconds())
-	control := DummyControl{rand.Float64(), rand.Float64()}
-	return func() DummyControl {
+	control := Control{rand.Float64(), rand.Float64()}
+	return func() Control {
 		return control
 	}
 }
 
-func randDummyConfig() func() DummyConfig {
+func randMockConfig() func() Config {
 	rand.Seed(time.Hour.Nanoseconds())
 	name := fmt.Sprintf("DummyAsset-%d", rand.Int())
-	config := DummyConfig{name, "DummyBus"}
-	return func() DummyConfig {
+	config := Config{name, "DummyBus"}
+	return func() Config {
 		return config
 	}
 }
 
-var AssertedStatus = randDummyStatus()
-var AssertedControl = randDummyControl()
-var AssertedConfig = randDummyConfig()
+var AssertedStatus = randMockStatus()
+var AssertedControl = randMockControl()
+var AssertedConfig = randMockConfig()
 
-type DummyAsset struct {
+type Asset struct {
 	pid          uuid.UUID
 	publisher    *msg.PubSub
 	controlOwner uuid.UUID
-	Control      DummyControl
+	Control      Control
 }
 
-func (d DummyAsset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+func (d Asset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
 	ch, err := d.publisher.Subscribe(pid, topic)
 	return ch, err
 }
 
 // Unsubscribe pid from all topic broadcasts
-func (d DummyAsset) Unsubscribe(pid uuid.UUID) {
+func (d Asset) Unsubscribe(pid uuid.UUID) {
 	d.publisher.Unsubscribe(pid)
 }
 
-func (d *DummyAsset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
+func (d *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	d.controlOwner = pid
 	go d.controlHandler(ch)
 	return nil
 }
 
 // Shutdown asset processes and cleanup resources
-func (d *DummyAsset) Shutdown(*sync.WaitGroup) error {
+func (d *Asset) Shutdown(*sync.WaitGroup) error {
 	return nil
 }
 
-func (d *DummyAsset) controlHandler(ch <-chan msg.Msg) {
+func (d *Asset) controlHandler(ch <-chan msg.Msg) {
 loop:
 	for {
 		data, ok := <-ch
@@ -77,7 +77,7 @@ loop:
 			log.Println("DummyAsset controlHandler() stopping")
 			break loop
 		}
-		control, ok := data.Payload().(DummyControl)
+		control, ok := data.Payload().(Control)
 		if !ok {
 			log.Println("DummyAsset controlHandler() bad type assertion")
 			break loop
@@ -86,49 +86,49 @@ loop:
 	}
 }
 
-func (d DummyAsset) PID() uuid.UUID {
+func (d Asset) PID() uuid.UUID {
 	return d.pid
 }
 
-func (d DummyAsset) Name() string {
+func (d Asset) Name() string {
 	return fmt.Sprintf("DummyAsset-%d", rand.Int())
 }
 
-func (d DummyAsset) BusName() string {
+func (d Asset) BusName() string {
 	return "DummyBus"
 }
 
-func (d DummyAsset) UpdateStatus() {
+func (d Asset) UpdateStatus() {
 	d.publisher.Publish(msg.Status, AssertedStatus())
 }
 
-func (d DummyAsset) UpdateConfig() {
+func (d Asset) UpdateConfig() {
 	d.publisher.Publish(msg.Config, AssertedConfig())
 }
 
-type DummyControl struct {
+type Control struct {
 	kW   float64
 	kVAR float64
 }
 
-func (c DummyControl) KW() float64 {
+func (c Control) KW() float64 {
 	return c.kW
 }
 
-func (c DummyControl) KVAR() float64 {
+func (c Control) KVAR() float64 {
 	return c.kVAR
 }
 
-type DummyStatus struct {
-	machine MachineDummyStatus
+type Status struct {
+	machine MachineStatus
 }
 
-type DummyConfig struct {
+type Config struct {
 	Name string
 	Bus  string
 }
 
-type MachineDummyStatus struct {
+type MachineStatus struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
@@ -138,24 +138,24 @@ type MachineDummyStatus struct {
 	Gridforming          bool    `json:"Gridforming"`
 }
 
-func NewDummyAsset() DummyAsset {
+func New() Asset {
 	pid, _ := uuid.NewUUID()
 	publisher := msg.NewPublisher(pid)
-	return DummyAsset{pid, publisher, uuid.UUID{}, DummyControl{}}
+	return Asset{pid, publisher, uuid.UUID{}, Control{}}
 }
 
-func (s DummyStatus) KW() float64 {
+func (s Status) KW() float64 {
 	return s.machine.KW
 }
 
-func (s DummyStatus) KVAR() float64 {
+func (s Status) KVAR() float64 {
 	return s.machine.KVAR
 }
 
-func (s DummyStatus) RealPositiveCapacity() float64 {
+func (s Status) RealPositiveCapacity() float64 {
 	return s.machine.RealPositiveCapacity
 }
 
-func (s DummyStatus) RealNegativeCapacity() float64 {
+func (s Status) RealNegativeCapacity() float64 {
 	return s.machine.RealNegativeCapacity
 }

@@ -5,15 +5,15 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc_core/internal/pkg/asset"
-	"github.com/ohowland/cgc_core/internal/pkg/msg"
+	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // Bus defines interface for a power system bus. Buses are nodes in the graph of
 // the power system that can be internal or leaves. As opposed to Assets, which
 // are contrainted to leaves only.
 type Bus interface {
-	AddMember(Node)
+	AddMember(Node) error
 	Node
 }
 
@@ -84,15 +84,15 @@ type BusGraph struct {
 
 func NewBusGraph() (BusGraph, error) {
 	g, err := NewGraph()
-	return BusGraph{&NilBus{}, &g}, err
+	return BusGraph{nil, &g}, err
 }
 
 func BuildBusGraph(root Bus, bm map[uuid.UUID]Bus, am map[uuid.UUID]asset.Asset) (BusGraph, error) {
 	g, err := NewBusGraph()
 	g.setRootBus(root)
 
-	err = g.attachBuses(bm)
-	err = g.attachAssets(am)
+	// err = g.attachBuses(bm)
+	// err = g.attachAssets(am)
 
 	return g, err
 }
@@ -104,14 +104,48 @@ func (bg *BusGraph) setRootBus(b Bus) {
 func (bg *BusGraph) AddMember(n Node) error {
 	switch v := n.(type) {
 	case Bus:
-		if _, ok := bg.rootBus.(*NilBus); ok {
+		if bg.rootBus == nil {
 			bg.setRootBus(v)
 		} else {
 			bg.rootBus.AddMember(v)
 		}
 	case asset.Asset:
-
+		if bg.rootBus == nil {
+			return errors.New("root bus undefined: add bus before asset")
+		}
+		targetBus, err := bg.findAssetBus(v)
+		if err != nil {
+			return err
+		}
+		err = targetBus.AddMember(v)
+		if err != nil {
+			return err
+		}
+	default:
+		return errors.New("node type unsupported by busgraph. interface types bus.Bus or asset.Asset supported")
 	}
 
 	return nil
+}
+
+func (bg *BusGraph) findAssetBus(a asset.Asset) (Bus, error) {
+	for _, node := range bg.nodeList() {
+		switch v := node.(type) {
+		case Bus:
+			if v.Name() == a.BusName() {
+				return v, nil
+			}
+		default:
+		}
+	}
+	err := fmt.Sprintf("graph does not contain target bus %v", a.BusName())
+	return nil, errors.New(err)
+}
+
+func (bg *BusGraph) nodeList() []Node {
+	nodeList := make([]Node, 0)
+	for node := range bg.graph.adjacentcyList {
+		nodeList = append(nodeList, node)
+	}
+	return nodeList
 }
