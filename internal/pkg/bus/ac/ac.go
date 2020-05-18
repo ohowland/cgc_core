@@ -112,20 +112,21 @@ loop:
 
 // AddMember links the asset parameter to the bus. Asset update status and update
 // configuration events will publish to the bus
-func (b *Bus) AddMember(a bus.Node) {
+func (b *Bus) AddMember(a bus.Node) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
 	member, err := b.newMember(a)
 	if err != nil {
 		// TODO: Error Handling Path: Failure to add member
-		return
+		return err
 	}
 	b.members[a.PID()] = member
 
 	if len(b.members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
+	return nil
 }
 
 // Subscribe returns a channel on which the specified topic is broadcast

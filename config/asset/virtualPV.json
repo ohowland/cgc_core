@@ -1,6 +1,6 @@
 {
     "Name": "Virtual PV",
-    "Bus": "Virtual Bus",
+    "BusName": "Virtual Bus",
     "RatedKW": 20,
     "RatedKVAR": 10
 }

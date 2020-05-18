@@ -89,10 +89,32 @@ func NewBusGraph() (BusGraph, error) {
 
 func BuildBusGraph(root Bus, bm map[uuid.UUID]Bus, am map[uuid.UUID]asset.Asset) (BusGraph, error) {
 	g, err := NewBusGraph()
-	g.setRootBus(root)
+	if err != nil {
+		return BusGraph{}, err
+	}
 
-	// err = g.attachBuses(bm)
-	// err = g.attachAssets(am)
+	g.AddMember(root)
+
+	targetBm := make(map[uuid.UUID]Bus)
+	for k, v := range bm {
+		targetBm[k] = v
+	}
+
+	delete(targetBm, root.PID())
+
+	for _, bus := range targetBm {
+		err = g.AddMember(bus)
+		if err != nil {
+			return BusGraph{}, err
+		}
+	}
+
+	for _, asset := range am {
+		err = g.AddMember(asset)
+		if err != nil {
+			return BusGraph{}, err
+		}
+	}
 
 	return g, err
 }
@@ -102,22 +124,37 @@ func (bg *BusGraph) setRootBus(b Bus) {
 }
 
 func (bg *BusGraph) AddMember(n Node) error {
-	switch v := n.(type) {
+	switch node := n.(type) {
 	case Bus:
+		bg.graph.AddNode(node)
+
 		if bg.rootBus == nil {
-			bg.setRootBus(v)
+			bg.setRootBus(node)
 		} else {
-			bg.rootBus.AddMember(v)
+			bg.graph.AddDirectedEdge(bg.rootBus, node)
+			bg.rootBus.AddMember(node) // link bus to bus
 		}
 	case asset.Asset:
 		if bg.rootBus == nil {
 			return errors.New("root bus undefined: add bus before asset")
 		}
-		targetBus, err := bg.findAssetBus(v)
+
+		bus, err := bg.findAssetBus(node)
 		if err != nil {
 			return err
 		}
-		err = targetBus.AddMember(v)
+
+		err = bg.graph.AddNode(node)
+		if err != nil {
+			return err
+		}
+
+		err = bg.graph.AddDirectedEdge(bus, node)
+		if err != nil {
+			return err
+		}
+
+		err = bus.AddMember(node)
 		if err != nil {
 			return err
 		}

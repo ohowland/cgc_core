@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/mockasset"
 	"gotest.tools/assert"
 )
@@ -138,22 +139,38 @@ func TestAddBusMember(t *testing.T) {
 	assert.Assert(t, g.rootBus.(*MockBus) == &bus1)
 }
 
-func TestMemberBuses(t *testing.T) {
+func TestNodeList(t *testing.T) {
 	g, _ := NewBusGraph()
 	bus1, _ := NewMockBus()
 	bus2, _ := NewMockBus()
 	bus3, _ := NewMockBus()
+
+	assertSet := make(map[Node]bool)
+	assertSet[&bus1] = true
+	assertSet[&bus2] = true
+	assertSet[&bus3] = true
 
 	g.AddMember(&bus1)
 	g.AddMember(&bus2)
 	g.AddMember(&bus3)
 
 	for _, bus := range g.nodeList() {
-		fmt.Printf("bus %p", &bus)
+		_, ok := assertSet[bus]
+		assert.Assert(t, ok, "bus added as member to graph not found in nodelist")
 	}
 
 }
-func TestFindAssetBus(t *testing.T) {}
+func TestFindAssetBus(t *testing.T) {
+	g, _ := NewBusGraph()
+	bus1, _ := NewMockBus()
+	asset1 := mockasset.New()
+
+	g.AddMember(&bus1)
+
+	bus, err := g.findAssetBus(&asset1)
+	assert.NilError(t, err)
+	assert.Assert(t, bus == &bus1)
+}
 
 func TestAddAssetMember(t *testing.T) {
 	g, _ := NewBusGraph()
@@ -165,6 +182,43 @@ func TestAddAssetMember(t *testing.T) {
 
 	err = g.AddMember(&asset1)
 	assert.NilError(t, err)
+
+	assertSet := make(map[Node]bool)
+	assertSet[&bus1] = true
+	assertSet[&asset1] = true
+
+	for _, node := range g.nodeList() {
+		_, ok := assertSet[node]
+		assert.Assert(t, ok, "bus added as member to graph not found in nodelist")
+	}
+
+	_, ok := bus1.Members[asset1.PID()]
+	assert.Assert(t, ok, "asset1 is not a member of bus1")
+}
+
+func TestBuildBusGraph(t *testing.T) {
+	bm := make(map[uuid.UUID]Bus)
+	bus1, _ := NewMockBus()
+	bm[bus1.PID()] = &bus1
+
+	am := make(map[uuid.UUID]asset.Asset)
+	asset1 := mockasset.New()
+	am[asset1.PID()] = &asset1
+
+	g, err := BuildBusGraph(&bus1, bm, am)
+	assert.NilError(t, err)
+
+	assertSet := make(map[Node]bool)
+	assertSet[&bus1] = true
+	assertSet[&asset1] = true
+
+	for _, node := range g.nodeList() {
+		_, ok := assertSet[node]
+		assert.Assert(t, ok, "node added as member to graph but not found in nodelist")
+	}
+
+	_, ok := bus1.Members[asset1.PID()]
+	assert.Assert(t, ok, "asset1 is not a member of bus1")
 
 }
 

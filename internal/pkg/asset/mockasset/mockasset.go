@@ -30,8 +30,8 @@ func randMockControl() func() Control {
 
 func randMockConfig() func() Config {
 	rand.Seed(time.Hour.Nanoseconds())
-	name := fmt.Sprintf("DummyAsset-%d", rand.Int())
-	config := Config{name, "DummyBus"}
+	name := fmt.Sprintf("MockAsset-%d", rand.Int())
+	config := Config{name, "MockBus"}
 	return func() Config {
 		return config
 	}
@@ -74,12 +74,12 @@ loop:
 	for {
 		data, ok := <-ch
 		if !ok {
-			log.Println("DummyAsset controlHandler() stopping")
+			log.Println("MockAsset controlHandler() stopping")
 			break loop
 		}
 		control, ok := data.Payload().(Control)
 		if !ok {
-			log.Println("DummyAsset controlHandler() bad type assertion")
+			log.Println("MockAsset controlHandler() bad type assertion")
 			break loop
 		}
 		d.Control = control
@@ -91,11 +91,11 @@ func (d Asset) PID() uuid.UUID {
 }
 
 func (d Asset) Name() string {
-	return fmt.Sprintf("DummyAsset-%d", rand.Int())
+	return fmt.Sprintf("MockAsset-%d", rand.Int())
 }
 
 func (d Asset) BusName() string {
-	return "DummyBus"
+	return "MockBus"
 }
 
 func (d Asset) UpdateStatus() {

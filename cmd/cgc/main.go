@@ -17,6 +17,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/ess"
 	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
+	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 )
 
@@ -27,50 +28,11 @@ func buildDispatch() (dispatch.Dispatcher, error) {
 }
 */
 
-func buildBus() (ac.Bus, error) {
-	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json")
-	return vrBus, err
-}
-
 /*
 func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
 	return bus.NewBusGraph(buses)
 }
 */
-
-func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
-	assets := make(map[uuid.UUID]asset.Asset)
-
-	grid := buildVirtualGridAsset(bus)
-	ess := buildVirtualESSAsset(bus)
-	feeder := buildVirtualFeederAsset(bus)
-
-	assets[ess.PID()] = ess
-	assets[grid.PID()] = grid
-	assets[feeder.PID()] = feeder
-
-	return assets, nil
-}
-
-func launchUpdateLoop(assets map[uuid.UUID]asset.Asset, sigs chan os.Signal) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	for {
-		select {
-		case <-ticker.C:
-			for _, asset := range assets {
-				asset.UpdateStatus()
-			}
-		case <-sigs:
-			var wg sync.WaitGroup
-			for _, asset := range assets {
-				go asset.Shutdown(&wg)
-			}
-			wg.Wait()
-			time.Sleep(1 * time.Second)
-			return
-		}
-	}
-}
 
 func main() {
 	log.Println("Starting cgc v0.1.1")
@@ -92,16 +54,14 @@ func main() {
 		panic(err)
 	}
 
-	/*
-		log.Println("Assembling Bus Graph")
-		busGraph, err := buildBusGraph(buses)
-		if err != nil {
-			panic(err)
-		}
-	*/
-
 	log.Println("[MAIN] Building Assets")
 	assets, err := buildAssets(&bus)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Println("[MAIN] Assembling Bus Graph")
+	busGraph, err := buildBusGraph(&bus, assets)
 	if err != nil {
 		panic(err)
 	}
@@ -122,7 +82,7 @@ func main() {
 	*/
 
 	log.Println("[MAIN] Starting update loops")
-	launchUpdateLoop(assets, sigs)
+	launchUpdateLoop(&busGraph, assets, sigs)
 
 	/*
 		log.Println("Starting Datalogging")
@@ -137,13 +97,45 @@ func main() {
 	log.Println("[MAIN] Stopping system")
 }
 
+func launchUpdateLoop(g *bus.BusGraph, assets map[uuid.UUID]asset.Asset, sigs chan os.Signal) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	for {
+		select {
+		case <-ticker.C:
+			for _, asset := range assets {
+				asset.UpdateStatus()
+			}
+		case <-sigs:
+			var wg sync.WaitGroup
+			for _, asset := range assets {
+				go asset.Shutdown(&wg)
+			}
+			wg.Wait()
+			time.Sleep(1 * time.Second)
+			return
+		}
+	}
+}
+
+func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
+	assets := make(map[uuid.UUID]asset.Asset)
+
+	grid := buildVirtualGridAsset(bus)
+	ess := buildVirtualESSAsset(bus)
+	feeder := buildVirtualFeederAsset(bus)
+
+	assets[ess.PID()] = ess
+	assets[grid.PID()] = grid
+	assets[feeder.PID()] = feeder
+
+	return assets, nil
+}
+
 func buildVirtualGridAsset(bus *ac.Bus) *grid.Asset {
 	grid, err := virtualgrid.New("./config/asset/virtualGrid.json")
 	if err != nil {
 		panic(err)
 	}
-
-	bus.AddMember(&grid)
 
 	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
 	vrGrid := grid.DeviceController().(*virtualgrid.VirtualGrid)
@@ -158,8 +150,6 @@ func buildVirtualESSAsset(bus *ac.Bus) *ess.Asset {
 		panic(err)
 	}
 
-	bus.AddMember(&ess)
-
 	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
 	vrEss := ess.DeviceController().(*virtualess.VirtualESS)
 	vrBus.AddMember(vrEss)
@@ -173,11 +163,21 @@ func buildVirtualFeederAsset(bus *ac.Bus) *feeder.Asset {
 		panic(err)
 	}
 
-	bus.AddMember(&feeder)
-
 	vrBus := bus.Relayer().(*virtualacbus.VirtualACBus)
 	vrFeeder := feeder.DeviceController().(*virtualfeeder.VirtualFeeder)
 	vrBus.AddMember(vrFeeder)
 
 	return &feeder
+}
+
+func buildBus() (ac.Bus, error) {
+	vrBus, err := virtualacbus.New("./config/bus/virtualACBus.json")
+	return vrBus, err
+}
+
+func buildBusGraph(rootBus bus.Bus, assets map[uuid.UUID]asset.Asset) (bus.BusGraph, error) {
+	buses := make(map[uuid.UUID]bus.Bus)
+	buses[rootBus.PID()] = rootBus
+	g, err := bus.BuildBusGraph(rootBus, buses, assets)
+	return g, err
 }

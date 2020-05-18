@@ -1,6 +1,6 @@
 {
     "Name": "ess",
-    "Bus": "Virtual Bus",
+    "BusName": "Virtual Bus",
     "RatedKW": 20,
     "RatedKVAR": 10,
     "RatedKWH": 50
