@@ -1,6 +1,6 @@
 {
     "Name": "grid",
-    "BusName": "Virtual Bus",
+    "BusName": "Virtual Bus-1",
     "RatedKW": 20,
     "RatedKVAR": 10
 }

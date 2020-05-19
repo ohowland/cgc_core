@@ -13,6 +13,7 @@ type System struct {
 	dispatch  dispatch.Dispatcher
 }
 
-func (s *System) SetBusGraph(bus.Graph) {}
-
-func (s *System) SetDispatcher(dispatch.Dispatcher) {}
+func NewSystem(bg bus.busGraph, d dispatch.Dispatcher) System {
+	pub := msg.NewPublisher()
+	return System{pub, bg, d}
+}

@@ -49,39 +49,31 @@ func main() {
 	*/
 
 	log.Println("[MAIN] Building Buses")
-	bus, err := buildBus()
+	buses, err := buildBuses()
 	if err != nil {
 		panic(err)
 	}
 
+	var bus *ac.Bus
+	for _, v := range buses {
+		bus = v.(*ac.Bus)
+		break
+	}
+
 	log.Println("[MAIN] Building Assets")
-	assets, err := buildAssets(&bus)
+	assets, err := buildAssets(bus)
 	if err != nil {
 		panic(err)
 	}
 
 	log.Println("[MAIN] Assembling Bus Graph")
-	busGraph, err := buildBusGraph(&bus, assets)
+	busGraph, err := buildBusGraph(bus, buses, assets)
 	if err != nil {
 		panic(err)
 	}
 
-	/*
-		log.Println("[Assembling Microgrid]")
-		microgrid, err := buildMicrogrid(busGraph)
-		if err != nil {
-			panic(err)
-		}
-	*/
-
-	/*
-		microgrid.linkDispatch(dispatch)
-		if err != nil {
-			panic(err)
-		}
-	*/
-
 	log.Println("[MAIN] Starting update loops")
+	busGraph.DumpString()
 	launchUpdateLoop(&busGraph, assets, sigs)
 
 	/*
@@ -175,9 +167,22 @@ func buildBus() (ac.Bus, error) {
 	return vrBus, err
 }
 
-func buildBusGraph(rootBus bus.Bus, assets map[uuid.UUID]asset.Asset) (bus.BusGraph, error) {
+func buildBuses() (map[uuid.UUID]bus.Bus, error) {
 	buses := make(map[uuid.UUID]bus.Bus)
-	buses[rootBus.PID()] = rootBus
+	vrBus1, err := virtualacbus.New("./config/bus/virtualACBus1.json")
+	buses[vrBus1.PID()] = &vrBus1
+
+	if err != nil {
+		return buses, err
+	}
+
+	vrBus2, err := virtualacbus.New("./config/bus/virtualACBus2.json")
+	buses[vrBus2.PID()] = &vrBus2
+
+	return buses, err
+}
+
+func buildBusGraph(rootBus bus.Bus, buses map[uuid.UUID]bus.Bus, assets map[uuid.UUID]asset.Asset) (bus.BusGraph, error) {
 	g, err := bus.BuildBusGraph(rootBus, buses, assets)
 	return g, err
 }

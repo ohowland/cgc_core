@@ -1,6 +1,6 @@
 {
     "Name": "feeder",
-    "BusName": "Virtual Bus",
+    "BusName": "Virtual Bus-1",
     "RatedKW": 20,
     "RatedKVAR": 10,
     "AverageKW": 10,
