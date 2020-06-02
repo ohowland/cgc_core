@@ -21,8 +21,8 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/dispatch/mockdispatch"
 	"github.com/ohowland/cgc/internal/pkg/msg"
-	"github.com/ohowland/cgc/internal/pkg/root"
 )
 
 /*

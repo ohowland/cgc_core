@@ -39,7 +39,7 @@ func NewMockDispatch() Dispatcher {
 	control := make(map[uuid.UUID]interface{})
 	pid, _ := uuid.NewUUID()
 	return &MockDispatch{&sync.Mutex{}, pid, status, control, []msg.Msg{}}
-}git 
+}
 
 func (d MockDispatch) MsgList() []msg.Msg {
 	return d.msgList

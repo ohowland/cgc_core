@@ -1,4 +1,4 @@
-module github.com/ohowland/cgc
+module github.com/ohowland/cgc_core
 
 go 1.13
 
