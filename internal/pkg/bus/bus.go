@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
 // Bus defines interface for a power system bus. Buses are nodes in the graph of
@@ -25,6 +26,18 @@ type BusGraph struct {
 func NewBusGraph() (BusGraph, error) {
 	g, err := NewGraph()
 	return BusGraph{nil, &g}, err
+}
+
+func (bg BusGraph) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+	return bg.rootBus.Subscribe(pid, topic)
+}
+
+func (bg BusGraph) Unsubscribe(pid uuid.UUID) {
+	bg.rootBus.Unsubscribe(pid)
+}
+
+func (bg BusGraph) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
+	return bg.rootBus.RequestControl(pid, ch)
 }
 
 func BuildBusGraph(root Bus, bm map[uuid.UUID]Bus, am map[uuid.UUID]asset.Asset) (BusGraph, error) {

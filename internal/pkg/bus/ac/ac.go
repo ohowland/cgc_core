@@ -7,6 +7,7 @@ package ac
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 
@@ -30,7 +31,6 @@ type Bus struct {
 
 type msgHandler struct {
 	status  chan msg.Msg
-	config  chan msg.Msg
 	control <-chan msg.Msg
 }
 
@@ -64,7 +64,6 @@ func New(jsonConfig []byte, relay Relayer) (Bus, error) {
 	publisher := msg.NewPublisher(pid)
 	MsgHandler := msgHandler{
 		make(chan msg.Msg),
-		make(chan msg.Msg),
 		make(<-chan msg.Msg),
 	}
 	members := make(map[uuid.UUID]member)
@@ -91,14 +90,9 @@ loop:
 				b.removeMember(m.PID())
 				continue
 			}
-			b.publisher.Forward(msg.Status, m)
-		case m, ok := <-b.inbox.config:
-			if !ok {
-				b.removeMember(m.PID())
-				continue
-			}
-			b.publisher.Forward(msg.Config, m)
+			b.publisher.Forward(m)
 		case m, ok := <-b.inbox.control:
+			fmt.Println(m)
 			if !ok {
 				// TODO: Lost Controller
 				continue
@@ -151,6 +145,7 @@ func (b *Bus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 }
 
 func (b Bus) publishMemberControl(m msg.Msg) {
+	// TODO: Control Messages are targeted for an asset.
 	m, ok := unwrap(m)
 	if !ok {
 		log.Printf("AC Bus %v: recieved message with no target address", b.PID())
@@ -193,7 +188,7 @@ func (b *Bus) newMember(node bus.Node) (member, error) {
 	if err != nil {
 		return member{}, err
 	}
-	go redirectMsg(chIn, b.inbox.config)
+	go redirectMsg(chIn, b.inbox.status)
 
 	chOut, err := b.requestControl(node)
 	if err != nil {

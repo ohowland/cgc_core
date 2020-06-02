@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -19,6 +20,9 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc/internal/pkg/bus"
 	"github.com/ohowland/cgc/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc/internal/pkg/dispatch"
+	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc/internal/pkg/root"
 )
 
 /*
@@ -72,9 +76,22 @@ func main() {
 		panic(err)
 	}
 
+	log.Println("[MAIN] Building Dispatcher")
+	dispatch, err := buildDispatch()
+	if err != nil {
+		panic(err)
+	}
+
+	log.Println("[MAIN] Assembling System")
+	system, err := buildSystem(&busGraph, dispatch)
+	if err != nil {
+		panic(err)
+	}
+
 	log.Println("[MAIN] Starting update loops")
 	busGraph.DumpString()
-	launchUpdateLoop(&busGraph, assets, sigs)
+	go launchUpdateAssets(assets, sigs)
+	go monitorSystem(system)
 
 	/*
 		log.Println("Starting Datalogging")
@@ -89,8 +106,23 @@ func main() {
 	log.Println("[MAIN] Stopping system")
 }
 
-func launchUpdateLoop(g *bus.BusGraph, assets map[uuid.UUID]asset.Asset, sigs chan os.Signal) {
+func monitorSystem(s *root.System, sigs chan os.Signal) {
+	ch := s.Subscribe(uuid.UUID{}, msg.Status)
+loop:
+	for {
+		select {
+		case msg := <-ch:
+			fmt.Println("[SYSTEM]", msg)
+		case <-sigs:
+			break loop
+		}
+	}
+	fmt.Println("[SYSTEM] Goroutine Shutdown")
+}
+
+func launchUpdateAssets(assets map[uuid.UUID]asset.Asset, sigs chan os.Signal) {
 	ticker := time.NewTicker(100 * time.Millisecond)
+loop:
 	for {
 		select {
 		case <-ticker.C:
@@ -104,9 +136,10 @@ func launchUpdateLoop(g *bus.BusGraph, assets map[uuid.UUID]asset.Asset, sigs ch
 			}
 			wg.Wait()
 			time.Sleep(1 * time.Second)
-			return
+			break loop
 		}
 	}
+	fmt.Println("[UpdateAssets] Goroutine Shutdown")
 }
 
 func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
@@ -185,4 +218,12 @@ func buildBuses() (map[uuid.UUID]bus.Bus, error) {
 func buildBusGraph(rootBus bus.Bus, buses map[uuid.UUID]bus.Bus, assets map[uuid.UUID]asset.Asset) (bus.BusGraph, error) {
 	g, err := bus.BuildBusGraph(rootBus, buses, assets)
 	return g, err
+}
+
+func buildDispatch() (dispatch.Dispatcher, error) {
+	return mockdispatch.NewMockDispatch()
+}
+
+func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
+	return root.NewSystem(g, d)
 }

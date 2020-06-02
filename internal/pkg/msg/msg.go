@@ -12,9 +12,9 @@ type Publisher interface {
 }
 
 type PubSub struct {
-	mux   sync.RWMutex
-	owner uuid.UUID
-	subs  map[Topic]map[uuid.UUID]chan<- Msg
+	mux    sync.RWMutex
+	sender uuid.UUID
+	subs   map[Topic]map[uuid.UUID]chan<- Msg
 }
 
 func NewPublisher(pid uuid.UUID) *PubSub {
@@ -54,7 +54,7 @@ func (p *PubSub) Publish(topic Topic, payload interface{}) {
 	p.mux.RLock()
 	defer p.mux.RUnlock()
 
-	msg := New(p.owner, payload)
+	msg := New(p.sender, topic, payload)
 	for _, ch := range p.subs[topic] {
 		select {
 		case ch <- msg:
@@ -63,11 +63,11 @@ func (p *PubSub) Publish(topic Topic, payload interface{}) {
 	}
 }
 
-func (p *PubSub) Forward(topic Topic, msg Msg) {
+func (p *PubSub) Forward(msg Msg) {
 	p.mux.RLock()
 	defer p.mux.RUnlock()
 
-	for _, ch := range p.subs[topic] {
+	for _, ch := range p.subs[msg.topic] {
 		select {
 		case ch <- msg:
 		default:
@@ -89,12 +89,13 @@ const (
 // Msg is
 type Msg struct {
 	sender  uuid.UUID
+	topic   Topic
 	payload interface{}
 }
 
 // New is the Msg factor function
-func New(sender uuid.UUID, payload interface{}) Msg {
-	return Msg{sender, payload}
+func New(sender uuid.UUID, topic Topic, payload interface{}) Msg {
+	return Msg{sender, topic, payload}
 }
 
 // PID returns the sender's PID

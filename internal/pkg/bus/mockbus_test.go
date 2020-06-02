@@ -63,7 +63,7 @@ func TestMockbusRequestControl(t *testing.T) {
 	assert.Equal(t, pid, bus1.ControlOwner)
 
 	rand.Seed(time.Now().UnixNano())
-	assertMsg := msg.New(pid, rand.Int())
+	assertMsg := msg.New(pid, msg.Control, rand.Int())
 	ch <- assertMsg
 
 	time.Sleep(timeout)

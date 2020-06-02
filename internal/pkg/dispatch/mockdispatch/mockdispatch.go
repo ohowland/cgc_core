@@ -1,4 +1,4 @@
-package dispatch
+package mockdispatch
 
 import (
 	"sync"
@@ -8,7 +8,7 @@ import (
 	"github.com/ohowland/cgc/internal/pkg/msg"
 )
 
-type DummyDispatch struct {
+type MockDispatch struct {
 	mux          *sync.Mutex
 	PID          uuid.UUID
 	AssetStatus  map[uuid.UUID]msg.Msg
@@ -16,31 +16,31 @@ type DummyDispatch struct {
 	msgList      []msg.Msg
 }
 
-func (d *DummyDispatch) UpdateStatus(msg msg.Msg) {
+func (d *MockDispatch) UpdateStatus(msg msg.Msg) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	d.msgList = append(d.msgList, msg)
 	d.AssetStatus[msg.PID()] = msg
 }
 
-func (d *DummyDispatch) DropAsset(uuid.UUID) error {
+func (d *MockDispatch) DropAsset(uuid.UUID) error {
 	return nil
 }
 
-func (d *DummyDispatch) GetControl(pid uuid.UUID) (interface{}, bool) {
+func (d *MockDispatch) GetControl(pid uuid.UUID) (interface{}, bool) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	d.AssetControl[pid] = mock.AssertedControl()
 	return d.AssetControl[pid], true
 }
 
-func NewDummyDispatch() Dispatcher {
+func NewMockDispatch() Dispatcher {
 	status := make(map[uuid.UUID]msg.Msg)
 	control := make(map[uuid.UUID]interface{})
 	pid, _ := uuid.NewUUID()
-	return &DummyDispatch{&sync.Mutex{}, pid, status, control, []msg.Msg{}}
-}
+	return &MockDispatch{&sync.Mutex{}, pid, status, control, []msg.Msg{}}
+}git 
 
-func (d DummyDispatch) MsgList() []msg.Msg {
+func (d MockDispatch) MsgList() []msg.Msg {
 	return d.msgList
 }

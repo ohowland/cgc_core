@@ -28,6 +28,15 @@ func NewMockBus() (MockBus, error) {
 func (b *MockBus) AddMember(n Node) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
+	ch, err := n.Subscribe(b.PID(), msg.Status)
+	if err != nil {
+		return err
+	}
+	go func(ch <-chan msg.Msg, pub *msg.PubSub) {
+		for msg := range ch {
+			pub.Forward(msg)
+		}
+	}(ch, b.publisher)
 	b.Members[n.PID()] = n
 	return nil
 }

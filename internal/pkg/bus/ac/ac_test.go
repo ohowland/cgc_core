@@ -119,6 +119,10 @@ func TestUpdateMemberStatus(t *testing.T) {
 func TestPushControl(t *testing.T) {
 	bus := newACBus()
 
+	pid, _ := uuid.NewUUID()
+	ch := make(chan msg.Msg)
+	bus.RequestControl(pid, ch)
+
 	asset1 := mockasset.New()
 	asset2 := mockasset.New()
 	bus.AddMember(&asset1)
@@ -126,11 +130,7 @@ func TestPushControl(t *testing.T) {
 
 	assertControl := mockasset.AssertedControl()
 
-	pid, _ := uuid.NewUUID()
-	ch := make(chan msg.Msg)
-	bus.RequestControl(pid, ch)
-
-	ch <- msg.New(pid, msg.New(asset1.PID(), assertControl))
+	ch <- msg.New(pid, msg.Control, msg.New(asset1.PID(), msg.Control, assertControl))
 
 	time.Sleep(100 * time.Millisecond)
 	assert.Assert(t, asset1.Control == assertControl, "Failed: %v != %v", asset1.Control, assertControl)

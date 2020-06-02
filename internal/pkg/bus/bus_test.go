@@ -2,11 +2,13 @@ package bus
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc/internal/pkg/asset"
 	"github.com/ohowland/cgc/internal/pkg/asset/mockasset"
+	"github.com/ohowland/cgc/internal/pkg/msg"
 	"gotest.tools/assert"
 )
 
@@ -219,7 +221,34 @@ func TestBuildBusGraph(t *testing.T) {
 
 	_, ok := bus1.Members[asset1.PID()]
 	assert.Assert(t, ok, "asset1 is not a member of bus1")
+}
 
+func TestUpdateStatusBusGraph(t *testing.T) {
+	bm := make(map[uuid.UUID]Bus)
+	bus1, _ := NewMockBus()
+	bm[bus1.PID()] = &bus1
+
+	am := make(map[uuid.UUID]asset.Asset)
+	asset1 := mockasset.New()
+	am[asset1.PID()] = &asset1
+
+	g, err := BuildBusGraph(&bus1, bm, am)
+	assert.NilError(t, err)
+
+	pid, _ := uuid.NewUUID()
+	ch, err := g.Subscribe(pid, msg.Status)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(ch <-chan msg.Msg, wg *sync.WaitGroup) {
+		defer wg.Done()
+		in := <-ch
+		fmt.Println(in)
+	}(ch, &wg)
+
+	g.DumpString()
+	asset1.UpdateStatus()
+	wg.Wait()
 }
 
 // --- END BusGraph Tests
