@@ -107,3 +107,8 @@ func (m Msg) PID() uuid.UUID {
 func (m Msg) Payload() interface{} {
 	return m.payload
 }
+
+// Topic returns the message topic
+func (m Msg) Topic() Topic {
+	return m.topic
+}

@@ -1,10 +1,9 @@
-package dispatch
+package calculatedstatus
 
 import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc_core/internal/pkg/asset"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
@@ -38,9 +37,10 @@ func NewCalculatedStatus() (CalculatedStatus, error) {
 	return CalculatedStatus{&sync.Mutex{}, memberStatus}, nil
 }
 
-func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
-	status := b.memberStatus[msg.PID()]
-	switch p := msg.Payload().(type) {
+/*
+func (b *CalculatedStatus) AggregateMemberStatus(m msg.Msg) {
+	status := b.memberStatus[m.PID()]
+	switch p := m.Payload().(type) {
 	case asset.Status:
 		status.capacity = capacity{
 			realPositiveCapacity: p.RealPositiveCapacity(),
@@ -57,6 +57,7 @@ func (b *CalculatedStatus) AggregateMemberStatus(msg msg.Msg) {
 	b.memberStatus[m.PID()] = status
 
 }
+*/
 
 func (b CalculatedStatus) updateBusStatus(msg msg.Msg, memberStatus map[uuid.UUID]Status) Status {
 	return Status{

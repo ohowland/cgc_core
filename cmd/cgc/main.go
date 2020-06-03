@@ -23,7 +23,7 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
-	"github.com/ohowland/cgc_core/internal/pkg/dispatch/mockdispatch"
+	"github.com/ohowland/cgc_core/internal/pkg/dispatch/manualdispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
 )
@@ -247,7 +247,7 @@ func buildBusGraph(rootBus bus.Bus, buses map[uuid.UUID]bus.Bus, assets map[uuid
 }
 
 func buildDispatch() (dispatch.Dispatcher, error) {
-	return mockdispatch.NewMockDispatch(), nil
+	return manualdispatch.New("./config/dispatch/manualdispatch.json")
 }
 
 func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
