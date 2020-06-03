@@ -1,58 +1,41 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/lib/asset/ess/virtualess"
-	"github.com/ohowland/cgc/internal/lib/asset/feeder/virtualfeeder"
-	"github.com/ohowland/cgc/internal/lib/asset/grid/virtualgrid"
-	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
-	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid"
-	"github.com/ohowland/cgc/internal/pkg/bus"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/dispatch"
-	"github.com/ohowland/cgc/internal/pkg/dispatch/mockdispatch"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/lib/asset/ess/virtualess"
+	"github.com/ohowland/cgc_core/internal/lib/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc_core/internal/lib/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc_core/internal/lib/bus/ac/virtualacbus"
+	"github.com/ohowland/cgc_core/internal/pkg/asset"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/grid"
+	"github.com/ohowland/cgc_core/internal/pkg/bus"
+	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
+	"github.com/ohowland/cgc_core/internal/pkg/dispatch/mockdispatch"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/root"
 )
 
-/*
-func buildDispatch() (dispatch.Dispatcher, error) {
-	dispatch, err := manualdispatch.New("./config/dispatch/manualdispatch.json")
-	return &dispatch, err
-}
-*/
-
-/*
-func buildBusGraph(buses map[uuid.UUID]bus.Bus) bus.BusGraph {
-	return bus.NewBusGraph(buses)
-}
-*/
-
 func main() {
-	log.Println("Starting cgc v0.1.1")
-	sigs := make(chan os.Signal, 1)
+	log.Println("[Main] Starting CGC_Core v0.0.1")
+	sigs1 := make(chan os.Signal, 1)
+	sigs2 := make(chan os.Signal, 1)
+	signal.Notify(sigs1, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs2, syscall.SIGINT, syscall.SIGTERM)
 
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	/*
-		log.Println("[MAIN] Building Dispatch")
-		dispatch, err := buildDispatch()
-		if err != nil {
-			panic(err)
-		}
-	*/
-
-	log.Println("[MAIN] Building Buses")
+	log.Println("[Main] Building Buses")
 	buses, err := buildBuses()
 	if err != nil {
 		panic(err)
@@ -64,34 +47,37 @@ func main() {
 		break
 	}
 
-	log.Println("[MAIN] Building Assets")
+	log.Println("[Main] Building Assets")
 	assets, err := buildAssets(bus)
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println("[MAIN] Assembling Bus Graph")
+	log.Println("[Main] Assembling Bus Graph")
 	busGraph, err := buildBusGraph(bus, buses, assets)
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println("[MAIN] Building Dispatcher")
+	log.Println("[Main] Building Dispatcher")
 	dispatch, err := buildDispatch()
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println("[MAIN] Assembling System")
+	log.Println("[Main] Assembling System")
 	system, err := buildSystem(&busGraph, dispatch)
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println("[MAIN] Starting update loops")
+	log.Println("[Main] Starting update loops")
 	busGraph.DumpString()
-	go launchUpdateAssets(assets, sigs)
-	go monitorSystem(system)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go launchUpdateAssets(assets, sigs1, &wg)
+	go monitorSystem(&system, sigs2, &wg)
+	wg.Wait()
 
 	/*
 		log.Println("Starting Datalogging")
@@ -103,24 +89,65 @@ func main() {
 		launchServer(assets)
 	*/
 
-	log.Println("[MAIN] Stopping system")
+	log.Println("[Main] Stopping system")
 }
 
-func monitorSystem(s *root.System, sigs chan os.Signal) {
-	ch := s.Subscribe(uuid.UUID{}, msg.Status)
+func monitorSystem(s *root.System, sigs chan os.Signal, wg *sync.WaitGroup) {
+	ch, err := s.Subscribe(uuid.UUID{}, msg.Status)
+	if err != nil {
+		panic(err)
+	}
+
+	assets := make(map[uuid.UUID]interface{})
+	staticOrder := make([]uuid.UUID, 0)
+	ticker := time.NewTicker(1 * time.Second)
 loop:
 	for {
 		select {
+		case <-ticker.C:
+			b := bufio.NewWriter(os.Stdout)
+			printClearTerm()
+			printTimestap(b)
+			for _, pid := range staticOrder {
+				p, _ := pid.MarshalText()
+				s := []byte(fmt.Sprintf("%v", assets[pid]))
+				printAssetStatus(b, p, s)
+			}
+			b.Flush()
 		case msg := <-ch:
-			fmt.Println("[SYSTEM]", msg)
+			if _, ok := assets[msg.PID()]; !ok {
+				staticOrder = append(staticOrder, msg.PID())
+			}
+			assets[msg.PID()] = msg.Payload()
 		case <-sigs:
 			break loop
 		}
 	}
-	fmt.Println("[SYSTEM] Goroutine Shutdown")
+	log.Println("[System] Goroutine Shutdown")
+	wg.Done()
 }
 
-func launchUpdateAssets(assets map[uuid.UUID]asset.Asset, sigs chan os.Signal) {
+func printClearTerm() {
+	cmd := exec.Command("cmd", "/c", "cls")
+	cmd.Stdout = os.Stdout
+	cmd.Run()
+}
+
+func printTimestap(b *bufio.Writer) {
+	t := time.Now()
+	s, _ := t.MarshalText()
+	b.Write(s)
+	b.WriteString("\n")
+}
+
+func printAssetStatus(b *bufio.Writer, pid []byte, status []byte) {
+	b.Write(pid)
+	b.WriteString(": ")
+	b.Write(status)
+	b.WriteString("\n")
+}
+
+func launchUpdateAssets(assets map[uuid.UUID]asset.Asset, sigs chan os.Signal, wg *sync.WaitGroup) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 loop:
 	for {
@@ -130,16 +157,15 @@ loop:
 				asset.UpdateStatus()
 			}
 		case <-sigs:
-			var wg sync.WaitGroup
 			for _, asset := range assets {
-				go asset.Shutdown(&wg)
+				go asset.Shutdown(wg)
 			}
-			wg.Wait()
 			time.Sleep(1 * time.Second)
 			break loop
 		}
 	}
-	fmt.Println("[UpdateAssets] Goroutine Shutdown")
+	log.Println("[UpdateAssets] Goroutine Shutdown")
+	wg.Done()
 }
 
 func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
@@ -221,7 +247,7 @@ func buildBusGraph(rootBus bus.Bus, buses map[uuid.UUID]bus.Bus, assets map[uuid
 }
 
 func buildDispatch() (dispatch.Dispatcher, error) {
-	return mockdispatch.NewMockDispatch()
+	return mockdispatch.NewMockDispatch(), nil
 }
 
 func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {

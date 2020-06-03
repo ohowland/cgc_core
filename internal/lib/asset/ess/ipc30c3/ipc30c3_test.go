@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/ohowland/cgc/internal/pkg/comm"
+	"github.com/ohowland/cgc_core/internal/pkg/comm"
 	"gotest.tools/assert"
 )
 

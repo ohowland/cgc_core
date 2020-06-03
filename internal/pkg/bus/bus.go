@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/asset"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 // Bus defines interface for a power system bus. Buses are nodes in the graph of

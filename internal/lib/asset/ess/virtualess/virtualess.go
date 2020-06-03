@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc_core/internal/pkg/asset"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/ess"
 )
 
 // VirtualESS target

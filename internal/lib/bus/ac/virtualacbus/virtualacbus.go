@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/asset"
+	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 // VirtualACBus is the top level data structure for virtual bus.

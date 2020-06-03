@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/comm/modbuscomm"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc_core/internal/pkg/comm/modbuscomm"
 )
 
 // IPC30C3 target

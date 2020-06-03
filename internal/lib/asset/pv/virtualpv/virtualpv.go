@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/pkg/asset"
-	"github.com/ohowland/cgc/internal/pkg/asset/pv"
+	"github.com/ohowland/cgc_core/internal/pkg/asset"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/pv"
 )
 
 // VirtualPV target

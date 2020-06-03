@@ -3,7 +3,7 @@ package root
 import (
 	"testing"
 
-	"github.com/ohowland/cgc/internal/pkg/bus"
+	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"gotest.tools/assert"
 )
 

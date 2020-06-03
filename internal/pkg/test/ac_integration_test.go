@@ -7,15 +7,15 @@ import (
 	"gotest.tools/assert"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc/internal/lib/asset/ess/virtualess"
-	"github.com/ohowland/cgc/internal/lib/asset/feeder/virtualfeeder"
-	"github.com/ohowland/cgc/internal/lib/asset/grid/virtualgrid"
-	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
-	"github.com/ohowland/cgc/internal/pkg/asset/ess"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/asset/grid"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/lib/asset/ess/virtualess"
+	"github.com/ohowland/cgc_core/internal/lib/asset/feeder/virtualfeeder"
+	"github.com/ohowland/cgc_core/internal/lib/asset/grid/virtualgrid"
+	"github.com/ohowland/cgc_core/internal/lib/bus/ac/virtualacbus"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/ess"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/grid"
+	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
 func TestSimpleVirtualBus(t *testing.T) {

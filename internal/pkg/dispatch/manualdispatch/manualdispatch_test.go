@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 <<<<<<< HEAD
-	"github.com/ohowland/cgc/internal/pkg/asset/mock"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/mock"
 =======
 >>>>>>> master
-	"github.com/ohowland/cgc/internal/pkg/msg"
+	"github.com/ohowland/cgc_core/internal/pkg/msg"
 	"gotest.tools/assert"
 )
 

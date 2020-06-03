@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohowland/cgc/internal/lib/bus/ac/virtualacbus"
-	"github.com/ohowland/cgc/internal/pkg/asset/feeder"
-	"github.com/ohowland/cgc/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc_core/internal/lib/bus/ac/virtualacbus"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/feeder"
+	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
 	"gotest.tools/assert"
 )
 
