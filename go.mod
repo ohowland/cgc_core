@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.3.0 // indirect
 	github.com/rivo/tview v0.0.0-20200108161608-1316ea7a4b35 // indirect
 	go.mongodb.org/mongo-driver v1.3.4
-	golang.org/x/tools v0.0.0-20200108203644-89082a384178 // indirect
+	golang.org/x/tools v0.0.0-20200108203644-89082a384178
 	google.golang.org/genproto v0.0.0-20200622133129-d0ee0c36e670
 	gotest.tools v2.2.0+incompatible
 	gotest.tools/v3 v3.0.2

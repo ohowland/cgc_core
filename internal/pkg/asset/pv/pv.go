@@ -2,7 +2,7 @@ package pv
 
 import (
 	"encoding/json"
-	"errors"
+	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -13,16 +13,18 @@ import (
 type DeviceController interface {
 	ReadDeviceStatus() (MachineStatus, error)
 	WriteDeviceControl(MachineControl) error
+	Stop() error
 }
 
 // Asset is a datastructure for an PV Asset
 type Asset struct {
-	mux         *sync.Mutex
-	pid         uuid.UUID
-	device      DeviceController
-	broadcast   map[uuid.UUID]chan<- msg.Msg
-	supervisory SupervisoryControl
-	config      Config
+	mux          *sync.Mutex
+	pid          uuid.UUID
+	device       DeviceController
+	publisher    *msg.PubSub
+	controlOwner uuid.UUID
+	supervisory  SupervisoryControl
+	config       Config
 }
 
 // PID is a getter for the unique identifier field
@@ -30,43 +32,57 @@ func (a Asset) PID() uuid.UUID {
 	return a.pid
 }
 
+// Name is a getter for the asset Name
+func (a Asset) Name() string {
+	return a.config.static.Name
+}
+
+// Bus is a getter for the asset's connected Bus
+func (a Asset) BusName() string {
+	return a.config.static.BusName
+}
+
 // DeviceController returns the hardware abstraction layer struct
 func (a Asset) DeviceController() DeviceController {
 	return a.device
 }
 
-func (a *Asset) Subscribe(pid uuid.UUID) <-chan msg.Msg {
-	ch := make(chan msg.Msg, 1)
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	a.broadcast[pid] = ch
-	return ch
+// Subscribe returns a channel on which the specified topic is broadcast
+func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+	ch, err := a.publisher.Subscribe(pid, topic)
+	return ch, err
 }
 
-func (a *Asset) Unsubscribe(pid uuid.UUID) {
+// Unsubscribe pid from all topic broadcasts
+func (a Asset) Unsubscribe(pid uuid.UUID) {
+	a.publisher.Unsubscribe(pid)
+}
+
+// RequestControl connects the asset control to the read only channel parameter.
+func (a *Asset) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	ch := a.broadcast[pid]
-	delete(a.broadcast, pid)
-	close(ch)
+	// TODO: previous owner needs to stop. how to enforce?
+	a.controlOwner = pid
+	go a.controlHandler(ch)
+
+	return nil
 }
 
 // UpdateStatus requests a physical device read, then updates MachineStatus field.
 func (a Asset) UpdateStatus() {
 	machineStatus, err := a.device.ReadDeviceStatus()
 	if err != nil {
-		// comm fail handling path
+		// Read Error Handler Path
 		return
 	}
 	status := transform(machineStatus)
-	a.mux.Lock()
-	defer a.mux.Unlock()
-	for _, ch := range a.broadcast {
-		select {
-		case ch <- msg.New(a.PID(), msg.Status, status):
-		default:
-		}
-	}
+	a.publisher.Publish(msg.Status, status)
+}
+
+// UpdateConfig requests component broadcast current configuration
+func (a Asset) UpdateConfig() {
+	a.publisher.Publish(msg.Config, a.config)
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -76,51 +92,57 @@ func transform(machineStatus MachineStatus) Status {
 	}
 }
 
-// WriteControl requests a physical device write of the data held in the asset machine control field.
-func (a Asset) WriteControl(c interface{}) {
-	control, ok := c.(MachineControl)
-	if !ok {
-		panic(errors.New("bad cast to write control"))
-	}
-	err := a.device.WriteDeviceControl(control)
-	if err != nil {
-		// comm fail handling path
-	}
+// Shutdown instructs the asset to cleanup all resources
+func (a Asset) Shutdown(wg *sync.WaitGroup) error {
+	wg.Add(1)
+	defer wg.Done()
+	return a.device.Stop()
 }
 
-//Config returns the archetypical configuration for the energy storage system asset.
-func (a Asset) Config() Config {
-	return a.config
-}
-
-func (a Asset) Enable(b bool) {
-	a.supervisory.enable = b
+func (a *Asset) controlHandler(ch <-chan msg.Msg) {
+loop:
+	for {
+		data, ok := <-ch
+		if !ok {
+			log.Println("PV controlHandler() stopping")
+			break loop
+		}
+		control, ok := data.Payload().(MachineControl)
+		if !ok {
+			log.Println("PV controlHandler() bad type assertion")
+			continue
+		}
+		err := a.device.WriteDeviceControl(control)
+		if err != nil {
+			log.Println("PV controlHandler():", err)
+		}
+	}
 }
 
 // Status wraps MachineStatus with a mutex
 type Status struct {
-	calc    CalculatedStatus
-	machine MachineStatus
+	Calc    CalculatedStatus `json:"CalculatedStatus"`
+	Machine MachineStatus    `json:"MachineStatus"`
 }
 type CalculatedStatus struct{}
 
 // MachineStatus is a data structure representing an architypical PV status
 type MachineStatus struct {
-	KW     float64
-	KVAR   float64
-	Hz     float64
-	Volts  float64
-	Online bool
+	KW     float64 `json:"KW"`
+	KVAR   float64 `json:"KVAR"`
+	Hz     float64 `json:"Hz"`
+	Volts  float64 `json:"Volts"`
+	Online bool    `json:"Online"`
 }
 
 // KW returns the asset's measured real power
 func (s Status) KW() float64 {
-	return s.machine.KW
+	return s.Machine.KW
 }
 
 // KVAR returns the asset's measured reactive power
 func (s Status) KVAR() float64 {
-	return s.machine.KVAR
+	return s.Machine.KVAR
 }
 
 // RealPositiveCapacity returns the asset's operative real positive capacity
@@ -142,50 +164,51 @@ type MachineControl struct {
 
 // SupervisoryControl defines the software control interface for the ESS Asset
 type SupervisoryControl struct {
-	mux    *sync.Mutex
 	enable bool
 }
 
-// Config wraps MachineConfig with mutex a mutex and hides the internal state.
+// Config wraps StaticConfig with mutex a mutex and hides the internal state.
 type Config struct {
-	mux     *sync.Mutex
-	machine MachineConfig
+	static  StaticConfig
+	dynamic DynamicConfig
 }
 
-type MachineConfig struct {
+type StaticConfig struct {
 	Name      string  `json:"Name"`
-	Bus       string  `json:"Bus"`
+	BusName   string  `json:"BusName"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
-// Name is a getter for the asset Name
-func (c Config) Name() string {
-	return c.machine.Name
-}
-
-// Bus is a getter for the asset's connected Bus
-func (c Config) Bus() string {
-	return c.machine.Bus
-}
+type DynamicConfig struct{}
 
 // New returns a configured PV Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	machineConfig := MachineConfig{}
-	err := json.Unmarshal(jsonConfig, &machineConfig)
+	staticConfig := StaticConfig{}
+	err := json.Unmarshal(jsonConfig, &staticConfig)
 	if err != nil {
 		return Asset{}, err
 	}
 
-	PID, err := uuid.NewUUID()
+	dynamicConfig := DynamicConfig{}
+
+	pid, err := uuid.NewUUID()
 	if err != nil {
 		return Asset{}, err
 	}
 
-	broadcast := make(map[uuid.UUID]chan<- msg.Msg)
+	publisher := msg.NewPublisher(pid)
+	controlOwner := uuid.UUID{}
+	supervisory := SupervisoryControl{false}
+	config := Config{staticConfig, dynamicConfig}
 
-	supervisory := SupervisoryControl{&sync.Mutex{}, false}
-	config := Config{&sync.Mutex{}, machineConfig}
-
-	return Asset{&sync.Mutex{}, PID, device, broadcast, supervisory, config}, err
+	return Asset{
+			&sync.Mutex{},
+			pid,
+			device,
+			publisher,
+			controlOwner,
+			supervisory,
+			config},
+		err
 }

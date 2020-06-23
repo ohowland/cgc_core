@@ -34,12 +34,12 @@ func (a Asset) PID() uuid.UUID {
 
 // Name is a getter for the asset Name
 func (a Asset) Name() string {
-	return a.config.machine.Name
+	return a.config.static.Name
 }
 
 // BusName is a getter for the asset's connected Bus
 func (a Asset) BusName() string {
-	return a.config.machine.BusName
+	return a.config.static.BusName
 }
 
 // DeviceController returns the hardware abstraction layer struct
@@ -82,7 +82,7 @@ func (a Asset) UpdateStatus() {
 
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
-	a.publisher.Publish(msg.Config, a.config.machine)
+	a.publisher.Publish(msg.Config, a.config)
 }
 
 // Shutdown instructs the asset to cleanup all resources
@@ -162,25 +162,29 @@ type SupervisoryControl struct {
 
 // Config wraps the machine configuration with a mutex and hides internal state
 type Config struct {
-	mux     *sync.Mutex
-	machine MachineConfig
+	static  StaticConfig
+	dynamic DynamicConfig
 }
 
 // MachineConfig holds the ESS asset configuration parameters
-type MachineConfig struct {
+type StaticConfig struct {
 	Name      string  `json:"Name"`
 	BusName   string  `json:"BusName"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
+type DynamicConfig struct{}
+
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	machineConfig := MachineConfig{}
-	err := json.Unmarshal(jsonConfig, &machineConfig)
+	staticConfig := StaticConfig{}
+	err := json.Unmarshal(jsonConfig, &staticConfig)
 	if err != nil {
 		return Asset{}, err
 	}
+
+	dynamicConfig := DynamicConfig{}
 
 	pid, err := uuid.NewUUID()
 	if err != nil {
@@ -188,9 +192,16 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	}
 
 	publisher := msg.NewPublisher(pid)
-	var controlOwner uuid.UUID
-
+	controlOwner := uuid.UUID{}
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
-	config := Config{&sync.Mutex{}, machineConfig}
-	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
+	config := Config{staticConfig, dynamicConfig}
+	return Asset{
+			&sync.Mutex{},
+			pid,
+			device,
+			publisher,
+			controlOwner,
+			supervisory,
+			config},
+		err
 }

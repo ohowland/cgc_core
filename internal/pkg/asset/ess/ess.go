@@ -173,7 +173,6 @@ type MachineControl struct {
 
 // SupervisoryControl defines the software control interface for the ESS Asset
 type SupervisoryControl struct {
-	mux    *sync.Mutex
 	enable bool
 }
 
@@ -210,11 +209,17 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	}
 
 	publisher := msg.NewPublisher(pid)
-
-	var controlOwner uuid.UUID
-
-	supervisory := SupervisoryControl{&sync.Mutex{}, false}
+	controlOwner := uuid.UUID{}
+	supervisory := SupervisoryControl{false}
 	config := Config{staticConfig, dynamicConfig}
 
-	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
+	return Asset{
+			&sync.Mutex{},
+			pid,
+			device,
+			publisher,
+			controlOwner,
+			supervisory,
+			config},
+		err
 }

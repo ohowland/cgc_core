@@ -55,14 +55,14 @@ func newGrid() (Asset, error) {
 }
 
 func TestReadConfigFile(t *testing.T) {
-	testConfig := MachineConfig{}
+	testConfig := StaticConfig{}
 	jsonConfig, err := ioutil.ReadFile("./grid_test_config.json")
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	assertConfig := MachineConfig{"TEST_Virtual Grid", "Virtual Bus", 20, 19}
+	assertConfig := StaticConfig{"TEST_Virtual Grid", "Virtual Bus", 20, 19}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
@@ -198,7 +198,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		subs[i] = subscriber{pid, ch}
 	}
 
-	assertConfig := MachineConfig{"TEST_Virtual Grid", "Virtual Bus", 20, 19}
+	assertConfig := StaticConfig{"TEST_Virtual Grid", "Virtual Bus", 20, 19}
 
 	var wg sync.WaitGroup
 	for _, sub := range subs {
@@ -206,7 +206,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		go func(sub subscriber, wg *sync.WaitGroup) {
 			defer wg.Done()
 			msg, ok := <-sub.ch
-			config := msg.Payload().(MachineConfig)
+			config := msg.Payload().(StaticConfig)
 			assert.Assert(t, ok == true)
 			assert.Equal(t, config, assertConfig)
 		}(sub, &wg)

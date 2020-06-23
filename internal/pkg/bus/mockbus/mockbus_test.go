@@ -1,4 +1,4 @@
-package bus
+package mockbus
 
 import (
 	"math/rand"
@@ -23,7 +23,7 @@ func TestMockbusAddMember(t *testing.T) {
 
 	bus1.AddMember(&bus2)
 
-	for _, member := range bus1.Members {
+	for _, member := range bus1.config.dynamic.Members {
 		assert.Assert(t, member.PID() == bus2.PID())
 	}
 }
@@ -60,7 +60,7 @@ func TestMockbusRequestControl(t *testing.T) {
 	ch := make(chan msg.Msg)
 	bus1.RequestControl(pid, ch)
 
-	assert.Equal(t, pid, bus1.ControlOwner)
+	assert.Equal(t, pid, bus1.config.dynamic.ControlOwner)
 
 	rand.Seed(time.Now().UnixNano())
 	assertMsg := msg.New(pid, msg.Control, rand.Int())

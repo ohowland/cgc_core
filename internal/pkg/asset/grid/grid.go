@@ -34,12 +34,12 @@ func (a Asset) PID() uuid.UUID {
 
 // Name is a getter for the asset Name
 func (a Asset) Name() string {
-	return a.config.machine.Name
+	return a.config.static.Name
 }
 
 // BusName is a getter for the asset's connected Bus
 func (a Asset) BusName() string {
-	return a.config.machine.BusName
+	return a.config.static.BusName
 }
 
 // DeviceController returns the hardware abstraction layer struct
@@ -82,14 +82,7 @@ func (a Asset) UpdateStatus() {
 
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
-	a.publisher.Publish(msg.Config, a.config.machine)
-}
-
-// Shutdown instructs the asset to cleanup all resources
-func (a Asset) Shutdown(wg *sync.WaitGroup) error {
-	wg.Add(1)
-	defer wg.Done()
-	return a.device.Stop()
+	a.publisher.Publish(msg.Config, a.config)
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -97,6 +90,13 @@ func transform(machineStatus MachineStatus) Status {
 		CalculatedStatus{},
 		machineStatus,
 	}
+}
+
+// Shutdown instructs the asset to cleanup all resources
+func (a Asset) Shutdown(wg *sync.WaitGroup) error {
+	wg.Add(1)
+	defer wg.Done()
+	return a.device.Stop()
 }
 
 func (a *Asset) controlHandler(ch <-chan msg.Msg) {
@@ -167,31 +167,34 @@ type MachineControl struct {
 
 // SupervisoryControl defines the software control interface for the ESS Asset
 type SupervisoryControl struct {
-	mux    *sync.Mutex
 	enable bool
 }
 
-// Config wraps MachineConfig with mutex a mutex and hides the internal state.
+// Config wraps StaticConfig with mutex a mutex and hides the internal state.
 type Config struct {
-	mux     *sync.Mutex
-	machine MachineConfig
+	static  StaticConfig
+	dynamic DynamicConfig
 }
 
-// MachineConfig holds the ESS asset configuration parameters
-type MachineConfig struct {
+// StaticConfig holds the ESS asset configuration parameters
+type StaticConfig struct {
 	Name      string  `json:"Name"`
 	BusName   string  `json:"BusName"`
 	RatedKW   float64 `json:"RatedKW"`
 	RatedKVAR float64 `json:"RatedKVAR"`
 }
 
+type DynamicConfig struct{}
+
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	machineConfig := MachineConfig{}
-	err := json.Unmarshal(jsonConfig, &machineConfig)
+	staticConfig := StaticConfig{}
+	err := json.Unmarshal(jsonConfig, &staticConfig)
 	if err != nil {
 		return Asset{}, err
 	}
+
+	dynamicConfig := DynamicConfig{}
 
 	pid, err := uuid.NewUUID()
 	if err != nil {
@@ -199,12 +202,17 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	}
 
 	publisher := msg.NewPublisher(pid)
+	controlOwner := uuid.UUID{}
+	supervisory := SupervisoryControl{false}
+	config := Config{staticConfig, dynamicConfig}
 
-	controlOwner := pid
-
-	supervisory := SupervisoryControl{&sync.Mutex{}, false}
-	config := Config{&sync.Mutex{}, machineConfig}
-
-	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
-
+	return Asset{
+			&sync.Mutex{},
+			pid,
+			device,
+			publisher,
+			controlOwner,
+			supervisory,
+			config},
+		err
 }

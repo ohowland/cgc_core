@@ -2,5 +2,5 @@
   "Name": "TEST_Virtual PV",
   "Bus": "Virtual Bus",
   "RatedKW": 20,
-  "RatedKVAR": 19
+  "RatedKVAR": 10
 }

@@ -53,12 +53,12 @@ func newFeeder() (Asset, error) {
 }
 
 func TestReadConfigFile(t *testing.T) {
-	testConfig := MachineConfig{}
+	testConfig := StaticConfig{}
 	jsonConfig, err := ioutil.ReadFile("./feeder_test_config.json")
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	assert.NilError(t, err)
 
-	assertConfig := MachineConfig{"TEST_Virtual Feeder", "Virtual Bus", 20, 18}
+	assertConfig := StaticConfig{"TEST_Virtual Feeder", "Virtual Bus", 20, 18}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
@@ -194,7 +194,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		subs[i] = subscriber{pid, ch}
 	}
 
-	assertConfig := MachineConfig{"TEST_Virtual Feeder", "Virtual Bus", 20, 18}
+	assertConfig := StaticConfig{"TEST_Virtual Feeder", "Virtual Bus", 20, 18}
 
 	var wg sync.WaitGroup
 	for _, sub := range subs {
@@ -202,7 +202,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		go func(sub subscriber, wg *sync.WaitGroup) {
 			defer wg.Done()
 			msg, ok := <-sub.ch
-			config := msg.Payload().(MachineConfig)
+			config := msg.Payload().(StaticConfig)
 			assert.Assert(t, ok == true)
 			assert.Equal(t, config, assertConfig)
 		}(sub, &wg)
