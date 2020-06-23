@@ -7,7 +7,6 @@ package ac
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"sync"
 
@@ -18,15 +17,13 @@ import (
 
 // Bus represents a single electrical AC power system bus.
 type Bus struct {
-	mux          *sync.Mutex
-	pid          uuid.UUID
-	relay        Relayer
-	publisher    *msg.PubSub
-	inbox        msgHandler
-	members      map[uuid.UUID]member
-	controlOwner uuid.UUID
-	config       Config
-	stop         chan bool
+	mux       *sync.Mutex
+	pid       uuid.UUID
+	relay     Relayer
+	publisher *msg.PubSub
+	inbox     msgHandler
+	config    Config
+	stop      chan bool
 }
 
 type msgHandler struct {
@@ -39,20 +36,35 @@ type member struct {
 	controller chan<- msg.Msg
 }
 
-// Config represents the static properties of an AC Bus
 type Config struct {
+	static  StaticConfig
+	dynamic dynamicConfig
+}
+
+// Config represents the static properties of an AC Bus
+type StaticConfig struct {
 	Name      string  `json:"Name"`
 	RatedVolt float64 `json:"RatedVolt"`
 	RatedHz   float64 `json:"RatedHz"`
 }
 
+type dynamicConfig struct {
+	Members      map[uuid.UUID]member `json:"Members"`
+	ControlOwner uuid.UUID            `json:"ControlOwner"`
+}
+
 // New configures and returns an ACbus data structure.
 func New(jsonConfig []byte, relay Relayer) (Bus, error) {
 
-	config := Config{}
-	err := json.Unmarshal(jsonConfig, &config)
+	staticConfig := StaticConfig{}
+	err := json.Unmarshal(jsonConfig, &staticConfig)
 	if err != nil {
 		return Bus{}, err
+	}
+
+	dynamicConfig := dynamicConfig{
+		make(map[uuid.UUID]member),
+		uuid.UUID{},
 	}
 
 	pid, err := uuid.NewUUID()
@@ -66,7 +78,6 @@ func New(jsonConfig []byte, relay Relayer) (Bus, error) {
 		make(chan msg.Msg),
 		make(<-chan msg.Msg),
 	}
-	members := make(map[uuid.UUID]member)
 
 	return Bus{
 		&sync.Mutex{},
@@ -74,9 +85,10 @@ func New(jsonConfig []byte, relay Relayer) (Bus, error) {
 		relay,
 		publisher,
 		MsgHandler,
-		members,
-		uuid.UUID{},
-		config,
+		Config{
+			staticConfig,
+			dynamicConfig,
+		},
 		stop}, nil
 }
 
@@ -92,7 +104,6 @@ loop:
 			}
 			b.publisher.Forward(m)
 		case m, ok := <-b.inbox.control:
-			fmt.Println(m)
 			if !ok {
 				// TODO: Lost Controller
 				continue
@@ -115,12 +126,20 @@ func (b *Bus) AddMember(a bus.Node) error {
 		// TODO: Error Handling Path: Failure to add member
 		return err
 	}
-	b.members[a.PID()] = member
+	b.config.dynamic.Members[a.PID()] = member
 
-	if len(b.members) == 1 { // if this is the first member, start the bus process.
+	if len(b.config.dynamic.Members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
+
+	// Propigate change in bus dynamic config
+	b.UpdateConfig()
 	return nil
+}
+
+// UpdateConfig pushes bus configuration to PubSub network
+func (b Bus) UpdateConfig() {
+	b.publisher.Publish(msg.Config, b.config)
 }
 
 // Subscribe returns a channel on which the specified topic is broadcast
@@ -139,7 +158,7 @@ func (b *Bus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	// TODO: previous owner needs to stop. how to enforce?
-	b.controlOwner = pid
+	b.config.dynamic.ControlOwner = pid
 	b.inbox.control = ch
 	return nil
 }
@@ -154,7 +173,7 @@ func (b Bus) publishMemberControl(m msg.Msg) {
 	}
 
 	if b.hasMember(m.PID()) {
-		b.members[m.PID()].controller <- m
+		b.config.dynamic.Members[m.PID()].controller <- m
 	} else {
 		log.Printf("AC Bus %v: recieved message bound for non-member address %v", b.PID(), m.PID())
 	}
@@ -164,14 +183,14 @@ func (b Bus) publishMemberControl(m msg.Msg) {
 func (b *Bus) stopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	allPIDs := make([]uuid.UUID, len(b.members))
+	allPIDs := make([]uuid.UUID, len(b.config.dynamic.Members))
 
-	for pid := range b.members {
+	for pid := range b.config.dynamic.Members {
 		allPIDs = append(allPIDs, pid)
 	}
 
 	for _, pid := range allPIDs {
-		delete(b.members, pid)
+		delete(b.config.dynamic.Members, pid)
 	}
 
 	b.stop <- true
@@ -208,26 +227,29 @@ func (b Bus) requestControl(node bus.Node) (chan<- msg.Msg, error) {
 func (b *Bus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	if member, ok := b.members[pid]; ok {
+	if member, ok := b.config.dynamic.Members[pid]; ok {
 		member.node.Unsubscribe(b.PID())
 	}
-	delete(b.members, pid)
+	delete(b.config.dynamic.Members, pid)
 
-	if len(b.members) < 1 {
+	if len(b.config.dynamic.Members) < 1 {
 		go b.stopProcess()
 	}
+
+	// Propigate change in bus dynamic config
+	b.UpdateConfig()
 }
 
 // hasMember verifies the membership of an asset.
 func (b Bus) hasMember(pid uuid.UUID) bool {
-	_, ok := b.members[pid]
+	_, ok := b.config.dynamic.Members[pid]
 	return ok
 }
 
 // Energized returns the state of the bus.
 func (b Bus) Energized() bool {
-	hzOk := b.Relayer().Hz() > b.config.RatedHz*0.5
-	voltOk := b.Relayer().Volt() > b.config.RatedVolt*0.5
+	hzOk := b.Relayer().Hz() > b.config.static.RatedHz*0.5
+	voltOk := b.Relayer().Volts() > b.config.static.RatedVolt*0.5
 	return hzOk && voltOk
 }
 
@@ -235,7 +257,7 @@ func (b Bus) Energized() bool {
 // Use this only when displaying information to customer.
 // PID is used internally.
 func (b Bus) Name() string {
-	return b.config.Name
+	return b.config.static.Name
 }
 
 // PID is an accessor for the ACBus's process id.

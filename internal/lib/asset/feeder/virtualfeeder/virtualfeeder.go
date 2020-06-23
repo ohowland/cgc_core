@@ -55,8 +55,8 @@ func (t Target) Hz() float64 {
 }
 
 // Volt is an accessor for ac voltage
-func (t Target) Volt() float64 {
-	return t.status.Volt
+func (t Target) Volts() float64 {
+	return t.status.Volts
 }
 
 // Gridforming is an accessor for gridforming state
@@ -69,7 +69,7 @@ type Status struct {
 	KW     float64 `json:"KW"`
 	KVAR   float64 `json:"KVAR"`
 	Hz     float64 `json:"Hz"`
-	Volt   float64 `json:"Volts"`
+	Volts  float64 `json:"Volts"`
 	Online bool    `json:"Online"`
 }
 
@@ -134,7 +134,7 @@ func mapStatus(s Status) feeder.MachineStatus {
 		KW:     s.KW,
 		KVAR:   s.KVAR,
 		Hz:     s.Hz,
-		Volt:   s.Volt,
+		Volts:  s.Volts,
 		Online: s.Online,
 	}
 }
@@ -233,7 +233,7 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:     0,
 		KVAR:   0,
 		Hz:     bus.Hz(),
-		Volt:   bus.Volt(),
+		Volts:  bus.Volts(),
 		Online: false,
 	}
 }
@@ -259,7 +259,7 @@ func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:     kw,
 		KVAR:   kvar,
 		Hz:     bus.Hz(),
-		Volt:   bus.Volt(),
+		Volts:  bus.Volts(),
 		Online: true,
 	}
 }

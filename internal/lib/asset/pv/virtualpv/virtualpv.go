@@ -43,8 +43,8 @@ func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
-func (t Target) Volt() float64 {
-	return t.status.Volt
+func (t Target) Volts() float64 {
+	return t.status.Volts
 }
 
 func (t Target) Gridforming() bool {
@@ -56,7 +56,7 @@ type Status struct {
 	KW     float64 `json:"KW"`
 	KVAR   float64 `json:"KVAR"`
 	Hz     float64 `json:"Hz"`
-	Volt   float64 `json:"Volt"`
+	Volts  float64 `json:"Volts"`
 	Online bool    `json:"Online"`
 }
 
@@ -128,7 +128,7 @@ func mapStatus(s Status) pv.MachineStatus {
 	return pv.MachineStatus{
 		KW:     s.KW,
 		KVAR:   s.KVAR,
-		Volt:   s.Volt,
+		Volts:  s.Volts,
 		Hz:     s.Hz,
 		Online: s.Online,
 	}
@@ -209,7 +209,7 @@ type state interface {
 }
 
 func energized(bus asset.VirtualStatus) bool {
-	return bus.Hz() > 1 && bus.Volt() > 1
+	return bus.Hz() > 1 && bus.Volts() > 1
 }
 
 type offState struct{}
@@ -219,7 +219,7 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:     0,
 		KVAR:   0,
 		Hz:     bus.Hz(),
-		Volt:   bus.Volt(),
+		Volts:  bus.Volts(),
 		Online: false,
 	}
 }
@@ -240,7 +240,7 @@ func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:     0,
 		KVAR:   0,
 		Hz:     bus.Hz(),
-		Volt:   bus.Volt(),
+		Volts:  bus.Volts(),
 		Online: true,
 	}
 }

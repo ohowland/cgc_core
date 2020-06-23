@@ -34,12 +34,12 @@ func (a Asset) PID() uuid.UUID {
 
 // Name is a getter for the asset Name
 func (a Asset) Name() string {
-	return a.config.machine.Name
+	return a.config.static.Name
 }
 
 // BusName is a getter for the asset's connected Bus
 func (a Asset) BusName() string {
-	return a.config.machine.BusName
+	return a.config.static.BusName
 }
 
 // DeviceController returns the hardware abstraction layer struct
@@ -82,7 +82,7 @@ func (a Asset) UpdateStatus() {
 
 // UpdateConfig requests component broadcast current configuration
 func (a Asset) UpdateConfig() {
-	a.publisher.Publish(msg.Config, a.config.machine)
+	a.publisher.Publish(msg.Config, a.config)
 }
 
 func transform(machineStatus MachineStatus) Status {
@@ -135,7 +135,7 @@ type MachineStatus struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
-	Volt                 float64 `json:"Volt"`
+	Volts                float64 `json:"Volts"`
 	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
 	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
 	SOC                  float64 `json:"SOC"`
@@ -179,12 +179,14 @@ type SupervisoryControl struct {
 
 // Config wraps MachineConfig with mutex a mutex and hides the internal state.
 type Config struct {
-	mux     *sync.Mutex
-	machine MachineConfig
+	static  StaticConfig
+	dynamic DynamicConfig
 }
 
+type DynamicConfig struct{}
+
 // MachineConfig holds the ESS asset configuration parameters
-type MachineConfig struct {
+type StaticConfig struct {
 	Name      string  `json:"Name"`
 	BusName   string  `json:"BusName"`
 	RatedKW   float64 `json:"RatedKW"`
@@ -194,11 +196,13 @@ type MachineConfig struct {
 
 // New returns a configured Asset
 func New(jsonConfig []byte, device DeviceController) (Asset, error) {
-	machineConfig := MachineConfig{}
-	err := json.Unmarshal(jsonConfig, &machineConfig)
+	staticConfig := StaticConfig{}
+	err := json.Unmarshal(jsonConfig, &staticConfig)
 	if err != nil {
 		return Asset{}, err
 	}
+
+	dynamicConfig := DynamicConfig{}
 
 	pid, err := uuid.NewUUID()
 	if err != nil {
@@ -210,7 +214,7 @@ func New(jsonConfig []byte, device DeviceController) (Asset, error) {
 	var controlOwner uuid.UUID
 
 	supervisory := SupervisoryControl{&sync.Mutex{}, false}
-	config := Config{&sync.Mutex{}, machineConfig}
+	config := Config{staticConfig, dynamicConfig}
 
 	return Asset{&sync.Mutex{}, pid, device, publisher, controlOwner, supervisory, config}, err
 }

@@ -3,16 +3,16 @@ package ac
 import "math/rand"
 
 type DummyRelay struct {
-	hz   float64
-	volt float64
+	hz    float64
+	volts float64
 }
 
 func (d DummyRelay) Hz() float64 {
 	return d.hz
 }
 
-func (d DummyRelay) Volt() float64 {
-	return d.volt
+func (d DummyRelay) Volts() float64 {
+	return d.volts
 }
 
 func NewDummyRelay() Relayer {

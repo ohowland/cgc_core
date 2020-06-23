@@ -52,10 +52,10 @@ func (b VirtualACBus) Hz() float64 {
 	return status.Hz()
 }
 
-// Volt is an accessor for the bus voltage
-func (b VirtualACBus) Volt() float64 {
+// Volts is an accessor for the bus voltage
+func (b VirtualACBus) Volts() float64 {
 	status := <-b.assetReciever
-	return status.Volt()
+	return status.Volts()
 }
 
 // AddMember joins a virtual asset to the virtual bus.
@@ -115,7 +115,7 @@ type assetMap map[uuid.UUID]asset.VirtualStatus
 // and calculating the power balance (swing load) for gridformer.
 func (b *VirtualACBus) Process() {
 	defer close(b.assetReciever)
-	log.Println("VirtualBus Process: Loop Started")
+	log.Println("[VirtualBus] Starting")
 	memberStatus := make(map[uuid.UUID]asset.VirtualStatus)
 loop:
 	for {
@@ -132,7 +132,7 @@ loop:
 			break loop
 		}
 	}
-	log.Println("VirtualBus Process: Loop Stopped")
+	log.Println("[VirtualBus] Goroutine Shutdown")
 }
 
 func (b *VirtualACBus) processMsg(msg msg.Msg, memberStatus assetMap) assetMap {
@@ -163,7 +163,7 @@ type Template struct {
 	kW         float64
 	kVAR       float64
 	hz         float64
-	volt       float64
+	volts      float64
 	gridformer bool
 }
 
@@ -184,8 +184,8 @@ func (v Template) Hz() float64 {
 }
 
 // Volt is an accessor for voltage
-func (v Template) Volt() float64 {
-	return v.volt
+func (v Template) Volts() float64 {
+	return v.volts
 }
 
 // Gridforming is required to meet the asset.VirtualStatus interface.
@@ -198,7 +198,7 @@ func newTemplate(a asset.VirtualStatus) Template {
 		kW:         a.KW(),
 		kVAR:       a.KVAR(),
 		hz:         a.Hz(),
-		volt:       a.Volt(),
+		volts:      a.Volts(),
 		gridformer: a.Gridforming(),
 	}
 }

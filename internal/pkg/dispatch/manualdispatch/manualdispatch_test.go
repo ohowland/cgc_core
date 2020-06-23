@@ -19,15 +19,14 @@ func TestNew(t *testing.T) {
 
 func TestUpdateStatusSingle(t *testing.T) {
 	dispatch, _ := New("./manualdispatch_test_config.json")
-
 	pid, _ := uuid.NewUUID()
+	ch := make(chan msg.Msg)
+	dispatch.StartProcess(ch)
 
 	status := mockasset.AssertedStatus()
 	msg := msg.New(pid, msg.Status, status)
 
-	dispatch.UpdateStatus(msg)
-
-	memberstatus := dispatch.calcStatus.MemberStatus()
+	ch <- msg
 
 	if memberstatus[pid].KW() != status.KW() {
 		t.Errorf("UpdateStatus(): FAILED. %f kW != %f kW", memberstatus[pid].KW(), status.KW())
@@ -57,6 +56,9 @@ func TestUpdateStatusSingle(t *testing.T) {
 func TestUpdatePowerMulti(t *testing.T) {
 	dispatch, _ := New("./manualdispatch_test_config.json")
 
+	ch := make(chan msg.Msg)
+	dispatch.StartProcess(ch)
+
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
 
@@ -65,10 +67,10 @@ func TestUpdatePowerMulti(t *testing.T) {
 	status2 := mockasset.AssertedStatus()
 
 	msg1 := msg.New(pid1, msg.Status, status1)
-	dispatch.UpdateStatus(msg1)
+	ch <- msg1
 
 	msg2 := msg.New(pid2, msg.Status, status2)
-	dispatch.UpdateStatus(msg2)
+	ch <- msg2
 
 	memberstatus := dispatch.calcStatus.MemberStatus()
 
@@ -123,6 +125,8 @@ func TestUpdatePowerMulti(t *testing.T) {
 
 func TestDropAsset(t *testing.T) {
 	dispatch, _ := New("./manualdispatch_test_config.json")
+	ch := make(chan msg.Msg)
+	dispatch.StartProcess(ch)
 
 	pid1, _ := uuid.NewUUID()
 	pid2, _ := uuid.NewUUID()
@@ -133,8 +137,8 @@ func TestDropAsset(t *testing.T) {
 	msg1 := msg.New(pid1, msg.Status, status1)
 	msg2 := msg.New(pid2, msg.Status, status2)
 
-	dispatch.UpdateStatus(msg1)
-	dispatch.UpdateStatus(msg2)
+	ch <- msg1
+	ch <- msg2
 
 	dispatch.DropAsset(pid1)
 

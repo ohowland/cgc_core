@@ -95,7 +95,7 @@ func TestWriteControl(t *testing.T) {
 	_ = grid.RequestControl(pid, write)
 
 	control := MachineControl{true}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.Control, control)
 
 	device := grid.DeviceController().(*DummyDevice)
 
@@ -106,7 +106,7 @@ func TestWriteControl(t *testing.T) {
 	}
 
 	control = MachineControl{false}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.Control, control)
 	if device.CloseIntertie != control.CloseIntertie {
 		t.Errorf("TestWriteControl() pass1: FAILED, %v != %v", device.CloseIntertie, control.CloseIntertie)
 	} else {

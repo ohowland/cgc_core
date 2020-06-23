@@ -63,13 +63,13 @@ func (p *PubSub) Publish(topic Topic, payload interface{}) {
 	}
 }
 
-func (p *PubSub) Forward(msg Msg) {
+func (p *PubSub) Forward(m Msg) {
 	p.mux.RLock()
 	defer p.mux.RUnlock()
 
-	for _, ch := range p.subs[msg.topic] {
+	for _, ch := range p.subs[m.topic] {
 		select {
-		case ch <- msg:
+		case ch <- m:
 		default:
 		}
 	}

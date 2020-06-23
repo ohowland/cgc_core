@@ -36,7 +36,7 @@ type Power interface {
 }
 
 type Voltage interface {
-	Volt() float64
+	Volts() float64
 }
 
 type Frequency interface {

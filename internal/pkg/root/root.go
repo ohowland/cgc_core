@@ -32,7 +32,22 @@ func NewSystem(g *bus.BusGraph, d dispatch.Dispatcher) (System, error) {
 		}
 	}(chStatus)
 
-	return System{pid, pub, g, d}, err
+	chConfig, err := g.Subscribe(pid, msg.Config)
+	if err != nil {
+		panic(err)
+	}
+
+	go func(ch <-chan msg.Msg) {
+		for m := range ch {
+			pub.Forward(m)
+		}
+	}(chConfig)
+
+	system := System{pid, pub, g, nil}
+
+	system.setDispatch(d)
+
+	return system, err
 }
 
 func (s *System) setDispatch(d dispatch.Dispatcher) error {
@@ -67,6 +82,10 @@ func (s *System) setDispatch(d dispatch.Dispatcher) error {
 
 func (s *System) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
 	return s.publisher.Subscribe(pid, topic)
+}
+
+func (s *System) Unsubscribe(pid uuid.UUID) {
+	s.publisher.Unsubscribe(pid)
 }
 
 func (s System) PID() uuid.UUID {

@@ -135,7 +135,7 @@ type MachineStatus struct {
 	KW     float64 `json:"KW"`
 	KVAR   float64 `json:"KVAR"`
 	Hz     float64 `json:"Hz"`
-	Volt   float64 `json:"Volt"`
+	Volts  float64 `json:"Volts"`
 	Online bool    `json:"Online"`
 }
 

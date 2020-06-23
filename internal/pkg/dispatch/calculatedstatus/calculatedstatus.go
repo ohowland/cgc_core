@@ -83,7 +83,3 @@ func aggregateCapacity(memberStatus map[uuid.UUID]Status) capacity {
 		realNegativeCapacity,
 	}
 }
-
-func (c CalculatedStatus) MemberStatus() map[uuid.UUID]Status {
-	return c.memberStatus
-}

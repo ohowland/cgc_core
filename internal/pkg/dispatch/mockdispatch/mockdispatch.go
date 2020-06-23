@@ -11,7 +11,7 @@ import (
 
 type MockDispatch struct {
 	mux          *sync.Mutex
-	PID          uuid.UUID
+	pid          uuid.UUID
 	pub          msg.Publisher
 	AssetStatus  map[uuid.UUID]msg.Msg
 	AssetControl map[uuid.UUID]interface{}
@@ -52,3 +52,7 @@ func (d MockDispatch) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg,
 	return d.pub.Subscribe(pid, topic)
 }
 func (d MockDispatch) Unsubscribe(pid uuid.UUID) {}
+
+func (d MockDispatch) PID() uuid.UUID {
+	return d.pid
+}

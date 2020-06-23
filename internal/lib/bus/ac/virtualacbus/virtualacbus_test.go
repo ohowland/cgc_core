@@ -49,7 +49,7 @@ type DummyStatus struct {
 	kW          float64
 	kVAR        float64
 	hz          float64
-	volt        float64
+	volts       float64
 	gridforming bool
 }
 
@@ -64,8 +64,8 @@ func (v DummyStatus) Hz() float64 {
 	return v.hz
 }
 
-func (v DummyStatus) Volt() float64 {
-	return v.volt
+func (v DummyStatus) Volts() float64 {
+	return v.volts
 }
 
 func (v DummyStatus) Gridforming() bool {
@@ -161,7 +161,7 @@ func TestProcessOneGridformer(t *testing.T) {
 	assert.Assert(t, gridformer.KW() == 0)
 	assert.Assert(t, gridformer.KVAR() == 0)
 	assert.Assert(t, gridformer.Hz() == assertStatus.Hz())
-	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
+	assert.Assert(t, gridformer.Volts() == assertStatus.Volts())
 }
 
 func TestProcessOneNongridformer(t *testing.T) {
@@ -180,7 +180,7 @@ func TestProcessOneNongridformer(t *testing.T) {
 	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
 	assert.Assert(t, gridformer.KVAR() == assertStatus.KVAR())
 	assert.Assert(t, gridformer.Hz() == 0)
-	assert.Assert(t, gridformer.Volt() == 0)
+	assert.Assert(t, gridformer.Volts() == 0)
 }
 
 func TestProcessTwoAssets(t *testing.T) {
@@ -204,7 +204,7 @@ func TestProcessTwoAssets(t *testing.T) {
 	assert.Assert(t, gridformer.KW() == -1*assertStatus.KW())
 	assert.Assert(t, gridformer.KVAR() == assertStatus.KVAR())
 	assert.Assert(t, gridformer.Hz() == assertStatus.Hz())
-	assert.Assert(t, gridformer.Volt() == assertStatus.Volt())
+	assert.Assert(t, gridformer.Volts() == assertStatus.Volts())
 }
 
 func TestReadHzVoltStatus(t *testing.T) {
@@ -221,7 +221,7 @@ func TestReadHzVoltStatus(t *testing.T) {
 
 	assertStatus := assertedStatus()
 	assert.Assert(t, bus.Hz() == assertStatus.Hz())
-	assert.Assert(t, bus.Volt() == assertStatus.Volt())
+	assert.Assert(t, bus.Volts() == assertStatus.Volts())
 }
 
 func TestProcessMessage(t *testing.T) {

@@ -63,7 +63,7 @@ func (a Asset) UpdateStatus() {
 	defer a.mux.Unlock()
 	for _, ch := range a.broadcast {
 		select {
-		case ch <- msg.New(a.PID(), status):
+		case ch <- msg.New(a.PID(), msg.Status, status):
 		default:
 		}
 	}
@@ -109,7 +109,7 @@ type MachineStatus struct {
 	KW     float64
 	KVAR   float64
 	Hz     float64
-	Volt   float64
+	Volts  float64
 	Online bool
 }
 

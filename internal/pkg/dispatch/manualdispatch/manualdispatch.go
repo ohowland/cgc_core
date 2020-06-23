@@ -1,11 +1,12 @@
 package manualdispatch
 
 import (
-	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch/calculatedstatus"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
@@ -42,6 +43,7 @@ func New(configPath string) (*ManualDispatch, error) {
 }
 
 func (d *ManualDispatch) StartProcess(ch <-chan msg.Msg) error {
+	log.Println("[ManualDispatch] Starting")
 	go d.Process(ch)
 	return nil
 }
@@ -55,7 +57,7 @@ func (d *ManualDispatch) Unsubscribe(pid uuid.UUID) {
 }
 
 func (d *ManualDispatch) Process(ch <-chan msg.Msg) {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(5000 * time.Millisecond)
 loop:
 	for {
 		select {
@@ -66,12 +68,29 @@ loop:
 			state := State{Status: m.Payload()}
 			// lock mutex?
 			d.memberState[m.PID()] = state
-			fmt.Println(d.memberState)
 		case <-ticker.C:
-			fmt.Println("[Dispatch] Write")
+
+			if m, ok := d.gridRunMsg(); ok {
+				//log.Println("[Dispatch] Write", m)
+				d.publisher.Publish(msg.Control, m)
+			} else {
+				log.Println("[Dispatch] No Grid Asset Found")
+			}
 		}
 	}
-	fmt.Println("[Dispatch] Goroutine Shutdown")
+	log.Println("[Dispatch] Goroutine Shutdown")
+}
+
+func (d *ManualDispatch) gridRunMsg() (msg.Msg, bool) {
+	for pid, state := range d.memberState {
+		_, ok := state.Status.(grid.Status)
+		if ok {
+			control := grid.MachineControl{CloseIntertie: true}
+			m := msg.New(pid, msg.Control, control)
+			return m, true
+		}
+	}
+	return msg.Msg{}, false
 }
 
 // DropAsset ...

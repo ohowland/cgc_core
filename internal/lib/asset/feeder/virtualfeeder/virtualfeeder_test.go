@@ -72,10 +72,10 @@ func TestLinkToVirtualBus(t *testing.T) {
 	targetSend := Target{
 		pid: device.PID(),
 		status: Status{
-			KW:   1,
-			KVAR: 2,
-			Hz:   60,
-			Volt: 480,
+			KW:    1,
+			KVAR:  2,
+			Hz:    60,
+			Volts: 480,
 		},
 	}
 
@@ -120,7 +120,7 @@ func TestRead(t *testing.T) {
 		KW:     0,
 		KVAR:   0,
 		Hz:     0,
-		Volt:   0,
+		Volts:  0,
 		Online: false,
 	}
 
@@ -167,7 +167,7 @@ func TestReadDeviceStatus(t *testing.T) {
 		KW:     0,
 		KVAR:   0,
 		Hz:     0,
-		Volt:   0,
+		Volts:  0,
 		Online: false,
 	}
 
@@ -203,7 +203,7 @@ func TestMapStatus(t *testing.T) {
 		KW:     1,
 		KVAR:   2,
 		Hz:     3,
-		Volt:   4,
+		Volts:  4,
 		Online: true,
 	}
 
@@ -213,7 +213,7 @@ func TestMapStatus(t *testing.T) {
 		KW:     1,
 		KVAR:   2,
 		Hz:     3,
-		Volt:   4,
+		Volts:  4,
 		Online: true,
 	}
 

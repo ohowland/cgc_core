@@ -1,140 +1,132 @@
 package web
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type handler struct {
+type Handler struct {
 	mux    *sync.Mutex
+	inbox  <-chan msg.Msg
 	pid    uuid.UUID
-	msgs   []json.RawMessage
 	config config
 }
 
 type config struct {
-	URL string
+	URI      string `json:"URI"`
+	Database string `json:"Database"`
+	Port     string `json:"Port"`
 }
 
-// thinking this gets linked into the asset broadcast
-// so handler would call subscribe and link the channel to
-// publish method, which aggregates
+type Entry struct {
+	PID  uuid.UUID   `json:"PID"`
+	Data interface{} `json:"Data"`
+}
 
-func New(configPath string) (handler, error) {
+func New(configPath string, system msg.Publisher) (Handler, error) {
 	jsonConfig, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return handler{}, err
+		return Handler{}, err
 	}
 	cfg := config{}
 	if err := json.Unmarshal(jsonConfig, &cfg); err != nil {
-		return handler{}, err
+		return Handler{}, err
 	}
 
 	pid, _ := uuid.NewUUID()
-	msgs := make([]json.RawMessage, 0)
 
-	return handler{
+	inbox := make(chan msg.Msg, 50)
+
+	chStatus, err := system.Subscribe(pid, msg.Status)
+	go func(ch <-chan msg.Msg) {
+		for m := range ch {
+			inbox <- m
+		}
+	}(chStatus)
+
+	chConfig, err := system.Subscribe(pid, msg.Config)
+	go func(ch <-chan msg.Msg) {
+		for m := range ch {
+			inbox <- m
+		}
+	}(chConfig)
+
+	if err := json.Unmarshal(jsonConfig, &cfg); err != nil {
+		return Handler{}, err
+	}
+
+	return Handler{
 		mux:    &sync.Mutex{},
+		inbox:  inbox,
 		pid:    pid,
-		msgs:   msgs,
-		config: cfg}, err
+		config: cfg,
+	}, nil
 }
 
-func (h *handler) Publish(ch <-chan msg.Msg) {
-	go func() {
-		for {
-			data := <-ch
-			switch data.Topic() {
-			case msg.JSON:
-				bytes, ok := data.Payload().(json.RawMessage)
-				if !ok {
-					continue
-				}
-				h.enqueue(bytes)
-
-			default:
-			}
-		}
-	}()
+func msgToBSON(m msg.Msg) bson.D {
+	return bson.D{
+		{"$set", bson.M{
+			"pid":  m.PID(),
+			"data": m.Payload(),
+		}},
+	}
 }
 
-func (h *handler) enqueue(bytes json.RawMessage) {
-	h.mux.Lock()
-	defer h.mux.Unlock()
-	h.msgs = append(h.msgs, bytes)
-}
-
-func (h *handler) transport() {
-	go func() {
-		for {
-			if len(h.msgs) > 0 {
-				send := h.dequeue()
-				for 
-				h.PostAssetStatus(send)
-			} else {
-				time.Sleep(500 * time.Millisecond)
-			}
-		}
-	}()
-}
-
-func (h *handler) dequeue() []json.RawMessage {
-	h.mux.Lock()
-	defer h.mux.Unlock()
-
-	var send []json.RawMessage
-	copy(send[:], h.msgs)
-	h.msgs = nil
-	return send
-}
-
-func (h handler) PostAssetStatus(bytes ) {
-	name := "hmm"
-	targetURL := h.config.URL + "/assets/" + name + "/status"
-	//log.Println("TARGET:", targetURL)
-	//log.Println("JSON:", b)
-	_, err := http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(bytes))
+func (h Handler) Process() {
+	client, err := mongo.NewClient(options.Client().ApplyURI(h.config.URI + ":" + h.config.Port))
 	if err != nil {
-		log.Println("[Webservice Handler]", err)
+		log.Println(err)
 	}
-}
 
-/*
-func (h Handler) updateHandler() {s
-	for pid, status := range w.GetStatus() {
-
-		var b []byte
-		var err error
-		switch s := status.(type) {
-		case ess.Status:
-			b, err = json.Marshal(s)
-		case grid.Status:
-			b, err = json.Marshal(s)
-		case feeder.Status:
-			b, err = json.Marshal(s)
-		case pv.Status:
-			b, err = json.Marshal(s)
-		default:
-			b = json.RawMessage("{}")
-			err = errors.New("manualDispatch.updateHandler: Could not cast status")
-		}
-
-		if err != nil {
-			log.Println(err)
-		}
-
-		targetURL := h.config.URL + "/assets/" + pid.String() + "/status"
-		log.Println("TARGET:", targetURL)
-		log.Println("JSON:", b)
-		_, err = http.Post(targetURL, "Content-Type: application/json", bytes.NewBuffer(b))
+	//ctx, _ := context.WithTimeout(context.TODO(), 20*time.Second)
+	ctx := context.TODO()
+	err = client.Connect(ctx)
+	if err != nil {
+		log.Println(err)
 	}
+	defer client.Disconnect(ctx)
+
+	client.Database(h.config.Database).Collection("assetStatus").Drop(ctx)
+	client.Database(h.config.Database).Collection("assetConfig").Drop(ctx)
+	for m := range h.inbox {
+		switch m.Topic() {
+		case msg.Status:
+			opts := options.Update().SetUpsert(true)
+			_, err = client.Database(h.config.Database).Collection("assetStatus").UpdateOne(
+				ctx,
+				bson.M{"pid": m.PID()},
+				msgToBSON(m),
+				opts,
+			)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+		case msg.Config:
+			log.Println("[Mongo] Config:", m)
+			opts := options.Update().SetUpsert(true)
+			_, err = client.Database(h.config.Database).Collection("assetConfig").UpdateOne(
+				ctx,
+				bson.M{"pid": m.PID()},
+				msgToBSON(m),
+				opts,
+			)
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+		}
+	}
+	log.Println("[Mongo] Process Shutdown")
 }
-*/

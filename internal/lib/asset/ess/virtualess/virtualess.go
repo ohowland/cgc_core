@@ -56,9 +56,9 @@ func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
-// Volt is an accessor for ac voltage
-func (t Target) Volt() float64 {
-	return t.status.Volt
+// Volts is an accessor for ac voltage
+func (t Target) Volts() float64 {
+	return t.status.Volts
 }
 
 // Gridforming is an accessor for gridforming state
@@ -71,7 +71,7 @@ type Status struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
-	Volt                 float64 `json:"Volt"`
+	Volts                float64 `json:"Volts"`
 	SOC                  float64 `json:"SOC"`
 	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
 	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
@@ -143,7 +143,7 @@ func mapStatus(s Status) ess.MachineStatus {
 		KW:                   s.KW,
 		KVAR:                 s.KVAR,
 		Hz:                   s.Hz,
-		Volt:                 s.Volt,
+		Volts:                s.Volts,
 		SOC:                  s.SOC,
 		RealPositiveCapacity: s.RealPositiveCapacity,
 		RealNegativeCapacity: s.RealNegativeCapacity,
@@ -250,7 +250,7 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:                   0,
 		KVAR:                 0,
 		Hz:                   bus.Hz(),
-		Volt:                 bus.Volt(),
+		Volts:                bus.Volts(),
 		SOC:                  target.status.SOC,
 		RealPositiveCapacity: 0, // TODO: Get Config into VirtualESS
 		RealNegativeCapacity: 0, // TODO: Get Config into VirtualESS
@@ -284,7 +284,7 @@ func (s pQState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:                   target.control.KW,
 		KVAR:                 target.control.KVAR,
 		Hz:                   bus.Hz(),
-		Volt:                 bus.Volt(),
+		Volts:                bus.Volts(),
 		SOC:                  target.status.SOC,
 		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
 		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
@@ -315,7 +315,7 @@ func (s hzVState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:                   bus.KW(),
 		KVAR:                 bus.KVAR(),
 		Hz:                   60,  // TODO: Get Config into VirtualESS
-		Volt:                 480, // TODO: Get Config into VirtualESS
+		Volts:                480, // TODO: Get Config into VirtualESS
 		SOC:                  target.status.SOC,
 		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
 		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS

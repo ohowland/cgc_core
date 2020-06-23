@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -24,8 +21,8 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch/manualdispatch"
-	"github.com/ohowland/cgc_core/internal/pkg/msg"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
+	"github.com/ohowland/cgc_core/internal/pkg/web"
 )
 
 func main() {
@@ -71,80 +68,25 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("[Main] Starting update loops")
-	busGraph.DumpString()
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go launchUpdateAssets(assets, sigs1, &wg)
-	go monitorSystem(&system, sigs2, &wg)
-	wg.Wait()
-
-	/*
-		log.Println("Starting Datalogging")
-		launchDatalogging(assets)
-	*/
-
-	/*
-		log.Println("Starting webserver")
-		launchServer(assets)
-	*/
-
-	log.Println("[Main] Stopping system")
-}
-
-func monitorSystem(s *root.System, sigs chan os.Signal, wg *sync.WaitGroup) {
-	ch, err := s.Subscribe(uuid.UUID{}, msg.Status)
+	log.Println("[Main] Connecting MongoDB Service")
+	err = linkWebservice(&system)
 	if err != nil {
 		panic(err)
 	}
 
-	assets := make(map[uuid.UUID]interface{})
-	staticOrder := make([]uuid.UUID, 0)
-	ticker := time.NewTicker(1 * time.Second)
-loop:
-	for {
-		select {
-		case <-ticker.C:
-			b := bufio.NewWriter(os.Stdout)
-			printClearTerm()
-			printTimestap(b)
-			for _, pid := range staticOrder {
-				p, _ := pid.MarshalText()
-				s := []byte(fmt.Sprintf("%v", assets[pid]))
-				printAssetStatus(b, p, s)
-			}
-			b.Flush()
-		case msg := <-ch:
-			if _, ok := assets[msg.PID()]; !ok {
-				staticOrder = append(staticOrder, msg.PID())
-			}
-			assets[msg.PID()] = msg.Payload()
-		case <-sigs:
-			break loop
-		}
+	log.Println("[Main] Propigate Configuration")
+	propigateConfigurations(buses, assets)
+	if err != nil {
+		panic(err)
 	}
-	log.Println("[System] Goroutine Shutdown")
-	wg.Done()
-}
 
-func printClearTerm() {
-	cmd := exec.Command("cmd", "/c", "cls")
-	cmd.Stdout = os.Stdout
-	cmd.Run()
-}
+	log.Println("[Main] Starting update loops")
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go launchUpdateAssets(assets, sigs1, &wg)
+	wg.Wait()
 
-func printTimestap(b *bufio.Writer) {
-	t := time.Now()
-	s, _ := t.MarshalText()
-	b.Write(s)
-	b.WriteString("\n")
-}
-
-func printAssetStatus(b *bufio.Writer, pid []byte, status []byte) {
-	b.Write(pid)
-	b.WriteString(": ")
-	b.Write(status)
-	b.WriteString("\n")
+	log.Println("[Main] Stopping system")
 }
 
 func launchUpdateAssets(assets map[uuid.UUID]asset.Asset, sigs chan os.Signal, wg *sync.WaitGroup) {
@@ -253,3 +195,63 @@ func buildDispatch() (dispatch.Dispatcher, error) {
 func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
 	return root.NewSystem(g, d)
 }
+
+func linkWebservice(sys *root.System) error {
+	webserviceHandler, err := web.New("./config/webservice/mongodb_config.json", sys)
+	go webserviceHandler.Process()
+	return err
+}
+
+func propigateConfigurations(buses map[uuid.UUID]bus.Bus, assets map[uuid.UUID]asset.Asset) {
+	for _, bus := range buses {
+		bus.UpdateConfig()
+	}
+
+	for _, asset := range assets {
+		asset.UpdateConfig()
+	}
+}
+
+/*
+func monitorSystem(s *root.System, sigs chan os.Signal, wg *sync.WaitGroup) {
+	statusCh, err := s.Subscribe(uuid.UUID{}, msg.Status)
+	configCh, err := s.Subscribe(uuid.UUID{}, msg.Config)
+	if err != nil {
+		panic(err)
+	}
+
+	status := make(map[uuid.UUID]interface{})
+	config := make(map[uuid.UUID]interface{})
+
+	orderedStatus := make([]uuid.UUID, 0)
+	ticker := time.NewTicker(1 * time.Second)
+loop:
+	for {
+		select {
+		case <-ticker.C:
+			for _, pid := range orderedStatus {
+				cfg, ok1 := config[pid]
+				assetCfg, ok2 := cfg.(asset.Config)
+				if ok1 && ok2 {
+					log.Println(assetCfg.Name(), status[pid])
+				} else {
+					log.Println(pid, status[pid])
+				}
+			}
+		case msg := <-statusCh:
+			if _, ok := status[msg.PID()]; !ok {
+				orderedStatus = append(orderedStatus, msg.PID())
+			}
+			status[msg.PID()] = msg.Payload()
+		case msg := <-configCh:
+			if _, ok := config[msg.PID()]; !ok {
+
+			}
+		case <-sigs:
+			break loop
+		}
+	}
+	log.Println("[System] Goroutine Shutdown")
+	wg.Done()
+}
+*/

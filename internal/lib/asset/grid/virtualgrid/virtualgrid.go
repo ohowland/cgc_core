@@ -53,9 +53,9 @@ func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
-// Volt is an accessor for ac voltage
-func (t Target) Volt() float64 {
-	return t.status.Volt
+// Volts is an accessor for ac voltage
+func (t Target) Volts() float64 {
+	return t.status.Volts
 }
 
 // Gridforming is an accessor for gridforming state
@@ -68,7 +68,7 @@ type Status struct {
 	KW                   float64 `json:"KW"`
 	KVAR                 float64 `json:"KVAR"`
 	Hz                   float64 `json:"Hz"`
-	Volt                 float64 `json:"Volt"`
+	Volts                float64 `json:"Volts"`
 	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
 	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
 	Online               bool    `json:"Online"`
@@ -135,6 +135,8 @@ func mapStatus(s Status) grid.MachineStatus {
 	return grid.MachineStatus{
 		KW:                   s.KW,
 		KVAR:                 s.KVAR,
+		Hz:                   s.Hz,
+		Volts:                s.Volts,
 		RealPositiveCapacity: s.RealPositiveCapacity,
 		RealNegativeCapacity: s.RealNegativeCapacity,
 		Online:               s.Online,
@@ -231,10 +233,10 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	return Status{
 		KW:                   0,
 		KVAR:                 0,
-		Hz:                   bus.Hz(),   // TODO: Get Config into VirtualGrid
-		Volt:                 bus.Volt(), // TODO: Get Config into VirtualGrid
-		RealPositiveCapacity: 0,          // TODO: Get Config into VirtualGrid
-		RealNegativeCapacity: 0,          // TODO: Get Config into VirtualGrid
+		Hz:                   bus.Hz(),    // TODO: Get Config into VirtualGrid
+		Volts:                bus.Volts(), // TODO: Get Config into VirtualGrid
+		RealPositiveCapacity: 0,           // TODO: Get Config into VirtualGrid
+		RealNegativeCapacity: 0,           // TODO: Get Config into VirtualGrid
 		Online:               false,
 	}
 }
@@ -254,7 +256,7 @@ func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 		KW:                   bus.KW(),
 		KVAR:                 bus.KVAR(),
 		Hz:                   60,  // TODO: Get Config into VirtualGrid
-		Volt:                 480, // TODO: Get Config into VirtualGrid
+		Volts:                480, // TODO: Get Config into VirtualGrid
 		RealPositiveCapacity: 10,  // TODO: Get Config into VirtualGrid
 		RealNegativeCapacity: 10,  // TODO: Get Config into VirtualGrid
 		Online:               true,

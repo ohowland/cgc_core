@@ -145,7 +145,7 @@ func TestGetRelay(t *testing.T) {
 	assertStatus := assertedDummyRelay()
 
 	assert.Assert(t, relay.Hz() == assertStatus.Hz())
-	assert.Assert(t, relay.Volt() == assertStatus.Volt())
+	assert.Assert(t, relay.Volts() == assertStatus.Volts())
 }
 
 func TestEnergized(t *testing.T) {
@@ -153,7 +153,7 @@ func TestEnergized(t *testing.T) {
 	assertStatus := assertedDummyRelay()
 
 	hzOk := assertStatus.Hz() > bus.config.RatedHz*0.5
-	voltOk := assertStatus.Volt() > bus.config.RatedVolt*0.5
+	voltOk := assertStatus.Volts() > bus.config.RatedVolt*0.5
 
 	if hzOk && voltOk {
 		assert.Assert(t, bus.Energized() == true)

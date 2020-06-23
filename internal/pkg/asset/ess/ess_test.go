@@ -57,12 +57,12 @@ func newESS() (Asset, error) {
 }
 
 func TestReadConfigFile(t *testing.T) {
-	testConfig := MachineConfig{}
+	testConfig := StaticConfig{}
 	jsonConfig, err := ioutil.ReadFile("./ess_test_config.json")
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	assert.NilError(t, err)
 
-	assertConfig := MachineConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
+	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
@@ -95,7 +95,7 @@ func TestWriteControl(t *testing.T) {
 	_ = ess.RequestControl(pid, write)
 
 	control := MachineControl{true, rand.Float64(), rand.Float64(), true}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.Control, control)
 
 	device := ess.DeviceController().(*DummyDevice)
 
@@ -107,7 +107,7 @@ func TestWriteControl(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 	control = MachineControl{true, rand.Float64(), rand.Float64(), true}
-	write <- msg.New(pid, control)
+	write <- msg.New(pid, msg.Control, control)
 	if device.KW != control.KW {
 		t.Errorf("TestWriteControl() pass2: FAILED, %f != %f", device.KW, control.KW)
 	} else {
@@ -200,7 +200,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		subs[i] = subscriber{pid, ch}
 	}
 
-	assertConfig := MachineConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
+	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
 
 	var wg sync.WaitGroup
 	for _, sub := range subs {
@@ -208,7 +208,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		go func(sub subscriber, wg *sync.WaitGroup) {
 			defer wg.Done()
 			msg, ok := <-sub.ch
-			config := msg.Payload().(MachineConfig)
+			config := msg.Payload().(StaticConfig)
 			assert.Assert(t, ok == true)
 			assert.Equal(t, config, assertConfig)
 		}(sub, &wg)

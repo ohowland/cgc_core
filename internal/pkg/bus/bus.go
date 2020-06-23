@@ -14,7 +14,19 @@ import (
 // are contrainted to leaves only.
 type Bus interface {
 	AddMember(Node) error
-	Node
+	msg.Publisher
+	Controller
+	Config
+}
+
+type Controller interface {
+	UpdateConfig()
+	RequestControl(uuid.UUID, <-chan msg.Msg) error
+}
+
+type Config interface {
+	Name() string
+	PID() uuid.UUID
 }
 
 // BusGraph is the graph representation of the power system bus.
@@ -23,6 +35,7 @@ type BusGraph struct {
 	graph   *Graph
 }
 
+// NewBusGraph returns and empty BusGraph object
 func NewBusGraph() (BusGraph, error) {
 	g, err := NewGraph()
 	return BusGraph{nil, &g}, err
@@ -40,7 +53,9 @@ func (bg BusGraph) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	return bg.rootBus.RequestControl(pid, ch)
 }
 
-func BuildBusGraph(root Bus, bm map[uuid.UUID]Bus, am map[uuid.UUID]asset.Asset) (BusGraph, error) {
+// BuildBusGraph returns a network graph of buses in assets.
+// @param root: the node attached to the dispatch system
+func BuildBusGraph(root Bus, buses map[uuid.UUID]Bus, assets map[uuid.UUID]asset.Asset) (BusGraph, error) {
 	g, err := NewBusGraph()
 	if err != nil {
 		return BusGraph{}, err
@@ -48,21 +63,22 @@ func BuildBusGraph(root Bus, bm map[uuid.UUID]Bus, am map[uuid.UUID]asset.Asset)
 
 	g.AddMember(root)
 
-	targetBm := make(map[uuid.UUID]Bus)
-	for k, v := range bm {
-		targetBm[k] = v
+	busesCopy := make(map[uuid.UUID]Bus)
+	for k, v := range buses {
+		busesCopy[k] = v
 	}
 
-	delete(targetBm, root.PID())
+	// remove root from bus map
+	delete(busesCopy, root.PID())
 
-	for _, bus := range targetBm {
+	for _, bus := range busesCopy {
 		err = g.AddMember(bus)
 		if err != nil {
 			return BusGraph{}, err
 		}
 	}
 
-	for _, asset := range am {
+	for _, asset := range assets {
 		err = g.AddMember(asset)
 		if err != nil {
 			return BusGraph{}, err
@@ -76,6 +92,7 @@ func (bg *BusGraph) setRootBus(b Bus) {
 	bg.rootBus = b
 }
 
+// AddMember inserts a node into the network graph.
 func (bg *BusGraph) AddMember(n Node) error {
 	switch node := n.(type) {
 	case Bus:
@@ -87,6 +104,7 @@ func (bg *BusGraph) AddMember(n Node) error {
 			bg.graph.AddDirectedEdge(bg.rootBus, node)
 			bg.rootBus.AddMember(node) // link bus to bus
 		}
+
 	case asset.Asset:
 		bus, err := bg.findAssetBus(node)
 		if err != nil {
@@ -136,6 +154,7 @@ func (bg *BusGraph) nodeList() []Node {
 	return nodeList
 }
 
+// DumpString returns a string representation of the network graph
 func (bg BusGraph) DumpString() {
 	bg.graph.DumpString()
 }
