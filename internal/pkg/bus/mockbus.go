@@ -1,22 +1,21 @@
-package Bus
+package bus
 
 import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
-type Bus struct {
+type MockBus struct {
 	mux            *sync.Mutex
 	pid            uuid.UUID
 	LastControlMsg msg.Msg
 	publisher      *msg.PubSub
-	config         Config
+	config         MockBusConfig
 }
 
-type Config struct {
+type MockBusConfig struct {
 	static  StaticConfig
 	dynamic DynamicConfig
 }
@@ -29,34 +28,35 @@ type StaticConfig struct {
 }
 
 type DynamicConfig struct {
-	Members      map[uuid.UUID]bus.Node `json:"Members"`
-	ControlOwner uuid.UUID              `json:"ControlOwner"`
+	Members      map[uuid.UUID]Node `json:"Members"`
+	ControlOwner uuid.UUID          `json:"ControlOwner"`
 }
 
-func NewBus() (Bus, error) {
+func NewMockBus() (MockBus, error) {
 	pid, _ := uuid.NewUUID()
 	pub := msg.NewPublisher(pid)
 
-	config := Config{
+	config := MockBusConfig{
 		StaticConfig{
 			Name:      "Bus",
 			RatedVolt: 480,
 			RatedHz:   60,
 		},
 		DynamicConfig{
-			Members:      make(map[uuid.UUID]bus.Node),
+			Members:      make(map[uuid.UUID]Node),
 			ControlOwner: uuid.UUID{},
 		},
 	}
 
-	return Bus{&sync.Mutex{}, pid, msg.Msg{}, pub, config}, nil
+	return MockBus{&sync.Mutex{}, pid, msg.Msg{}, pub, config}, nil
 }
 
 // AddMember links the asset parameter to the bus. Asset update status and update
 // configuration events will publish to the bus
-func (b *Bus) AddMember(n bus.Node) error {
+func (b *MockBus) AddMember(n Node) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
+
 	ch, err := n.Subscribe(b.PID(), msg.Status)
 	if err != nil {
 		return err
@@ -73,18 +73,18 @@ func (b *Bus) AddMember(n bus.Node) error {
 }
 
 // Subscribe returns a channel on which the specified topic is broadcast
-func (b *Bus) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
+func (b *MockBus) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
 	ch, err := b.publisher.Subscribe(pid, topic)
 	return ch, err
 }
 
 // Unsubscribe pid from all topic broadcasts
-func (b *Bus) Unsubscribe(pid uuid.UUID) {
+func (b *MockBus) Unsubscribe(pid uuid.UUID) {
 	b.publisher.Unsubscribe(pid)
 }
 
 // RequestControl assigns a channel parameter to the bus control channel
-func (b *Bus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
+func (b *MockBus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	// TODO: previous owner needs to stop. how to enforce?
@@ -93,7 +93,7 @@ func (b *Bus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	return nil
 }
 
-func (b *Bus) controlHandler(ch <-chan msg.Msg) {
+func (b *MockBus) controlHandler(ch <-chan msg.Msg) {
 	ctrlMsg, ok := <-ch
 	if !ok {
 		return
@@ -102,14 +102,14 @@ func (b *Bus) controlHandler(ch <-chan msg.Msg) {
 }
 
 // PID process id
-func (b Bus) PID() uuid.UUID {
+func (b MockBus) PID() uuid.UUID {
 	return b.pid
 }
 
-func (b Bus) Name() string {
-	return "Bus"
+func (b MockBus) Name() string {
+	return "MockBus"
 }
 
-func (b Bus) UpdateConfig() {
+func (b MockBus) UpdateConfig() {
 	b.publisher.Publish(msg.Config, b.config)
 }

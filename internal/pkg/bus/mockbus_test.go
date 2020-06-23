@@ -1,4 +1,4 @@
-package mockbus
+package bus
 
 import (
 	"math/rand"

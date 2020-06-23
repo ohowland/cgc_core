@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc_core/internal/pkg/asset"
 	"github.com/ohowland/cgc_core/internal/pkg/asset/mockasset"
-	"github.com/ohowland/cgc_core/internal/pkg/bus/mockbus"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 	"gotest.tools/assert"
 )
@@ -23,7 +22,7 @@ func TestNewGraph(t *testing.T) {
 
 func TestAddNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 	err := g.AddNode(&bus1)
 	assert.NilError(t, err)
 
@@ -33,8 +32,8 @@ func TestAddNode(t *testing.T) {
 
 func TestAddMultipleNodes(t *testing.T) {
 	g, _ := NewGraph()
-	bus1, _ := mockbus.NewMockBus()
-	bus2, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	err := g.AddNode(&bus1)
 	assert.NilError(t, err)
@@ -52,7 +51,7 @@ func TestAddMultipleNodes(t *testing.T) {
 
 func TestRejectDuplicateNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 
 	err := g.AddNode(&bus1)
 	assert.NilError(t, err)
@@ -64,8 +63,8 @@ func TestRejectDuplicateNode(t *testing.T) {
 
 func TestAddDirectedEdge(t *testing.T) {
 	g, _ := NewGraph()
-	bus1, _ := mockbus.NewMockBus()
-	bus2, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	g.AddNode(&bus1)
 	g.AddNode(&bus2)
@@ -96,8 +95,8 @@ func TestAddDirectedEdge(t *testing.T) {
 
 func TestAddDirectedEdgeMissingStartNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1, _ := mockbus.NewMockBus()
-	bus2, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	// g.AddNode(&bus1) <- Missing Start Node.
 	g.AddNode(&bus2)
@@ -109,8 +108,8 @@ func TestAddDirectedEdgeMissingStartNode(t *testing.T) {
 
 func TestAddDirectedEdgeMissingEndNode(t *testing.T) {
 	g, _ := NewGraph()
-	bus1, _ := mockbus.NewMockBus()
-	bus2, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
 
 	g.AddNode(&bus1)
 	// g.AddNode(&bus2) <- Missing End Node.
@@ -126,7 +125,7 @@ func TestAddDirectedEdgeMissingEndNode(t *testing.T) {
 
 func TestSetRootBus(t *testing.T) {
 	g, _ := NewBusGraph()
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 
 	g.setRootBus(&bus1)
 
@@ -135,18 +134,18 @@ func TestSetRootBus(t *testing.T) {
 
 func TestAddBusMember(t *testing.T) {
 	g, _ := NewBusGraph()
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 
 	err := g.AddMember(&bus1)
 	assert.NilError(t, err)
-	assert.Assert(t, g.rootBus.(*mockbus.MockBus) == &bus1)
+	assert.Assert(t, g.rootBus.(*MockBus) == &bus1)
 }
 
 func TestNodeList(t *testing.T) {
 	g, _ := NewBusGraph()
-	bus1, _ := mockbus.NewMockBus()
-	bus2, _ := mockbus.NewMockBus()
-	bus3, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
+	bus2, _ := NewMockBus()
+	bus3, _ := NewMockBus()
 
 	assertSet := make(map[Node]bool)
 	assertSet[&bus1] = true
@@ -165,7 +164,7 @@ func TestNodeList(t *testing.T) {
 }
 func TestFindAssetBus(t *testing.T) {
 	g, _ := NewBusGraph()
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 	asset1 := mockasset.New()
 
 	g.AddMember(&bus1)
@@ -177,7 +176,7 @@ func TestFindAssetBus(t *testing.T) {
 
 func TestAddAssetMember(t *testing.T) {
 	g, _ := NewBusGraph()
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 	asset1 := mockasset.New()
 
 	err := g.AddMember(&bus1)
@@ -201,7 +200,7 @@ func TestAddAssetMember(t *testing.T) {
 
 func TestBuildBusGraph(t *testing.T) {
 	bm := make(map[uuid.UUID]Bus)
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 	bm[bus1.PID()] = &bus1
 
 	am := make(map[uuid.UUID]asset.Asset)
@@ -220,13 +219,13 @@ func TestBuildBusGraph(t *testing.T) {
 		assert.Assert(t, ok, "node added as member to graph but not found in nodelist")
 	}
 
-	_, ok := bus1.Members[asset1.PID()]
+	_, ok := bus1.config.dynamic.Members[asset1.PID()]
 	assert.Assert(t, ok, "asset1 is not a member of bus1")
 }
 
 func TestUpdateStatusBusGraph(t *testing.T) {
 	bm := make(map[uuid.UUID]Bus)
-	bus1, _ := mockbus.NewMockBus()
+	bus1, _ := NewMockBus()
 	bm[bus1.PID()] = &bus1
 
 	am := make(map[uuid.UUID]asset.Asset)
