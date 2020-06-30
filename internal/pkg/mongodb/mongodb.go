@@ -1,4 +1,4 @@
-package web
+package mongodb
 
 import (
 	"context"
@@ -19,6 +19,7 @@ type Handler struct {
 	inbox  <-chan msg.Msg
 	pid    uuid.UUID
 	config config
+	stop   chan bool
 }
 
 type config struct {
@@ -27,9 +28,10 @@ type config struct {
 	Port     string `json:"Port"`
 }
 
-type Entry struct {
-	PID  uuid.UUID   `json:"PID"`
-	Data interface{} `json:"Data"`
+func redirectMsg(chIn <-chan msg.Msg, chOut chan<- msg.Msg) {
+	for m := range chIn {
+		chOut <- m
+	}
 }
 
 func New(configPath string, system msg.Publisher) (Handler, error) {
@@ -47,41 +49,43 @@ func New(configPath string, system msg.Publisher) (Handler, error) {
 	inbox := make(chan msg.Msg, 50)
 
 	chStatus, err := system.Subscribe(pid, msg.Status)
-	go func(ch <-chan msg.Msg) {
-		for m := range ch {
-			inbox <- m
-		}
-	}(chStatus)
+	go redirectMsg(chStatus, inbox)
 
 	chConfig, err := system.Subscribe(pid, msg.Config)
-	go func(ch <-chan msg.Msg) {
-		for m := range ch {
-			inbox <- m
-		}
-	}(chConfig)
+	go redirectMsg(chConfig, inbox)
 
 	if err := json.Unmarshal(jsonConfig, &cfg); err != nil {
 		return Handler{}, err
 	}
+
+	stop := make(chan bool)
 
 	return Handler{
 		mux:    &sync.Mutex{},
 		inbox:  inbox,
 		pid:    pid,
 		config: cfg,
+		stop:   stop,
 	}, nil
 }
 
 func msgToBSON(m msg.Msg) bson.D {
+	//TODO: PID should be written as a binary of subtype 0x04 (UUID standard).
+	// currently written as a string.
 	return bson.D{
 		{"$set", bson.M{
-			"pid":  m.PID(),
+			"pid":  m.PID().String(),
 			"data": m.Payload(),
 		}},
 	}
 }
 
+func (h *Handler) StopProcess() {
+	h.stop <- true
+}
+
 func (h Handler) Process() {
+	//TODO: Handle reconnection to the MongoDB resource
 	client, err := mongo.NewClient(options.Client().ApplyURI(h.config.URI + ":" + h.config.Port))
 	if err != nil {
 		log.Println(err)
@@ -97,35 +101,40 @@ func (h Handler) Process() {
 
 	client.Database(h.config.Database).Collection("assetStatus").Drop(ctx)
 	client.Database(h.config.Database).Collection("assetConfig").Drop(ctx)
-	for m := range h.inbox {
-		switch m.Topic() {
-		case msg.Status:
-			opts := options.Update().SetUpsert(true)
-			_, err = client.Database(h.config.Database).Collection("assetStatus").UpdateOne(
-				ctx,
-				bson.M{"pid": m.PID()},
-				msgToBSON(m),
-				opts,
-			)
+loop:
+	for {
+		select {
+		case m := <-h.inbox:
+			switch m.Topic() {
+			case msg.Status:
+				opts := options.Update().SetUpsert(true)
+				_, err = client.Database(h.config.Database).Collection("assetStatus").UpdateOne(
+					ctx,
+					bson.M{"pid": m.PID()},
+					msgToBSON(m),
+					opts,
+				)
 
-			if err != nil {
-				log.Fatal(err)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+			case msg.Config:
+				log.Println("[Mongo] Config:", m)
+				opts := options.Update().SetUpsert(true)
+				_, err = client.Database(h.config.Database).Collection("assetConfig").UpdateOne(
+					ctx,
+					bson.M{"pid": m.PID()},
+					msgToBSON(m),
+					opts,
+				)
+
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
-
-		case msg.Config:
-			log.Println("[Mongo] Config:", m)
-			opts := options.Update().SetUpsert(true)
-			_, err = client.Database(h.config.Database).Collection("assetConfig").UpdateOne(
-				ctx,
-				bson.M{"pid": m.PID()},
-				msgToBSON(m),
-				opts,
-			)
-
-			if err != nil {
-				log.Fatal(err)
-			}
-
+		case <-h.stop:
+			break loop
 		}
 	}
 	log.Println("[Mongo] Process Shutdown")

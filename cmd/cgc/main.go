@@ -21,8 +21,8 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch/manualdispatch"
+	"github.com/ohowland/cgc_core/internal/pkg/mongodb"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
-	"github.com/ohowland/cgc_core/internal/pkg/web"
 )
 
 func main() {
@@ -197,8 +197,8 @@ func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
 }
 
 func linkWebservice(sys *root.System) error {
-	webserviceHandler, err := web.New("./config/webservice/mongodb_config.json", sys)
-	go webserviceHandler.Process()
+	mongoHandler, err := mongodb.New("./config/database/mongodb_config.json", sys)
+	go mongoHandler.Process()
 	return err
 }
 

@@ -49,8 +49,8 @@ func TestAddMember(t *testing.T) {
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
-	assert.Assert(t, len(bus.config.dynamic.Members) == 2)
-	for pid := range bus.config.dynamic.Members {
+	assert.Assert(t, len(bus.config.Dynamic.Members) == 2)
+	for pid := range bus.config.Dynamic.Members {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
 	}
 }
@@ -66,15 +66,15 @@ func TestRemoveMember(t *testing.T) {
 	bus.AddMember(&asset2)
 	bus.AddMember(&asset3)
 
-	assert.Assert(t, len(bus.config.dynamic.Members) == 3)
-	for pid := range bus.config.dynamic.Members {
+	assert.Assert(t, len(bus.config.Dynamic.Members) == 3)
+	for pid := range bus.config.Dynamic.Members {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID() || pid == asset3.PID())
 	}
 
 	bus.removeMember(asset2.PID())
 
-	assert.Assert(t, len(bus.config.dynamic.Members) == 2)
-	for pid := range bus.config.dynamic.Members {
+	assert.Assert(t, len(bus.config.Dynamic.Members) == 2)
+	for pid := range bus.config.Dynamic.Members {
 		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
 		assert.Assert(t, pid != asset2.PID())
 	}
@@ -82,7 +82,7 @@ func TestRemoveMember(t *testing.T) {
 	bus.removeMember(asset1.PID())
 	bus.removeMember(asset3.PID())
 
-	for range bus.config.dynamic.Members {
+	for range bus.config.Dynamic.Members {
 		assert.Assert(t, false) // if members is empty this loop will not run.
 	}
 
@@ -152,8 +152,8 @@ func TestEnergized(t *testing.T) {
 	bus := newACBus()
 	assertStatus := assertedDummyRelay()
 
-	hzOk := assertStatus.Hz() > bus.config.static.RatedHz*0.5
-	voltOk := assertStatus.Volts() > bus.config.static.RatedVolt*0.5
+	hzOk := assertStatus.Hz() > bus.config.Static.RatedHz*0.5
+	voltOk := assertStatus.Volts() > bus.config.Static.RatedVolt*0.5
 
 	if hzOk && voltOk {
 		assert.Assert(t, bus.Energized() == true)
@@ -171,7 +171,7 @@ func TestStop(t *testing.T) {
 	bus.AddMember(&asset2)
 
 	n := 0
-	for range bus.config.dynamic.Members {
+	for range bus.config.Dynamic.Members {
 		n++
 	}
 	assert.Equal(t, n, 2)
@@ -179,7 +179,7 @@ func TestStop(t *testing.T) {
 	bus.stopProcess()
 
 	n = 0
-	for range bus.config.dynamic.Members {
+	for range bus.config.Dynamic.Members {
 		n++
 	}
 	assert.Equal(t, n, 0)

@@ -37,8 +37,8 @@ type member struct {
 }
 
 type Config struct {
-	static  StaticConfig
-	dynamic dynamicConfig
+	Static  StaticConfig  `json:"Static"`
+	Dynamic dynamicConfig `json:"Dynamic`
 }
 
 // Config represents the static properties of an AC Bus
@@ -126,9 +126,9 @@ func (b *Bus) AddMember(a bus.Node) error {
 		// TODO: Error Handling Path: Failure to add member
 		return err
 	}
-	b.config.dynamic.Members[a.PID()] = member
+	b.config.Dynamic.Members[a.PID()] = member
 
-	if len(b.config.dynamic.Members) == 1 { // if this is the first member, start the bus process.
+	if len(b.config.Dynamic.Members) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
 
@@ -158,7 +158,7 @@ func (b *Bus) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 	// TODO: previous owner needs to stop. how to enforce?
-	b.config.dynamic.ControlOwner = pid
+	b.config.Dynamic.ControlOwner = pid
 	b.inbox.control = ch
 	return nil
 }
@@ -173,7 +173,7 @@ func (b Bus) publishMemberControl(m msg.Msg) {
 	}
 
 	if b.hasMember(m.PID()) {
-		b.config.dynamic.Members[m.PID()].controller <- m
+		b.config.Dynamic.Members[m.PID()].controller <- m
 	} else {
 		log.Printf("AC Bus %v: recieved message bound for non-member address %v", b.PID(), m.PID())
 	}
@@ -183,14 +183,14 @@ func (b Bus) publishMemberControl(m msg.Msg) {
 func (b *Bus) stopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	allPIDs := make([]uuid.UUID, len(b.config.dynamic.Members))
+	allPIDs := make([]uuid.UUID, len(b.config.Dynamic.Members))
 
-	for pid := range b.config.dynamic.Members {
+	for pid := range b.config.Dynamic.Members {
 		allPIDs = append(allPIDs, pid)
 	}
 
 	for _, pid := range allPIDs {
-		delete(b.config.dynamic.Members, pid)
+		delete(b.config.Dynamic.Members, pid)
 	}
 
 	b.stop <- true
@@ -227,12 +227,12 @@ func (b Bus) requestControl(node bus.Node) (chan<- msg.Msg, error) {
 func (b *Bus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	if member, ok := b.config.dynamic.Members[pid]; ok {
+	if member, ok := b.config.Dynamic.Members[pid]; ok {
 		member.node.Unsubscribe(b.PID())
 	}
-	delete(b.config.dynamic.Members, pid)
+	delete(b.config.Dynamic.Members, pid)
 
-	if len(b.config.dynamic.Members) < 1 {
+	if len(b.config.Dynamic.Members) < 1 {
 		go b.stopProcess()
 	}
 
@@ -242,14 +242,14 @@ func (b *Bus) removeMember(pid uuid.UUID) {
 
 // hasMember verifies the membership of an asset.
 func (b Bus) hasMember(pid uuid.UUID) bool {
-	_, ok := b.config.dynamic.Members[pid]
+	_, ok := b.config.Dynamic.Members[pid]
 	return ok
 }
 
 // Energized returns the state of the bus.
 func (b Bus) Energized() bool {
-	hzOk := b.Relayer().Hz() > b.config.static.RatedHz*0.5
-	voltOk := b.Relayer().Volts() > b.config.static.RatedVolt*0.5
+	hzOk := b.Relayer().Hz() > b.config.Static.RatedHz*0.5
+	voltOk := b.Relayer().Volts() > b.config.Static.RatedVolt*0.5
 	return hzOk && voltOk
 }
 
@@ -257,7 +257,7 @@ func (b Bus) Energized() bool {
 // Use this only when displaying information to customer.
 // PID is used internally.
 func (b Bus) Name() string {
-	return b.config.static.Name
+	return b.config.Static.Name
 }
 
 // PID is an accessor for the ACBus's process id.

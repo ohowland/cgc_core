@@ -27,12 +27,12 @@ func (a Asset) PID() uuid.UUID {
 
 // Name is a getter for the asset Name
 func (a Asset) Name() string {
-	return a.config.static.Name
+	return a.config.Static.Name
 }
 
 // BusName is a getter for the asset's connected Bus
 func (a Asset) BusName() string {
-	return a.config.static.BusName
+	return a.config.Static.BusName
 }
 
 // DeviceController returns the hardware abstraction layer struct
@@ -102,8 +102,8 @@ func (s Status) Volt() float64 {
 
 // Config differentiates between two types of configurations, static and dynamic
 type Config struct {
-	static  StaticConfig
-	dynamic DynamicConfig
+	Static  StaticConfig  `json:"Static"`
+	Dynamic DynamicConfig `json:"Dynamic"`
 }
 
 // StaticConfig holds the asset configuration parameters

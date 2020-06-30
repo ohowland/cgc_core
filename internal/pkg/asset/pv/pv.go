@@ -34,12 +34,12 @@ func (a Asset) PID() uuid.UUID {
 
 // Name is a getter for the asset Name
 func (a Asset) Name() string {
-	return a.config.static.Name
+	return a.config.Static.Name
 }
 
 // Bus is a getter for the asset's connected Bus
 func (a Asset) BusName() string {
-	return a.config.static.BusName
+	return a.config.Static.BusName
 }
 
 // DeviceController returns the hardware abstraction layer struct
@@ -169,8 +169,8 @@ type SupervisoryControl struct {
 
 // Config wraps StaticConfig with mutex a mutex and hides the internal state.
 type Config struct {
-	static  StaticConfig
-	dynamic DynamicConfig
+	Static  StaticConfig  `json:"Static"`
+	Dynamic DynamicConfig `json:"Dynamic"`
 }
 
 type StaticConfig struct {
