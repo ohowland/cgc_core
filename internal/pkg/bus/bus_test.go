@@ -246,7 +246,7 @@ func TestUpdateStatusBusGraph(t *testing.T) {
 		fmt.Println(in)
 	}(ch, &wg)
 
-	g.DumpString()
+	g.AsString()
 	asset1.UpdateStatus()
 	wg.Wait()
 }

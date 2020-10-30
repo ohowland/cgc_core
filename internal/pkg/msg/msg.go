@@ -81,9 +81,6 @@ const (
 	Status Topic = iota
 	Control
 	Config
-	JsonStatus
-	JsonControl
-	JsonConfig
 )
 
 // Msg is

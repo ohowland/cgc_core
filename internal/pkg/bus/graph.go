@@ -9,6 +9,7 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
 
+// Node types can be used as nodes in the Graph struct.
 type Node interface {
 	msg.Publisher
 	RequestControl(uuid.UUID, <-chan msg.Msg) error
@@ -16,11 +17,13 @@ type Node interface {
 	Name() string
 }
 
+// Graph is a struct for organizing the graph network in an adjacentcy list.
 type Graph struct {
 	pid            uuid.UUID
 	adjacentcyList map[Node][]Node
 }
 
+// NewGraph returns an initialized empty graph.
 func NewGraph() (Graph, error) {
 	pid, err := uuid.NewUUID()
 	if err != nil {
@@ -31,10 +34,12 @@ func NewGraph() (Graph, error) {
 	return Graph{pid, al}, nil
 }
 
+// PID returns the graph's unique identifier
 func (g Graph) PID() uuid.UUID {
 	return g.pid
 }
 
+// AddNode inserts the node into the graph
 func (g *Graph) AddNode(n Node) error {
 	if _, exists := g.adjacentcyList[n]; exists {
 		err := fmt.Sprintf("node %p already exists in graph.", n)
@@ -45,6 +50,7 @@ func (g *Graph) AddNode(n Node) error {
 	return nil
 }
 
+// AddDirectedEdge inserts an edge from n1 to n2
 func (g *Graph) AddDirectedEdge(n1 Node, n2 Node) error {
 	edges1, exists := g.adjacentcyList[n1]
 	if !exists {
@@ -61,6 +67,7 @@ func (g *Graph) AddDirectedEdge(n1 Node, n2 Node) error {
 	return nil
 }
 
+// Edges returns the edge list for node n
 func (g *Graph) Edges(n Node) []Node {
 	if edges, exists := g.adjacentcyList[n]; exists {
 		return edges
@@ -68,7 +75,8 @@ func (g *Graph) Edges(n Node) []Node {
 	return make([]Node, 0)
 }
 
-func (g Graph) DumpString() {
+// asString returns string representation of the graph
+func (g Graph) AsString() {
 	for node1, edgelist := range g.adjacentcyList {
 		line := fmt.Sprintf("%v: [", node1.Name())
 		for i, node2 := range edgelist {

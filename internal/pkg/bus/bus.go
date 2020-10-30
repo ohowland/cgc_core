@@ -41,20 +41,24 @@ func NewBusGraph() (BusGraph, error) {
 	return BusGraph{nil, &g}, err
 }
 
+// Subscribe returns a channel on which the root node in the bus graph publishes topics.
 func (bg BusGraph) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
 	return bg.rootBus.Subscribe(pid, topic)
 }
 
+// Unsubscribe removes the listener's PID from the subscription list.
 func (bg BusGraph) Unsubscribe(pid uuid.UUID) {
 	bg.rootBus.Unsubscribe(pid)
 }
 
+// RequestControl attempts to aquire the control channel for the root node of the
+// bus graph.
 func (bg BusGraph) RequestControl(pid uuid.UUID, ch <-chan msg.Msg) error {
 	return bg.rootBus.RequestControl(pid, ch)
 }
 
 // BuildBusGraph returns a network graph of buses in assets.
-// @param root: the node attached to the dispatch system
+// @param root: the node attached to the dispatch system.
 func BuildBusGraph(root Bus, buses map[uuid.UUID]Bus, assets map[uuid.UUID]asset.Asset) (BusGraph, error) {
 	g, err := NewBusGraph()
 	if err != nil {
@@ -63,15 +67,8 @@ func BuildBusGraph(root Bus, buses map[uuid.UUID]Bus, assets map[uuid.UUID]asset
 
 	g.AddMember(root)
 
-	busesCopy := make(map[uuid.UUID]Bus)
-	for k, v := range buses {
-		busesCopy[k] = v
-	}
-
-	// remove root from bus map
-	delete(busesCopy, root.PID())
-
-	for _, bus := range busesCopy {
+	buses = dropBus(root, buses)
+	for _, bus := range dropBus(root, buses) {
 		err = g.AddMember(bus)
 		if err != nil {
 			return BusGraph{}, err
@@ -88,11 +85,23 @@ func BuildBusGraph(root Bus, buses map[uuid.UUID]Bus, assets map[uuid.UUID]asset
 	return g, err
 }
 
+// dropBus returns a new map[uuid.UUID]Bus that does not contain the dropped bus
+func dropBus(drop Bus, buses map[uuid.UUID]Bus) map[uuid.UUID]Bus {
+	busesMutant := make(map[uuid.UUID]Bus)
+	for k, v := range buses {
+		busesMutant[k] = v
+	}
+
+	delete(busesMutant, drop.PID())
+	return busesMutant
+}
+
 func (bg *BusGraph) setRootBus(b Bus) {
 	bg.rootBus = b
 }
 
 // AddMember inserts a node into the network graph.
+// The first bus added as a member will assume the position of root bus.
 func (bg *BusGraph) AddMember(n Node) error {
 	switch node := n.(type) {
 	case Bus:
@@ -154,7 +163,7 @@ func (bg *BusGraph) nodeList() []Node {
 	return nodeList
 }
 
-// DumpString returns a string representation of the network graph
-func (bg BusGraph) DumpString() {
-	bg.graph.DumpString()
+// AsString prints a string representation of the network graph
+func (bg BusGraph) AsString() {
+	bg.graph.AsString()
 }

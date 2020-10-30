@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/ohowland/cgc_core/internal/pkg/bus"
+	"github.com/ohowland/cgc_core/internal/pkg/dispatch/mockdispatch"
 	"gotest.tools/assert"
 )
 
 func TestNewRootSystem(t *testing.T) {
 	bg, err := bus.NewBusGraph()
-	assert.NilError(err)
+	assert.NilError(t, err)
 
-	s, err := NewSystem()
-	assert.NilError(err)
+	_, err = NewSystem(&bg, mockdispatch.NewMockDispatch())
+	assert.NilError(t, err)
 }

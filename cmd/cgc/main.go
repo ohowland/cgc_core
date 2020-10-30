@@ -40,7 +40,7 @@ func main() {
 
 	var bus *ac.Bus
 	for _, v := range buses {
-		bus = v.(*ac.Bus)
+		bus = v.(*ac.Bus) // random root bus
 		break
 	}
 

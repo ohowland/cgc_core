@@ -19,7 +19,7 @@ import (
 )
 
 func TestSimpleVirtualBus(t *testing.T) {
-	bus1, err := virtualacbus.New("../../../config/bus/virtualACBus.json")
+	bus1, err := virtualacbus.New("../../../config/bus/virtualACBus1.json")
 	assert.NilError(t, err)
 	ess1, err := virtualess.New("../../../config/asset/virtualESS.json")
 	assert.NilError(t, err)
@@ -50,20 +50,19 @@ func TestSimpleVirtualBus(t *testing.T) {
 			select {
 			case <-ticker.C:
 				ess1.UpdateStatus()
-			case msg := <-read:
-				switch status := msg.Payload().(type) {
-				case ess.Status:
-					t.Log(status)
+			case m := <-read:
+				switch m.Topic() {
+				case msg.Status:
+					t.Log(m.Payload().(ess.Status))
 					assert.Assert(t, true)
 				default:
-					t.Log(status)
 					assert.Assert(t, false)
 				}
 			}
 		}
 	}(&ess1)
 
-	write <- msg.New(pid, msg.New(ess1.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true}))
+	write <- msg.New(pid, msg.Control, msg.New(ess1.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true}))
 
 	time.Sleep(5 * time.Second)
 }
@@ -133,12 +132,12 @@ func TestVirtualBusVirtualEss(t *testing.T) {
 
 	bus1.RequestControl(wPID, writer)
 
-	writer <- msg.New(wPID, msg.New(ess1.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true}))
-	writer <- msg.New(wPID, msg.New(ess2.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
-	writer <- msg.New(wPID, msg.New(ess3.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
-	writer <- msg.New(wPID, msg.New(ess4.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
-	writer <- msg.New(wPID, msg.New(ess5.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
-	writer <- msg.New(wPID, msg.New(ess6.PID(), ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
+	writer <- msg.New(wPID, msg.Control, msg.New(ess1.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: true}))
+	writer <- msg.New(wPID, msg.Control, msg.New(ess2.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
+	writer <- msg.New(wPID, msg.Control, msg.New(ess3.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
+	writer <- msg.New(wPID, msg.Control, msg.New(ess4.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
+	writer <- msg.New(wPID, msg.Control, msg.New(ess5.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
+	writer <- msg.New(wPID, msg.Control, msg.New(ess6.PID(), msg.Control, ess.MachineControl{Run: true, KW: 0.0, KVAR: 0.0, Gridform: false}))
 
 	time.Sleep(1 * time.Second)
 
@@ -202,15 +201,15 @@ func TestVirtualBusAllAssets(t *testing.T) {
 	wpid, _ := uuid.NewUUID()
 	essWriter := make(chan msg.Msg)
 	_ = ess1.RequestControl(wpid, essWriter)
-	essWriter <- msg.New(wpid, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
+	essWriter <- msg.New(wpid, msg.Control, ess.MachineControl{Run: true, KW: kwSp, KVAR: 0.0, Gridform: false})
 
 	feederWriter := make(chan msg.Msg)
 	_ = feeder1.RequestControl(wpid, feederWriter)
-	feederWriter <- msg.New(wpid, feeder.MachineControl{CloseFeeder: true})
+	feederWriter <- msg.New(wpid, msg.Control, feeder.MachineControl{CloseFeeder: true})
 
 	gridWriter := make(chan msg.Msg)
 	_ = grid1.RequestControl(wpid, gridWriter)
-	gridWriter <- msg.New(wpid, grid.MachineControl{CloseIntertie: true})
+	gridWriter <- msg.New(wpid, msg.Control, grid.MachineControl{CloseIntertie: true})
 
 	pid, _ := uuid.NewUUID()
 	ch, _ := grid1.Subscribe(pid, msg.Status)

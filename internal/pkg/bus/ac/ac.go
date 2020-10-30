@@ -36,12 +36,13 @@ type member struct {
 	controller chan<- msg.Msg
 }
 
+// Config contains the static (immutable) and dynamic (mutable) configuration
 type Config struct {
 	Static  StaticConfig  `json:"Static"`
-	Dynamic dynamicConfig `json:"Dynamic`
+	Dynamic dynamicConfig `json:"Dynamic"`
 }
 
-// Config represents the static properties of an AC Bus
+// StaticConfig represents the static properties of an AC Bus
 type StaticConfig struct {
 	Name      string  `json:"Name"`
 	RatedVolt float64 `json:"RatedVolt"`
