@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc_core/internal/pkg/asset"
 	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 )
@@ -50,7 +51,8 @@ type StaticConfig struct {
 }
 
 type dynamicConfig struct {
-	Members      map[uuid.UUID]member `json:"Members"`
+	MemberAssets map[uuid.UUID]member `json:"MemberAssets"`
+	MemberBuses  map[uuid.UUID]member `json:"MemberBuses"`
 	ControlOwner uuid.UUID            `json:"ControlOwner"`
 }
 
@@ -64,6 +66,7 @@ func New(jsonConfig []byte, relay Relayer) (Bus, error) {
 	}
 
 	dynamicConfig := dynamicConfig{
+		make(map[uuid.UUID]member),
 		make(map[uuid.UUID]member),
 		uuid.UUID{},
 	}
@@ -127,9 +130,18 @@ func (b *Bus) AddMember(a bus.Node) error {
 		// TODO: Error Handling Path: Failure to add member
 		return err
 	}
-	b.config.Dynamic.Members[a.PID()] = member
 
-	if len(b.config.Dynamic.Members) == 1 { // if this is the first member, start the bus process.
+	// members are bucketed into buses and assets.
+	// this seperation is utilized when a bus recieves
+	// a message for an asset that it does not own.
+	switch member.node.(type) {
+	case bus.Bus:
+		b.config.Dynamic.MemberBuses[a.PID()] = member
+	case asset.Asset:
+		b.config.Dynamic.MemberAssets[a.PID()] = member
+	}
+
+	if len(b.config.Dynamic.MemberAssets)+len(b.config.Dynamic.MemberBuses) == 1 { // if this is the first member, start the bus process.
 		go b.Process()
 	}
 
@@ -168,15 +180,19 @@ func (b Bus) publishMemberControl(m msg.Msg) {
 	// TODO: Control Messages are targeted for an asset.
 	m, ok := unwrap(m)
 	if !ok {
+		log.Println(m)
 		log.Printf("AC Bus %v: recieved message with no target address", b.PID())
 		// TODO: Bad Control Message
 		return
 	}
 
 	if b.hasMember(m.PID()) {
-		b.config.Dynamic.Members[m.PID()].controller <- m
+		b.config.Dynamic.MemberAssets[m.PID()].controller <- m
 	} else {
-		log.Printf("AC Bus %v: recieved message bound for non-member address %v", b.PID(), m.PID())
+		// forward on to member buses
+		for pid := range b.config.Dynamic.MemberBuses {
+			b.config.Dynamic.MemberBuses[pid].controller <- m
+		}
 	}
 }
 
@@ -184,14 +200,23 @@ func (b Bus) publishMemberControl(m msg.Msg) {
 func (b *Bus) stopProcess() {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	allPIDs := make([]uuid.UUID, len(b.config.Dynamic.Members))
 
-	for pid := range b.config.Dynamic.Members {
-		allPIDs = append(allPIDs, pid)
+	allAssetPIDs := make([]uuid.UUID, len(b.config.Dynamic.MemberAssets))
+	for pid := range b.config.Dynamic.MemberAssets {
+		allAssetPIDs = append(allAssetPIDs, pid)
 	}
 
-	for _, pid := range allPIDs {
-		delete(b.config.Dynamic.Members, pid)
+	for _, pid := range allAssetPIDs {
+		delete(b.config.Dynamic.MemberAssets, pid)
+	}
+
+	allBusPIDs := make([]uuid.UUID, len(b.config.Dynamic.MemberBuses))
+	for pid := range b.config.Dynamic.MemberBuses {
+		allBusPIDs = append(allBusPIDs, pid)
+	}
+
+	for _, pid := range allBusPIDs {
+		delete(b.config.Dynamic.MemberBuses, pid)
 	}
 
 	b.stop <- true
@@ -228,12 +253,16 @@ func (b Bus) requestControl(node bus.Node) (chan<- msg.Msg, error) {
 func (b *Bus) removeMember(pid uuid.UUID) {
 	b.mux.Lock()
 	defer b.mux.Unlock()
-	if member, ok := b.config.Dynamic.Members[pid]; ok {
-		member.node.Unsubscribe(b.PID())
-	}
-	delete(b.config.Dynamic.Members, pid)
 
-	if len(b.config.Dynamic.Members) < 1 {
+	if member, ok := b.config.Dynamic.MemberAssets[pid]; ok {
+		member.node.Unsubscribe(b.PID())
+		delete(b.config.Dynamic.MemberAssets, pid)
+	} else if member, ok := b.config.Dynamic.MemberBuses[pid]; ok {
+		member.node.Unsubscribe(b.PID())
+		delete(b.config.Dynamic.MemberBuses, pid)
+	}
+
+	if len(b.config.Dynamic.MemberAssets)+len(b.config.Dynamic.MemberBuses) < 1 {
 		go b.stopProcess()
 	}
 
@@ -243,7 +272,11 @@ func (b *Bus) removeMember(pid uuid.UUID) {
 
 // hasMember verifies the membership of an asset.
 func (b Bus) hasMember(pid uuid.UUID) bool {
-	_, ok := b.config.Dynamic.Members[pid]
+	if _, ok := b.config.Dynamic.MemberAssets[pid]; ok {
+		return ok
+	}
+
+	_, ok := b.config.Dynamic.MemberBuses[pid]
 	return ok
 }
 

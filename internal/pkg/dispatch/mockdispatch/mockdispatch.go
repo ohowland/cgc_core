@@ -56,3 +56,7 @@ func (d MockDispatch) Unsubscribe(pid uuid.UUID) {}
 func (d MockDispatch) PID() uuid.UUID {
 	return d.pid
 }
+
+func (d MockDispatch) StartProcess(<-chan msg.Msg) error {
+	return nil
+}

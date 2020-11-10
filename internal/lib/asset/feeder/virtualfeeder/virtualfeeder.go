@@ -1,6 +1,7 @@
 package virtualfeeder
 
 import (
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -19,6 +20,7 @@ type VirtualFeeder struct {
 	pid  uuid.UUID
 	comm virtualHardware
 	bus  virtualBus
+	load virtualLoad
 }
 
 // Comm data structure for the VirtualFeeder
@@ -32,11 +34,21 @@ type virtualBus struct {
 	recieve <-chan asset.VirtualStatus
 }
 
+type virtualLoad struct {
+	AverageKW   float64 `json:"AverageKW"`
+	AverageKVAR float64 `json:"AverageKVAR"`
+}
+
+func (vl virtualLoad) generate() (float64, float64) {
+	return vl.AverageKW, vl.AverageKVAR
+}
+
 // Target is a virtual representation of the hardware
 type Target struct {
 	pid     uuid.UUID
 	status  Status
 	control Control
+	load    Load
 }
 
 // KW is an accessor for real power
@@ -54,7 +66,7 @@ func (t Target) Hz() float64 {
 	return t.status.Hz
 }
 
-// Volt is an accessor for ac voltage
+// Volts is an accessor for ac voltage
 func (t Target) Volts() float64 {
 	return t.status.Volts
 }
@@ -77,6 +89,14 @@ type Status struct {
 type Control struct {
 	CloseFeeder bool
 }
+
+// Load data structure contains the simulated load data
+type Load struct {
+	kw   float64
+	kvar float64
+}
+
+// VirtualLoad simulates loading
 
 // PID is an accessor for the process id
 func (a VirtualFeeder) PID() uuid.UUID {
@@ -118,11 +138,19 @@ func New(configPath string) (feeder.Asset, error) {
 		return feeder.Asset{}, err
 	}
 
+	load := virtualLoad{}
+	err = json.Unmarshal(jsonConfig, &load)
+	if err != nil {
+		log.Fatal("dang")
+		return feeder.Asset{}, err
+	}
+
 	pid, err := uuid.NewUUID()
 
 	device := VirtualFeeder{
 		pid:  pid,
 		comm: virtualHardware{},
+		load: load,
 	}
 
 	return feeder.New(jsonConfig, &device)
@@ -165,7 +193,7 @@ func (a *VirtualFeeder) startProcess() {
 	a.comm.recieve = make(chan Status)
 	a.comm.send = make(chan Control)
 
-	go Process(a.pid, a.comm, a.bus)
+	go Process(a.pid, a.comm, a.bus, a.load)
 }
 
 // Stop the virtual machine loop by closing it's communication channels.
@@ -178,19 +206,22 @@ func (a *VirtualFeeder) Stop() error {
 }
 
 // Process is the virtual hardware update loop
-func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
+func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus, load virtualLoad) {
 	defer close(bus.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
-	var ok bool
+
+	ticker := time.NewTicker(1 * time.Second)
+
 	log.Println("[VirtualFeeder-Device] Starting")
 loop:
 	for {
 		select {
-		case target.control, ok = <-comm.send: // write to 'hardware'
+		case control, ok := <-comm.send: // write to 'hardware'
 			if !ok {
 				break loop
 			}
+			target.control = control
 
 		case comm.recieve <- target.status: // read from 'hardware'
 
@@ -202,10 +233,13 @@ loop:
 
 		case bus.send <- target: // write to 'virtual system'
 
+		case <-ticker.C:
+			target.load.kw, target.load.kvar = load.generate()
+
 		default:
-			// TODO: understand buffered/unbuffered channels in select statement...
-			// These channels are all unbuffered, default seems to provide a path for execution.
-			// If this isn't included, the process locks.
+		// TODO: understand buffered/unbuffered channels in select statement...
+		// These channels are all unbuffered, default seems to provide a path for execution.
+		// If this isn't included, the process locks.
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
@@ -252,8 +286,8 @@ func (s onState) action(target Target, bus asset.VirtualStatus) Status {
 	var kw float64
 	var kvar float64
 	if true {
-		kw = 0   //TODO: Link to a virtual load?
-		kvar = 0 //TODO: Link to a virtual load?
+		kw = target.load.kw
+		kvar = target.load.kvar
 	}
 	return Status{
 		KW:     kw,

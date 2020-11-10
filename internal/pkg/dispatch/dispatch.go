@@ -10,3 +10,9 @@ type Dispatcher interface {
 	msg.Publisher
 	StartProcess(<-chan msg.Msg) error
 }
+
+type State struct {
+	Status  interface{}
+	Control interface{}
+	Config  interface{}
+}

@@ -49,8 +49,8 @@ func TestAddMember(t *testing.T) {
 	bus.AddMember(&asset1)
 	bus.AddMember(&asset2)
 
-	assert.Assert(t, len(bus.config.Dynamic.Members) == 2)
-	for pid := range bus.config.Dynamic.Members {
+	assert.Assert(t, len(bus.config.Dynamic.MemberAssets) == 2)
+	for pid := range bus.config.Dynamic.MemberAssets {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID())
 	}
 }
@@ -66,15 +66,15 @@ func TestRemoveMember(t *testing.T) {
 	bus.AddMember(&asset2)
 	bus.AddMember(&asset3)
 
-	assert.Assert(t, len(bus.config.Dynamic.Members) == 3)
-	for pid := range bus.config.Dynamic.Members {
+	assert.Assert(t, len(bus.config.Dynamic.MemberAssets) == 3)
+	for pid := range bus.config.Dynamic.MemberAssets {
 		assert.Assert(t, pid == asset1.PID() || pid == asset2.PID() || pid == asset3.PID())
 	}
 
 	bus.removeMember(asset2.PID())
 
-	assert.Assert(t, len(bus.config.Dynamic.Members) == 2)
-	for pid := range bus.config.Dynamic.Members {
+	assert.Assert(t, len(bus.config.Dynamic.MemberAssets) == 2)
+	for pid := range bus.config.Dynamic.MemberAssets {
 		assert.Assert(t, pid == asset1.PID() || pid == asset3.PID())
 		assert.Assert(t, pid != asset2.PID())
 	}
@@ -82,7 +82,7 @@ func TestRemoveMember(t *testing.T) {
 	bus.removeMember(asset1.PID())
 	bus.removeMember(asset3.PID())
 
-	for range bus.config.Dynamic.Members {
+	for range bus.config.Dynamic.MemberAssets {
 		assert.Assert(t, false) // if members is empty this loop will not run.
 	}
 
@@ -171,7 +171,7 @@ func TestStop(t *testing.T) {
 	bus.AddMember(&asset2)
 
 	n := 0
-	for range bus.config.Dynamic.Members {
+	for range bus.config.Dynamic.MemberAssets {
 		n++
 	}
 	assert.Equal(t, n, 2)
@@ -179,7 +179,7 @@ func TestStop(t *testing.T) {
 	bus.stopProcess()
 
 	n = 0
-	for range bus.config.Dynamic.Members {
+	for range bus.config.Dynamic.MemberAssets {
 		n++
 	}
 	assert.Equal(t, n, 0)
@@ -200,3 +200,5 @@ func TestHasMember(t *testing.T) {
 	assert.Assert(t, !bus.hasMember(asset2.PID()))
 	assert.Assert(t, bus.hasMember(asset3.PID()))
 }
+
+// TODO: Add tests for member buses as opposed ot member assets
