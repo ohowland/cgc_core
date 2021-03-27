@@ -1,0 +1,6 @@
+{
+  "Name": "TEST_Virtual PCS",
+  "BusNameAC": "Virtual AC Bus",
+  "BusNameDC": "Virtual DC Bus",
+  "RatedKVA": 20
+}

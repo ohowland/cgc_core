@@ -186,11 +186,10 @@ type DynamicConfig struct{}
 
 // StaticConfig holds the ESS asset configuration parameters
 type StaticConfig struct {
-	Name      string  `json:"Name"`
-	BusName   string  `json:"BusName"`
-	RatedKW   float64 `json:"RatedKW"`
-	RatedKVAR float64 `json:"RatedKVAR"`
-	RatedKWH  float64 `json:"RatedKWH"`
+	Name     string  `json:"Name"`
+	BusName  string  `json:"BusName"`
+	RatedKVA float64 `json:"RatedKVA"`
+	RatedAh  float64 `json:"RatedAh"`
 }
 
 // New returns a configured Asset

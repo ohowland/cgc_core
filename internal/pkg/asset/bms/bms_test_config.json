@@ -1,0 +1,7 @@
+{
+  "Name": "TEST_Virtual BMS",
+  "BusName": "Virtual Bus",
+  "RatedKW": 20,
+  "RatedAh": 50,
+  "RatedVolts": 800
+}

@@ -59,10 +59,12 @@ func newESS() (Asset, error) {
 func TestReadConfigFile(t *testing.T) {
 	testConfig := StaticConfig{}
 	jsonConfig, err := ioutil.ReadFile("./ess_test_config.json")
+	assert.NilError(t, err)
+
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	assert.NilError(t, err)
 
-	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
+	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 50}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
@@ -200,7 +202,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		subs[i] = subscriber{pid, ch}
 	}
 
-	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 10, 50}
+	assertConfig := Config{StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 50}, DynamicConfig{}}
 
 	var wg sync.WaitGroup
 	for _, sub := range subs {
@@ -208,7 +210,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		go func(sub subscriber, wg *sync.WaitGroup) {
 			defer wg.Done()
 			msg, ok := <-sub.ch
-			config := msg.Payload().(StaticConfig)
+			config := msg.Payload().(Config)
 			assert.Assert(t, ok == true)
 			assert.Equal(t, config, assertConfig)
 		}(sub, &wg)

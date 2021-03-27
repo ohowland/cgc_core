@@ -59,10 +59,11 @@ func newPCS() (Asset, error) {
 func TestReadConfigFile(t *testing.T) {
 	testConfig := StaticConfig{}
 	jsonConfig, err := ioutil.ReadFile("./pcs_test_config.json")
+	assert.NilError(t, err)
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	assert.NilError(t, err)
 
-	assertConfig := StaticConfig{"TEST_Virtual PCS", "Virtual AC Bus", "Virtual DC Bus", 30}
+	assertConfig := StaticConfig{"TEST_Virtual PCS", "Virtual AC Bus", "Virtual DC Bus", 20}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
@@ -72,7 +73,16 @@ func TestReadConfigMem(t *testing.T) {
 
 	assert.Equal(t, pcs.PID(), pcs.pid)
 	assert.Equal(t, pcs.Name(), "TEST_Virtual PCS")
-	assert.Equal(t, pcs.BusName(), "Virtual Bus")
+
+	m := make(map[string]struct{})
+	for _, name := range pcs.BusName() {
+		m[name] = struct{}{}
+	}
+	_, ok := m["Virtual AC Bus"]
+	assert.Assert(t, true == ok)
+	_, ok = m["Virtual DC Bus"]
+	assert.Assert(t, true == ok)
+
 }
 
 func TestRequestControl(t *testing.T) {
@@ -200,7 +210,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		subs[i] = subscriber{pid, ch}
 	}
 
-	assertConfig := StaticConfig{"TEST_Virtual PCS", "Virtual Bus", 20, 10, 50}
+	assertConfig := Config{StaticConfig{"TEST_Virtual PCS", "Virtual AC Bus", "Virtual DC Bus", 20}, DynamicConfig{}}
 
 	var wg sync.WaitGroup
 	for _, sub := range subs {
@@ -208,7 +218,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		go func(sub subscriber, wg *sync.WaitGroup) {
 			defer wg.Done()
 			msg, ok := <-sub.ch
-			config := msg.Payload().(StaticConfig)
+			config := msg.Payload().(Config)
 			assert.Assert(t, ok == true)
 			assert.Equal(t, config, assertConfig)
 		}(sub, &wg)
