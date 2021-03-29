@@ -16,13 +16,19 @@ import (
 // VirtualPV target
 type VirtualPV struct {
 	pid  uuid.UUID
-	comm comm
+	comm virtualHardware
 	bus  virtualBus
 }
 
+// Comm data structure for the VirtualPV
+type virtualHardware struct {
+	send    chan Control
+	recieve chan Status
+}
+
 type virtualBus struct {
-	send    chan<- asset.VirtualStatus
-	recieve <-chan asset.VirtualStatus
+	send    chan<- asset.VirtualACStatus
+	recieve <-chan asset.VirtualACStatus
 }
 
 // Target is a virtual representation of the hardware
@@ -67,12 +73,6 @@ type Control struct {
 	KVAR    float64 `json:"KVAR"`
 }
 
-// Comm data structure for the VirtualPV
-type comm struct {
-	incoming chan Status
-	outgoing chan Control
-}
-
 func (a VirtualPV) PID() uuid.UUID {
 	return a.pid
 }
@@ -91,17 +91,17 @@ func (a VirtualPV) WriteDeviceControl(machineControl pv.MachineControl) error {
 }
 
 func (a VirtualPV) read() (Status, error) {
-	fuzzing := rand.Intn(2000)
+	fuzzing := rand.Intn(500)
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
-	readStatus, ok := <-a.comm.incoming
+	readStatus, ok := <-a.comm.recieve
 	if !ok {
-		return Status{}, errors.New("Read Error")
+		return Status{}, errors.New("read error")
 	}
 	return readStatus, nil
 }
 
 func (a VirtualPV) write(control Control) error {
-	a.comm.outgoing <- control
+	a.comm.send <- control
 	return nil
 }
 
@@ -113,10 +113,13 @@ func New(configPath string) (pv.Asset, error) {
 	}
 
 	pid, err := uuid.NewUUID()
+	if err != nil {
+		panic(err)
+	}
 
 	device := VirtualPV{
 		pid:  pid,
-		comm: comm{},
+		comm: virtualHardware{},
 	}
 
 	return pv.New(jsonConfig, &device)
@@ -144,77 +147,86 @@ func mapControl(c pv.MachineControl) Control {
 	}
 }
 
-func (a *VirtualPV) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
-	busOut := make(chan asset.VirtualStatus)
+func (a *VirtualPV) LinkToBus(busIn <-chan asset.VirtualACStatus) <-chan asset.VirtualACStatus {
+	busOut := make(chan asset.VirtualACStatus)
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
-	a.StopProcess()
-	a.StartProcess()
+	if err := a.Stop; err != nil {
+		panic(err)
+	}
+
+	a.startProcess()
 	return busOut
 }
 
-func (a *VirtualPV) StartProcess() {
-	in := make(chan Status)
-	out := make(chan Control)
-	a.comm.incoming = in
-	a.comm.outgoing = out
+func (a *VirtualPV) startProcess() {
+	a.comm.recieve = make(chan Status)
+	a.comm.send = make(chan Control)
 
 	go Process(a.pid, a.comm, a.bus)
 }
 
 // StopProcess stops the virtual machine loop by closing it's communication channels.
-func (a *VirtualPV) StopProcess() {
-	if a.comm.outgoing != nil {
-		close(a.comm.outgoing)
+func (a *VirtualPV) Stop() error {
+	if a.comm.send != nil {
+		close(a.comm.send)
 	}
+	return nil
 }
 
-func Process(pid uuid.UUID, comm comm, bus virtualBus) {
-	defer close(comm.incoming)
+func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
+	defer close(comm.send)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
-
+	log.Println("[VirtualPV-Device] Starting")
 loop:
 	for {
 		select {
-		case target.control, ok = <-comm.outgoing: // write to 'hardware'
+		case target.control, ok = <-comm.send: // write to 'hardware'
 			if !ok {
 				break loop
 			}
-		case comm.incoming <- target.status:
-		case busStatus := <-bus.recieve:
+
+		case comm.recieve <- target.status:
+
+		case busStatus, ok := <-bus.recieve:
+			if !ok {
+				break loop
+			}
 			target.status = sm.run(*target, busStatus)
+
 		case bus.send <- target:
+
 		default:
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	log.Println("VirtualPV-Device shutdown")
+	log.Println("[VirtualPV-Device] Stopped")
 }
 
 type stateMachine struct {
 	currentState state
 }
 
-func (s *stateMachine) run(target Target, bus asset.VirtualStatus) Status {
+func (s *stateMachine) run(target Target, bus asset.VirtualACStatus) Status {
 	s.currentState = s.currentState.transition(target, bus)
 	return s.currentState.action(target, bus)
 }
 
 type state interface {
-	action(Target, asset.VirtualStatus) Status
-	transition(Target, asset.VirtualStatus) state
+	action(Target, asset.VirtualACStatus) Status
+	transition(Target, asset.VirtualACStatus) state
 }
 
-func energized(bus asset.VirtualStatus) bool {
+func energized(bus asset.VirtualACStatus) bool {
 	return bus.Hz() > 1 && bus.Volts() > 1
 }
 
 type offState struct{}
 
-func (s offState) action(target Target, bus asset.VirtualStatus) Status {
+func (s offState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
 		KW:     0,
 		KVAR:   0,
@@ -224,8 +236,8 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	}
 }
 
-func (s offState) transition(target Target, bus asset.VirtualStatus) state {
-	if target.control.Run == true && energized(bus) {
+func (s offState) transition(target Target, bus asset.VirtualACStatus) state {
+	if target.control.Run && energized(bus) {
 		log.Printf("VirtualPV-Device: state: %v\n",
 			reflect.TypeOf(onState{}).String())
 		return onState{}
@@ -235,17 +247,20 @@ func (s offState) transition(target Target, bus asset.VirtualStatus) state {
 
 type onState struct{}
 
-func (s onState) action(target Target, bus asset.VirtualStatus) Status {
+func (s onState) action(target Target, bus asset.VirtualACStatus) Status {
+
+	//radiation := TotalIrradiance(a, l, time.Now())
+
 	return Status{
 		KW:     0,
-		KVAR:   0,
+		KVAR:   target.control.KVAR,
 		Hz:     bus.Hz(),
 		Volts:  bus.Volts(),
 		Online: true,
 	}
 }
 
-func (s onState) transition(target Target, bus asset.VirtualStatus) state {
+func (s onState) transition(target Target, bus asset.VirtualACStatus) state {
 	if target.control.Run == false || !energized(bus) {
 		log.Printf("VirtualPV-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())

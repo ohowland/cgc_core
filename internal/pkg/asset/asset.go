@@ -30,8 +30,11 @@ type Config interface {
 }
 
 //
-type Power interface {
+type RealPower interface {
 	KW() float64
+}
+
+type ReactivePower interface {
 	KVAR() float64
 }
 
@@ -48,7 +51,7 @@ type Gridforming interface {
 }
 
 //
-type Capacity interface {
+type RealCapacity interface {
 	RealPositiveCapacity() float64
 	RealNegativeCapacity() float64
 }

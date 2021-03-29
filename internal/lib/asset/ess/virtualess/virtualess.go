@@ -29,8 +29,8 @@ type virtualHardware struct {
 
 // For commmunication between virtual bus and asset
 type virtualBus struct {
-	send    chan<- asset.VirtualStatus
-	recieve <-chan asset.VirtualStatus
+	send    chan<- asset.VirtualACStatus
+	recieve <-chan asset.VirtualACStatus
 }
 
 // Target is a virtual representation of the hardware
@@ -110,7 +110,7 @@ func (a VirtualESS) read() (Status, error) {
 	time.Sleep(time.Duration(fuzzing) * time.Millisecond)
 	readStatus, ok := <-a.comm.recieve
 	if !ok {
-		return Status{}, errors.New("Read Error")
+		return Status{}, errors.New("read error")
 	}
 	return readStatus, nil
 }
@@ -128,6 +128,9 @@ func New(configPath string) (ess.Asset, error) {
 	}
 
 	pid, err := uuid.NewUUID()
+	if err != nil {
+		panic(err)
+	}
 
 	device := VirtualESS{
 		pid:  pid,
@@ -164,8 +167,8 @@ func mapControl(c ess.MachineControl) Control {
 
 // LinkToBus recieves a channel from the virtual bus, which the bus will transmit its status on.
 // the method returns a channel for the virtual asset to report its status to the bus.
-func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualStatus) <-chan asset.VirtualStatus {
-	busOut := make(chan asset.VirtualStatus)
+func (a *VirtualESS) LinkToBus(busIn <-chan asset.VirtualACStatus) <-chan asset.VirtualACStatus {
+	busOut := make(chan asset.VirtualACStatus)
 	a.bus.send = busOut
 	a.bus.recieve = busIn
 
@@ -233,19 +236,19 @@ type stateMachine struct {
 	currentState state
 }
 
-func (s *stateMachine) run(target Target, bus asset.VirtualStatus) Status {
+func (s *stateMachine) run(target Target, bus asset.VirtualACStatus) Status {
 	s.currentState = s.currentState.transition(target, bus)
 	return s.currentState.action(target, bus)
 }
 
 type state interface {
-	action(Target, asset.VirtualStatus) Status
-	transition(Target, asset.VirtualStatus) state
+	action(Target, asset.VirtualACStatus) Status
+	transition(Target, asset.VirtualACStatus) state
 }
 
 type offState struct{}
 
-func (s offState) action(target Target, bus asset.VirtualStatus) Status {
+func (s offState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
 		KW:                   0,
 		KVAR:                 0,
@@ -259,9 +262,9 @@ func (s offState) action(target Target, bus asset.VirtualStatus) Status {
 	}
 }
 
-func (s offState) transition(target Target, bus asset.VirtualStatus) state {
-	if target.control.Run == true {
-		if target.control.Gridform == true {
+func (s offState) transition(target Target, bus asset.VirtualACStatus) state {
+	if target.control.Run {
+		if target.control.Gridform {
 			log.Printf("VirtualESS-Device: state: %v\n",
 				reflect.TypeOf(hzVState{}).String())
 			return hzVState{}
@@ -279,7 +282,7 @@ func (s offState) transition(target Target, bus asset.VirtualStatus) state {
 // pQState is the power control state
 type pQState struct{}
 
-func (s pQState) action(target Target, bus asset.VirtualStatus) Status {
+func (s pQState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
 		KW:                   target.control.KW,
 		KVAR:                 target.control.KVAR,
@@ -293,13 +296,13 @@ func (s pQState) action(target Target, bus asset.VirtualStatus) Status {
 	}
 }
 
-func (s pQState) transition(target Target, bus asset.VirtualStatus) state {
-	if target.control.Run == false || !bus.Gridforming() {
+func (s pQState) transition(target Target, bus asset.VirtualACStatus) state {
+	if target.control.Run || !bus.Gridforming() {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}
-	if target.control.Gridform == true {
+	if target.control.Gridform {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(hzVState{}).String())
 		return hzVState{}
@@ -310,7 +313,7 @@ func (s pQState) transition(target Target, bus asset.VirtualStatus) state {
 // hzVState is the gridforming state
 type hzVState struct{}
 
-func (s hzVState) action(target Target, bus asset.VirtualStatus) Status {
+func (s hzVState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
 		KW:                   bus.KW(),
 		KVAR:                 bus.KVAR(),
@@ -324,13 +327,13 @@ func (s hzVState) action(target Target, bus asset.VirtualStatus) Status {
 	}
 }
 
-func (s hzVState) transition(target Target, bus asset.VirtualStatus) state {
-	if target.control.Run == false {
+func (s hzVState) transition(target Target, bus asset.VirtualACStatus) state {
+	if target.control.Run {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(offState{}).String())
 		return offState{}
 	}
-	if target.control.Gridform == false {
+	if target.control.Gridform {
 		log.Printf("VirtualESS-Device: state: %v\n",
 			reflect.TypeOf(pQState{}).String())
 		return pQState{}

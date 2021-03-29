@@ -21,7 +21,6 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch/manualdispatch"
-	"github.com/ohowland/cgc_core/internal/pkg/mongodb"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
 )
 
@@ -68,11 +67,13 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("[Main] Connecting MongoDB Service")
-	err = linkWebservice(&system)
-	if err != nil {
+	/*
+		log.Println("[Main] Connecting MongoDB Service")
+		err = linkWebservice(&system)
+		if err != nil {
 		panic(err)
-	}
+		}
+	*/
 
 	log.Println("[Main] Propigate Configuration")
 	propigateConfigurations(buses, assets)
@@ -196,11 +197,20 @@ func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
 	return root.NewSystem(g, d)
 }
 
+/*
 func linkWebservice(sys *root.System) error {
 	mongoHandler, err := mongodb.New("./config/database/mongodb_config.json", sys)
 	go mongoHandler.Process()
 	return err
 }
+
+func linkWebservice(sys *root.System) error {
+	sqlHandler, err := sqldb.New("./config/database/kafka_config.json", sys)
+	go sqlHandler.Process()
+	return err
+}
+
+*/
 
 func propigateConfigurations(buses map[uuid.UUID]bus.Bus, assets map[uuid.UUID]asset.Asset) {
 	for _, bus := range buses {

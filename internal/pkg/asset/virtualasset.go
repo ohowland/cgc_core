@@ -5,14 +5,26 @@ import (
 )
 
 // VirtualAsset defines the interface to the virtual assets.
-type VirtualAsset interface {
+type VirtualACAsset interface {
 	PID() uuid.UUID
-	LinkToBus(<-chan VirtualStatus) <-chan VirtualStatus
+	LinkToBus(<-chan VirtualACStatus) <-chan VirtualACStatus
 }
 
-type VirtualStatus interface {
-	Power
+type VirtualACStatus interface {
+	RealPower
+	ReactivePower
 	Voltage
 	Frequency
+	Gridforming
+}
+
+type VirtualDCAsset interface {
+	PID() uuid.UUID
+	LinkToBus(<-chan VirtualDCStatus) <-chan VirtualDCStatus
+}
+
+type VirtualDCStatus interface {
+	RealPower
+	Voltage
 	Gridforming
 }
