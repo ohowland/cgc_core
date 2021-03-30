@@ -1,9 +1,10 @@
-package sql
+package sqldb
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"sync"
@@ -24,9 +25,11 @@ type Handler struct {
 }
 
 type config struct {
-	URI      string `json:"URI"`
+	Server   string `json:"Server"`
+	Port     int    `json:"Port"`
+	Username string `json:"Username"`
+	Password string `json:"Password"`
 	Database string `json:"Database"`
-	Port     string `json:"Port"`
 }
 
 func redirectMsg(chIn <-chan msg.Msg, chOut chan<- msg.Msg) {
@@ -80,14 +83,32 @@ func (h *Handler) StopProcess() {
 	h.stop <- true
 }
 
-func (h Handler) Process() {
-	db, err := sql.Open("mysql", h.config.URI)
+func (h Handler) getDB() (*sql.DB, error) {
+	uri := fmt.Sprintf("%v:%v@%v:%v/%v", h.config.Username, h.config.Password, h.config.Server, h.config.Database)
+	db, err := sql.Open("mysql", uri)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	defer db.Close()
+	return db, nil
+}
 
+func initDB(db *sql.DB) (*sql.DB, error) {
 	sqlStatement := `CREATE ABLE IF NOT EXISTS realtime(uuid VARCHAR(32) primary key, status BLOB, config BLOB)`
+	_, err := db.Exec(sqlStatement)
+	return db, err
+}
+
+func (h Handler) Process() {
+	db, err := h.getDB()
+	defer db.Close()
+	if err != nil {
+		panic(err) // #TODO Handle failed connection
+	}
+
+	db, err = initDB(db)
+	if err != nil {
+		panic(err) // #TODO Handle failed query
+	}
 
 loop:
 	for {

@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/TrueFurby/go-callvis v0.5.0 // indirect
+	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/goburrow/modbus v0.1.0
 	github.com/goburrow/serial v0.1.0 // indirect
 	github.com/google/uuid v1.1.1
