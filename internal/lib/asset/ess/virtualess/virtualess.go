@@ -200,6 +200,7 @@ func (a *VirtualESS) Stop() error {
 // Process is the virtual hardware update loop
 func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
 	defer close(bus.send)
+	defer close(comm.recieve)
 	target := &Target{pid: pid}
 	sm := &stateMachine{offState{}}
 	var ok bool
@@ -207,20 +208,20 @@ func Process(pid uuid.UUID, comm virtualHardware, bus virtualBus) {
 loop:
 	for {
 		select {
-		case target.control, ok = <-comm.send: // write to 'hardware'
+		case target.control, ok = <-comm.send: // write to 'hardware' (owner: this loop)
 			if !ok {
 				break loop
 			}
 
-		case comm.recieve <- target.status: // read from 'hardware'
+		case comm.recieve <- target.status: // read from 'hardware' (owner: this loop)
 
-		case busStatus, ok := <-bus.recieve: // read from 'virtual system'
+		case busStatus, ok := <-bus.recieve: // read from 'virtual system' (owner: virtual system)
 			if !ok {
 				break loop
 			}
 			target.status = sm.run(*target, busStatus)
 
-		case bus.send <- target: // write to 'virtual system'
+		case bus.send <- target: // write to 'virtual system' (owner: this loop)
 
 		default:
 			// TODO: understand buffered/unbuffered channels in select statement...

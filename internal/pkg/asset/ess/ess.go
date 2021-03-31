@@ -54,8 +54,13 @@ func (a Asset) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error)
 }
 
 // Unsubscribe pid from all topic broadcasts
-func (a Asset) Unsubscribe(pid uuid.UUID) {
+func (a *Asset) Unsubscribe(pid uuid.UUID) {
 	a.publisher.Unsubscribe(pid)
+}
+
+func (a *Asset) Stop() {
+	a.publisher.Stop()
+	a.device.Stop()
 }
 
 // RequestControl connects the asset control to the read only channel parameter.

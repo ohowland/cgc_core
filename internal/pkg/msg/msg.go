@@ -9,7 +9,6 @@ import (
 type Publisher interface {
 	Subscribe(pid uuid.UUID, topic Topic) (<-chan Msg, error)
 	Unsubscribe(pid uuid.UUID)
-	Stop()
 }
 
 type PubSub struct {
@@ -76,6 +75,7 @@ func (p *PubSub) Forward(m Msg) {
 	}
 }
 
+// Stop closes all subscription channels owned by the publisher
 func (p *PubSub) Stop() {
 	p.mux.Lock()
 	defer p.mux.Unlock()

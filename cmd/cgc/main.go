@@ -63,7 +63,7 @@ func main() {
 	}
 
 	log.Println("[Main] Assembling System")
-	system, err := buildSystem(&busGraph, dispatch, sigs2)
+	system, err := buildSystem(&busGraph, dispatch)
 	if err != nil {
 		panic(err)
 	}
@@ -121,9 +121,9 @@ loop:
 			time.Sleep(1 * time.Second)
 			break loop
 		}
-		log.Println("[SystemMonitor] Goroutine Shutdown")
-		wg.Done()
 	}
+	log.Println("[SystemMonitor] Goroutine Shutdown")
+	wg.Done()
 }
 
 func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
@@ -208,8 +208,8 @@ func buildDispatch() (dispatch.Dispatcher, error) {
 	return manualdispatch.New("./config/dispatch/manualdispatch.json")
 }
 
-func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher, s chan os.Signal) (root.System, error) {
-	return root.NewSystem(g, d, s)
+func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
+	return root.NewSystem(g, d)
 }
 
 func startDatastream(sys *root.System) error {

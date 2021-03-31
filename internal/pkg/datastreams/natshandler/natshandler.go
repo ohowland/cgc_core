@@ -90,7 +90,10 @@ func (h Handler) Process() {
 loop:
 	for {
 		select {
-		case m := <-h.inbox:
+		case m, ok := <-h.inbox:
+			if !ok {
+				break loop
+			}
 			switch m.Topic() {
 			case msg.Status:
 				data, err := json.Marshal(m.Payload())
@@ -105,9 +108,9 @@ loop:
 			}
 
 		case <-h.stop:
-			nc.Close()
 			break loop
 		}
 	}
+	nc.Close()
 	log.Println("[NATS client] Process Shutdown")
 }

@@ -10,7 +10,7 @@ import (
 // System is the root node of the control system
 type System struct {
 	pid       uuid.UUID
-	publisher msg.Publisher
+	publisher *msg.PubSub
 	busGraph  *bus.BusGraph
 	dispatch  dispatch.Dispatcher
 }
@@ -88,10 +88,10 @@ func (s *System) Unsubscribe(pid uuid.UUID) {
 	s.publisher.Unsubscribe(pid)
 }
 
-func (s System) PID() uuid.UUID {
-	return s.pid
+func (s *System) Shutdown() {
+	s.publisher.Stop()
 }
 
-func (s System) Shutdown() {
-	s.publisher.Stop()
+func (s System) PID() uuid.UUID {
+	return s.pid
 }

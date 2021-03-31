@@ -219,6 +219,8 @@ func (b *Bus) stopProcess() {
 		delete(b.config.Dynamic.MemberBuses, pid)
 	}
 
+	b.publisher.Stop()
+
 	b.stop <- true
 }
 
