@@ -19,6 +19,7 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
+	"github.com/ohowland/cgc_core/internal/pkg/datastreams/natshandler"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch/manualdispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
@@ -62,18 +63,16 @@ func main() {
 	}
 
 	log.Println("[Main] Assembling System")
-	system, err := buildSystem(&busGraph, dispatch)
+	system, err := buildSystem(&busGraph, dispatch, sigs2)
 	if err != nil {
 		panic(err)
 	}
 
-	/*
-		log.Println("[Main] Connecting MongoDB Service")
-		err = linkWebservice(&system)
-		if err != nil {
+	log.Println("[Main] Starting Datastreams")
+	err = startDatastream(&system)
+	if err != nil {
 		panic(err)
-		}
-	*/
+	}
 
 	log.Println("[Main] Propigate Configuration")
 	propigateConfigurations(buses, assets)
@@ -85,6 +84,8 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go launchUpdateAssets(assets, sigs1, &wg)
+	wg.Add(1)
+	go launchSystemMonitor(&system, sigs2, &wg)
 	wg.Wait()
 
 	log.Println("[Main] Stopping system")
@@ -109,6 +110,20 @@ loop:
 	}
 	log.Println("[UpdateAssets] Goroutine Shutdown")
 	wg.Done()
+}
+
+func launchSystemMonitor(system *root.System, sigs chan os.Signal, wg *sync.WaitGroup) {
+loop:
+	for {
+		select {
+		case <-sigs:
+			system.Shutdown()
+			time.Sleep(1 * time.Second)
+			break loop
+		}
+		log.Println("[SystemMonitor] Goroutine Shutdown")
+		wg.Done()
+	}
 }
 
 func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
@@ -193,24 +208,15 @@ func buildDispatch() (dispatch.Dispatcher, error) {
 	return manualdispatch.New("./config/dispatch/manualdispatch.json")
 }
 
-func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
-	return root.NewSystem(g, d)
+func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher, s chan os.Signal) (root.System, error) {
+	return root.NewSystem(g, d, s)
 }
 
-/*
-func linkWebservice(sys *root.System) error {
-	mongoHandler, err := mongodb.New("./config/database/mongodb_config.json", sys)
-	go mongoHandler.Process()
+func startDatastream(sys *root.System) error {
+	n, err := natshandler.New("./config/datastream/nats_config.json", sys)
+	go n.Process()
 	return err
 }
-
-func linkWebservice(sys *root.System) error {
-	sqlHandler, err := sqldb.New("./config/database/kafka_config.json", sys)
-	go sqlHandler.Process()
-	return err
-}
-
-*/
 
 func propigateConfigurations(buses map[uuid.UUID]bus.Bus, assets map[uuid.UUID]asset.Asset) {
 	for _, bus := range buses {

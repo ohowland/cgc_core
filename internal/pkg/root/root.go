@@ -91,3 +91,7 @@ func (s *System) Unsubscribe(pid uuid.UUID) {
 func (s System) PID() uuid.UUID {
 	return s.pid
 }
+
+func (s System) Shutdown() {
+	s.publisher.Stop()
+}

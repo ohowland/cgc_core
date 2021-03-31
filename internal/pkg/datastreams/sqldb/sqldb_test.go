@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/ohowland/cgc_core/internal/pkg/asset/mockasset"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 	"gotest.tools/v3/assert"
 )
@@ -25,7 +26,7 @@ func TestGetConfig(t *testing.T) {
 
 func TestDatabaseConnection(t *testing.T) {
 	h, _ := newHandler()
-	db, err := h.getDB()
+	db, err := h.DB()
 	defer db.Close()
 
 	assert.NilError(t, err)
@@ -33,9 +34,23 @@ func TestDatabaseConnection(t *testing.T) {
 
 func TestInitDatabase(t *testing.T) {
 	h, _ := newHandler()
-	db, _ := h.getDB()
+	db, _ := h.DB()
 	defer db.Close()
 
-	db, err := initDB(db)
+	err := initDBTables(db)
 	assert.NilError(t, err)
+}
+
+func TestAddRowDatabase(t *testing.T) {
+	h, _ := newHandler()
+	db, _ := h.DB()
+	defer db.Close()
+
+	mock := mockasset.New()
+	ch, err := mock.Subscribe(h.PID(), msg.Status)
+	assert.NilError(t, err)
+	mock.UpdateStatus()
+
+	msg := <-ch
+	db := updateRow(mock.PID(), msg)
 }

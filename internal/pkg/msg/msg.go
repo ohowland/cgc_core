@@ -9,6 +9,7 @@ import (
 type Publisher interface {
 	Subscribe(pid uuid.UUID, topic Topic) (<-chan Msg, error)
 	Unsubscribe(pid uuid.UUID)
+	Stop()
 }
 
 type PubSub struct {
@@ -71,6 +72,17 @@ func (p *PubSub) Forward(m Msg) {
 		select {
 		case ch <- m:
 		default:
+		}
+	}
+}
+
+func (p *PubSub) Stop() {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+	for _, topic := range p.subs {
+		for pid, ch := range topic {
+			close(ch)
+			delete(topic, pid)
 		}
 	}
 }

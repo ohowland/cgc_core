@@ -32,6 +32,10 @@ type config struct {
 	Database string `json:"Database"`
 }
 
+func (h Handler) PID() uuid.UUID {
+	return h.pid
+}
+
 func redirectMsg(chIn <-chan msg.Msg, chOut chan<- msg.Msg) {
 	for m := range chIn {
 		chOut <- m
@@ -79,12 +83,12 @@ func New(configPath string, system msg.Publisher) (Handler, error) {
 	}, nil
 }
 
-func (h *Handler) StopProcess() {
+func (h *Handler) Stop() {
 	h.stop <- true
 }
 
-func (h Handler) getDB() (*sql.DB, error) {
-	uri := fmt.Sprintf("%v:%v@%v:%v/%v", h.config.Username, h.config.Password, h.config.Server, h.config.Database)
+func (h Handler) DB() (*sql.DB, error) {
+	uri := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v", h.config.Username, h.config.Password, h.config.Server, h.config.Port, h.config.Database)
 	db, err := sql.Open("mysql", uri)
 	if err != nil {
 		return nil, err
@@ -92,20 +96,14 @@ func (h Handler) getDB() (*sql.DB, error) {
 	return db, nil
 }
 
-func initDB(db *sql.DB) (*sql.DB, error) {
-	sqlStatement := `CREATE ABLE IF NOT EXISTS realtime(uuid VARCHAR(32) primary key, status BLOB, config BLOB)`
-	_, err := db.Exec(sqlStatement)
-	return db, err
-}
-
 func (h Handler) Process() {
-	db, err := h.getDB()
+	db, err := h.DB()
 	defer db.Close()
 	if err != nil {
 		panic(err) // #TODO Handle failed connection
 	}
 
-	db, err = initDB(db)
+	err = initDBTables(db)
 	if err != nil {
 		panic(err) // #TODO Handle failed query
 	}
@@ -132,4 +130,15 @@ loop:
 		}
 	}
 	log.Println("[Mongo] Process Shutdown")
+}
+
+func initDBTables(db *sql.DB) error {
+	sqlStatement := `CREATE TABLE IF NOT EXISTS realtime(uuid VARCHAR(32) primary key, status BLOB, config BLOB)`
+	_, err := db.Exec(sqlStatement)
+	return err
+}
+
+func updateRow(db *sql.DB, m msg.Msg) {
+	sqlStatement := `INSERT INTO realtime (uuid, status) VALUES ($1, $2) ON DUPLICATE KEY UPDATE`
+	_, err := db.Exec(sqlStatement, m.PID().String())
 }
