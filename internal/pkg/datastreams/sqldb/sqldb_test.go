@@ -52,5 +52,6 @@ func TestAddRowDatabase(t *testing.T) {
 	mock.UpdateStatus()
 
 	msg := <-ch
-	db := updateRow(mock.PID(), msg)
+	err = updateRow(db, msg)
+	assert.NilError(t, err)
 }

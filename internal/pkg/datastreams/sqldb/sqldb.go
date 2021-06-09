@@ -138,7 +138,8 @@ func initDBTables(db *sql.DB) error {
 	return err
 }
 
-func updateRow(db *sql.DB, m msg.Msg) {
+func updateRow(db *sql.DB, m msg.Msg) error {
 	sqlStatement := `INSERT INTO realtime (uuid, status) VALUES ($1, $2) ON DUPLICATE KEY UPDATE`
 	_, err := db.Exec(sqlStatement, m.PID().String())
+	return err
 }

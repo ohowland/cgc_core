@@ -34,6 +34,12 @@ type RealPower interface {
 	KW() float64
 }
 
+type RealEnergyCost interface {
+	RealPositiveEnergyCost() float64
+	RealNegativeEnergyCost() float64
+	RealCapacityCost() float64
+}
+
 type ReactivePower interface {
 	KVAR() float64
 }
@@ -54,4 +60,9 @@ type Gridforming interface {
 type RealCapacity interface {
 	RealPositiveCapacity() float64
 	RealNegativeCapacity() float64
+}
+
+type StoredEnergy interface {
+	StoredEnergy() float64
+	StoredEnergyCapacity() float64
 }
