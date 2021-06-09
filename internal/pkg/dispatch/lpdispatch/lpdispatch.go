@@ -31,7 +31,7 @@ func New(configPath string) (*LPDispatch, error) {
 }
 
 func (d LPDispatch) PID() uuid.UUID {
-	return t.pid
+	return d.pid
 }
 
 func (d *LPDispatch) Subscribe(pid uuid.UUID, topic msg.Topic) (<-chan msg.Msg, error) {
@@ -58,7 +58,7 @@ loop:
 				log.Println("[LP Dispatch] disconnected from bus graph")
 				break loop
 			}
-			//d.ingress(m)
+			d.ingress(m)
 		case <-ticker.C:
 			//d.runSolver()
 

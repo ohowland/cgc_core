@@ -19,9 +19,7 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/asset/grid"
 	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
-	"github.com/ohowland/cgc_core/internal/pkg/datastreams/natshandler"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
-	"github.com/ohowland/cgc_core/internal/pkg/dispatch/manualdispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
 )
 
@@ -205,7 +203,8 @@ func buildBusGraph(rootBus bus.Bus, buses map[uuid.UUID]bus.Bus, assets map[uuid
 }
 
 func buildDispatch() (dispatch.Dispatcher, error) {
-	return manualdispatch.New("./config/dispatch/manualdispatch.json")
+	return nil, nil
+	//return manualdispatch.New("./config/dispatch/manualdispatch.json")
 }
 
 func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
@@ -213,9 +212,9 @@ func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {
 }
 
 func startDatastream(sys *root.System) error {
-	n, err := natshandler.New("./config/datastream/nats_config.json", sys)
-	go n.Process()
-	return err
+	//n, err := natshandler.New("./config/datastream/nats_config.json", sys)
+	//go n.Process()
+	return nil
 }
 
 func propigateConfigurations(buses map[uuid.UUID]bus.Bus, assets map[uuid.UUID]asset.Asset) {

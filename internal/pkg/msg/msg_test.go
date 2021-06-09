@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gotest.tools/v3/assert"
+	"gotest.tools/assert"
 )
 
 func TestSubscribe(t *testing.T) {
