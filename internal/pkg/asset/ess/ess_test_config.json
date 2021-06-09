@@ -2,5 +2,9 @@
   "Name": "TEST_Virtual ESS",
   "BusName": "Virtual Bus",
   "RatedKVA": 20,
-  "RatedAh": 50
+  "RatedKWH": 500,
+  "MeasuredKWH": 500,
+  "EnergyProductionCost": 0.1,
+  "EnergyConsumptionValue": 0.1,
+  "CapacityCost": 0.01
 }

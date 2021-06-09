@@ -68,15 +68,14 @@ func (t Target) Gridforming() bool {
 
 // Status data structure for the VirtualESS
 type Status struct {
-	KW                   float64 `json:"KW"`
-	KVAR                 float64 `json:"KVAR"`
-	Hz                   float64 `json:"Hz"`
-	Volts                float64 `json:"Volts"`
-	SOC                  float64 `json:"SOC"`
-	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
-	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
-	Gridforming          bool    `json:"Gridforming"`
-	Online               bool    `json:"Online"`
+	KW          float64 `json:"KW"`
+	KVAR        float64 `json:"KVAR"`
+	Hz          float64 `json:"Hz"`
+	Volts       float64 `json:"Volts"`
+	SOC         float64 `json:"SOC"`
+	Gridforming bool    `json:"Gridforming"`
+	Online      bool    `json:"Online"`
+	Faulted     bool    `json:"Faulted"`
 }
 
 // Control data structure for the VirtualESS
@@ -143,15 +142,14 @@ func New(configPath string) (ess.Asset, error) {
 // Status maps ess.DeviceStatus to ess.Status
 func mapStatus(s Status) ess.MachineStatus {
 	return ess.MachineStatus{
-		KW:                   s.KW,
-		KVAR:                 s.KVAR,
-		Hz:                   s.Hz,
-		Volts:                s.Volts,
-		SOC:                  s.SOC,
-		RealPositiveCapacity: s.RealPositiveCapacity,
-		RealNegativeCapacity: s.RealNegativeCapacity,
-		Gridforming:          s.Gridforming,
-		Online:               s.Online,
+		KW:          s.KW,
+		KVAR:        s.KVAR,
+		Hz:          s.Hz,
+		Volts:       s.Volts,
+		SOC:         s.SOC,
+		Gridforming: s.Gridforming,
+		Online:      s.Online,
+		Faulted:     s.Faulted,
 	}
 }
 
@@ -251,15 +249,14 @@ type offState struct{}
 
 func (s offState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
-		KW:                   0,
-		KVAR:                 0,
-		Hz:                   bus.Hz(),
-		Volts:                bus.Volts(),
-		SOC:                  target.status.SOC,
-		RealPositiveCapacity: 0, // TODO: Get Config into VirtualESS
-		RealNegativeCapacity: 0, // TODO: Get Config into VirtualESS
-		Gridforming:          false,
-		Online:               false,
+		KW:          0,
+		KVAR:        0,
+		Hz:          bus.Hz(),
+		Volts:       bus.Volts(),
+		SOC:         target.status.SOC,
+		Gridforming: false,
+		Online:      false,
+		Faulted:     false,
 	}
 }
 
@@ -285,15 +282,14 @@ type pQState struct{}
 
 func (s pQState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
-		KW:                   target.control.KW,
-		KVAR:                 target.control.KVAR,
-		Hz:                   bus.Hz(),
-		Volts:                bus.Volts(),
-		SOC:                  target.status.SOC,
-		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
-		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
-		Gridforming:          false,
-		Online:               true,
+		KW:          target.control.KW,
+		KVAR:        target.control.KVAR,
+		Hz:          bus.Hz(),
+		Volts:       bus.Volts(),
+		SOC:         target.status.SOC,
+		Gridforming: false,
+		Online:      true,
+		Faulted:     false,
 	}
 }
 
@@ -316,15 +312,14 @@ type hzVState struct{}
 
 func (s hzVState) action(target Target, bus asset.VirtualACStatus) Status {
 	return Status{
-		KW:                   bus.KW(),
-		KVAR:                 bus.KVAR(),
-		Hz:                   60,  // TODO: Get Config into VirtualESS
-		Volts:                480, // TODO: Get Config into VirtualESS
-		SOC:                  target.status.SOC,
-		RealPositiveCapacity: 10, // TODO: Get Config into VirtualESS
-		RealNegativeCapacity: 10, // TODO: Get Config into VirtualESS
-		Gridforming:          true,
-		Online:               true,
+		KW:          bus.KW(),
+		KVAR:        bus.KVAR(),
+		Hz:          60,  // TODO: Get Config into VirtualESS
+		Volts:       480, // TODO: Get Config into VirtualESS
+		SOC:         target.status.SOC,
+		Gridforming: true,
+		Online:      true,
+		Faulted:     false,
 	}
 }
 

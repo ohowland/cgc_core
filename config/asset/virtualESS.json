@@ -1,7 +1,10 @@
 {
     "Name": "ess",
     "BusName": "Virtual Bus-2",
-    "RatedKW": 20,
-    "RatedKVAR": 10,
-    "RatedKWH": 50
+    "RatedKVA": 50,
+    "RatedKWH": 400,
+    "MeasuredKWH": 400,
+    "EnergyProductionCost": 0.1,
+    "EnergyConsumptionValue": 0.1,
+    "CapacityCost": 0.01
 }

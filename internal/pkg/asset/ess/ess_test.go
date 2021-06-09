@@ -20,7 +20,7 @@ type DummyDevice struct {
 
 // randMachineStatus returns a closure for random MachineStatus
 func randMachineStatus() func() MachineStatus {
-	status := MachineStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false, false}
+	status := MachineStatus{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false, false, false}
 	return func() MachineStatus {
 		return status
 	}
@@ -64,7 +64,7 @@ func TestReadConfigFile(t *testing.T) {
 	err = json.Unmarshal(jsonConfig, &testConfig)
 	assert.NilError(t, err)
 
-	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 50}
+	assertConfig := StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 50, 50}
 	assert.Assert(t, testConfig == assertConfig)
 }
 
@@ -202,7 +202,7 @@ func TestSubscribeToPublisherConfig(t *testing.T) {
 		subs[i] = subscriber{pid, ch}
 	}
 
-	assertConfig := Config{StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 50}, DynamicConfig{}}
+	assertConfig := Config{StaticConfig{"TEST_Virtual ESS", "Virtual Bus", 20, 50, 50}, DynamicConfig{}}
 
 	var wg sync.WaitGroup
 	for _, sub := range subs {
@@ -270,7 +270,7 @@ func TestTransform(t *testing.T) {
 		machineStatus,
 	}
 
-	status := transform(machineStatus)
+	status := transform(machineStatus, CalculatedStatus{})
 	assert.Assert(t, status == assertedStatus)
 }
 
@@ -284,6 +284,4 @@ func TestStatusAccessors(t *testing.T) {
 
 	assert.Equal(t, assertedStatus.KW(), machineStatus.KW)
 	assert.Equal(t, assertedStatus.KVAR(), machineStatus.KVAR)
-	assert.Equal(t, assertedStatus.RealPositiveCapacity(), machineStatus.RealPositiveCapacity)
-	assert.Equal(t, assertedStatus.RealNegativeCapacity(), machineStatus.RealNegativeCapacity)
 }

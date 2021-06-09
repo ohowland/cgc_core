@@ -20,6 +20,7 @@ import (
 	"github.com/ohowland/cgc_core/internal/pkg/bus"
 	"github.com/ohowland/cgc_core/internal/pkg/bus/ac"
 	"github.com/ohowland/cgc_core/internal/pkg/dispatch"
+	"github.com/ohowland/cgc_core/internal/pkg/dispatch/lpdispatch"
 	"github.com/ohowland/cgc_core/internal/pkg/root"
 )
 
@@ -111,14 +112,11 @@ loop:
 }
 
 func launchSystemMonitor(system *root.System, sigs chan os.Signal, wg *sync.WaitGroup) {
-loop:
-	for {
-		select {
-		case <-sigs:
-			system.Shutdown()
-			time.Sleep(1 * time.Second)
-			break loop
-		}
+	for sig := range sigs {
+		log.Printf("[SystemMonitor] Recieved Signal: %v", sig.String())
+		system.Shutdown()
+		time.Sleep(1 * time.Second)
+		close(sigs)
 	}
 	log.Println("[SystemMonitor] Goroutine Shutdown")
 	wg.Done()
@@ -131,8 +129,8 @@ func buildAssets(bus *ac.Bus) (map[uuid.UUID]asset.Asset, error) {
 	ess := buildVirtualESSAsset(bus)
 	feeder := buildVirtualFeederAsset(bus)
 
-	assets[ess.PID()] = ess
 	assets[grid.PID()] = grid
+	assets[ess.PID()] = ess
 	assets[feeder.PID()] = feeder
 
 	return assets, nil
@@ -203,8 +201,7 @@ func buildBusGraph(rootBus bus.Bus, buses map[uuid.UUID]bus.Bus, assets map[uuid
 }
 
 func buildDispatch() (dispatch.Dispatcher, error) {
-	return nil, nil
-	//return manualdispatch.New("./config/dispatch/manualdispatch.json")
+	return lpdispatch.New("./config/dispatch/manualdispatch.json")
 }
 
 func buildSystem(g *bus.BusGraph, d dispatch.Dispatcher) (root.System, error) {

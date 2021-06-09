@@ -81,7 +81,8 @@ func (a Asset) UpdateStatus() {
 		// Read Error Handler Path
 		return
 	}
-	status := transform(machineStatus)
+	calcStatus := a.calculateStatus(machineStatus)
+	status := transform(machineStatus, calcStatus)
 	a.publisher.Publish(msg.Status, status)
 }
 
@@ -90,10 +91,66 @@ func (a Asset) UpdateConfig() {
 	a.publisher.Publish(msg.Config, a.config)
 }
 
-func transform(machineStatus MachineStatus) Status {
+func (a Asset) calculateStatus(ms MachineStatus) CalculatedStatus {
+	realPositiveCapacity := calcRealPositiveCapacity(ms, a.config)
+	realNegativeCapacity := calcRealNegativeCapacity(ms, a.config)
+	storedEnergy := calcStoredEnergy(ms, a.config)
+	storedEnergyCapacity := calcStoredEnergyCapacity(ms, a.config)
+	energyProductionCost := calcEnergyProductionCost(ms, a.config)
+	energyConsumptionValue := calcEnergyConsumptionValue(ms, a.config)
+	capacityCost := calcCapacityCost(ms, a.config)
+
+	return CalculatedStatus{
+		realPositiveCapacity,
+		realNegativeCapacity,
+		storedEnergy,
+		storedEnergyCapacity,
+		energyProductionCost,
+		energyConsumptionValue,
+		capacityCost,
+	}
+}
+
+func calcRealPositiveCapacity(ms MachineStatus, cfg Config) float64 {
+	if ms.Faulted {
+		return 0.0
+	}
+	// need to curtail based on SOC
+	return cfg.Static.RatedKVA
+}
+
+func calcRealNegativeCapacity(ms MachineStatus, cfg Config) float64 {
+	if ms.Faulted {
+		return 0.0
+	}
+	// need to curtail based on SOC
+	return cfg.Static.RatedKVA
+}
+
+func calcStoredEnergy(ms MachineStatus, cfg Config) float64 {
+	return ms.SOC * cfg.Static.MeasuredKWH
+}
+
+func calcStoredEnergyCapacity(ms MachineStatus, cfg Config) float64 {
+	return cfg.Static.MeasuredKWH
+}
+
+func calcEnergyProductionCost(ms MachineStatus, cfg Config) float64 {
+	return cfg.Static.EnergyProductionCost
+}
+
+func calcEnergyConsumptionValue(ms MachineStatus, cfg Config) float64 {
+	return cfg.Static.EnergyConsumptionValue
+}
+
+func calcCapacityCost(ms MachineStatus, cfg Config) float64 {
+	return 1
+}
+
+func transform(ms MachineStatus, cs CalculatedStatus) Status {
 	return Status{
-		CalculatedStatus{},
-		machineStatus,
+		cs,
+		ms,
 	}
 }
 
@@ -133,19 +190,26 @@ type Status struct {
 
 // CalculatedStatus is a data structure representing asset state information
 // that is calculated from data read into the archetype ess.
-type CalculatedStatus struct{}
+type CalculatedStatus struct {
+	RealPositiveCapacity   float64 `json:"RealPositiveCapacity"`
+	RealNegativeCapacity   float64 `json:"RealNegativeCapacity"`
+	StoredEnergy           float64 `json:"StoredEnergy"`
+	StoredEnergyCapacity   float64 `json:"StoredEnergyCapacity"`
+	EnergyProductionCost   float64 `json:"EnergyProductionCost"`
+	EnergyConsumptionValue float64 `json:"EnergyConsumptionValue"`
+	CapacityCost           float64 `json:"CapacityCost"`
+}
 
 // MachineStatus is a data structure representing an architypical ESS status
 type MachineStatus struct {
-	KW                   float64 `json:"KW"`
-	KVAR                 float64 `json:"KVAR"`
-	Hz                   float64 `json:"Hz"`
-	Volts                float64 `json:"Volts"`
-	RealPositiveCapacity float64 `json:"RealPositiveCapacity"`
-	RealNegativeCapacity float64 `json:"RealNegativeCapacity"`
-	SOC                  float64 `json:"SOC"`
-	Gridforming          bool    `json:"Gridforming"`
-	Online               bool    `json:"Online"`
+	KW          float64 `json:"KW"`
+	KVAR        float64 `json:"KVAR"`
+	Hz          float64 `json:"Hz"`
+	Volts       float64 `json:"Volts"`
+	SOC         float64 `json:"SOC"`
+	Gridforming bool    `json:"Gridforming"`
+	Online      bool    `json:"Online"`
+	Faulted     bool    `json:"Faulted"`
 }
 
 // KW returns the asset's measured real power
@@ -160,12 +224,32 @@ func (s Status) KVAR() float64 {
 
 // RealPositiveCapacity returns the asset's operative real positive capacity
 func (s Status) RealPositiveCapacity() float64 {
-	return s.Machine.RealPositiveCapacity
+	return s.Calc.RealPositiveCapacity
 }
 
 // RealNegativeCapacity returns the asset's operative real negative capacity
 func (s Status) RealNegativeCapacity() float64 {
-	return s.Machine.RealNegativeCapacity
+	return s.Calc.RealNegativeCapacity
+}
+
+func (s Status) StoredEnergy() float64 {
+	return s.Calc.StoredEnergy
+}
+
+func (s Status) StoredEnergyCapacity() float64 {
+	return s.Calc.StoredEnergyCapacity
+}
+
+func (s Status) EnergyProductionCost() float64 {
+	return s.Calc.EnergyProductionCost
+}
+
+func (s Status) EnergyConsumptionValue() float64 {
+	return s.Calc.EnergyConsumptionValue
+}
+
+func (s Status) CapacityCost() float64 {
+	return s.Calc.CapacityCost
 }
 
 // MachineControl defines the hardware control interface for the ESS Asset
@@ -191,10 +275,14 @@ type DynamicConfig struct{}
 
 // StaticConfig holds the ESS asset configuration parameters
 type StaticConfig struct {
-	Name     string  `json:"Name"`
-	BusName  string  `json:"BusName"`
-	RatedKVA float64 `json:"RatedKVA"`
-	RatedAh  float64 `json:"RatedAh"`
+	Name                   string  `json:"Name"`
+	BusName                string  `json:"BusName"`
+	RatedKVA               float64 `json:"RatedKVA"`
+	RatedKWH               float64 `json:"RatedKWH"`
+	MeasuredKWH            float64 `json:"MeasuredKWH"`
+	EnergyProductionCost   float64 `json:"EnergyProductionCost"`
+	EnergyConsumptionValue float64 `json:"EnergyConsumptionValue"`
+	CapacityCost           float64 `json:"CapacityCost"`
 }
 
 // New returns a configured Asset

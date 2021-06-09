@@ -8,18 +8,16 @@ import (
 	opt "github.com/ohowland/cgc_optimize"
 )
 
-func (lp *LPDispatch) ConstructUnit(pid uuid.UUID, a interface{})
-
-func asUnit(pid uuid.UUID, a interface{}) opt.Unit {
+func BuildUnit(pid uuid.UUID, a interface{}) opt.Unit {
 
 	var Cp float64 = math.Inf(1)
 	var Cn float64 = math.Inf(1)
 	var Cc float64 = math.Inf(1)
 	c, ok := a.(asset.RealEnergyCost)
 	if ok {
-		Cp = c.RealPositiveEnergyCost()
-		Cn = c.RealNegativeEnergyCost()
-		Cc = c.RealCapacityCost()
+		Cp = c.EnergyProductionCost()
+		Cn = -1 * c.EnergyConsumptionValue()
+		Cc = c.CapacityCost()
 	}
 
 	var Ce float64 = 0.0
@@ -41,5 +39,8 @@ func asUnit(pid uuid.UUID, a interface{}) opt.Unit {
 		XeUb = xe.StoredEnergyCapacity()
 	}
 
-	return opt.NewUnit(pid, Cp, Cn, Cc, Ce, XpUb, XnUb, XcUb, XeUb)
+	u := opt.NewUnit(pid, Cp, Cn, Cc, Ce, XpUb, XnUb, XcUb, XeUb)
+	u.NewConstraint(opt.UnitCapacityConstraints(&u)...)
+
+	return u
 }

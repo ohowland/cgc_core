@@ -1,6 +1,7 @@
 package lpdispatch
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ohowland/cgc_core/internal/pkg/msg"
 	opt "github.com/ohowland/cgc_optimize"
+	"github.com/ohowland/highs"
 )
 
 type LPDispatch struct {
@@ -15,7 +17,6 @@ type LPDispatch struct {
 	pid       uuid.UUID
 	publisher *msg.PubSub
 	units     map[uuid.UUID]opt.Unit
-	//lp        opt.MipLinearProgram
 }
 
 func New(configPath string) (*LPDispatch, error) {
@@ -60,8 +61,7 @@ loop:
 			}
 			d.ingress(m)
 		case <-ticker.C:
-			//d.runSolver()
-
+			d.runSolver()
 		}
 	}
 }
@@ -70,9 +70,37 @@ loop:
 func (d *LPDispatch) ingress(m msg.Msg) {
 	switch m.Topic() {
 	case msg.Status:
-		unit := asUnit(m.PID(), m.Payload())
+		unit := BuildUnit(m.PID(), m.Payload())
 		d.units[m.PID()] = unit
-	case msg.Config:
 	default:
 	}
+}
+
+func (d *LPDispatch) runSolver() ([]float64, error) {
+	units := make([]opt.Unit, 0)
+	for _, u := range d.units {
+		fmt.Printf("%+v\n", u)
+		units = append(units, u)
+	}
+	grp := opt.NewGroup(units...)
+
+	netload := 5.0
+	grp.NewConstraint(opt.NetLoadConstraint(&grp, netload))
+
+	s, err := highs.New(
+		grp.CostCoefficients(),
+		grp.Bounds(),
+		grp.Constraints(),
+		[]int{})
+
+	if err != nil {
+		return []float64{}, err
+	}
+
+	s.SetObjectiveSense(highs.Minimize)
+	s.RunSolver()
+	sol := s.PrimalColumnSolution()
+	log.Println(sol)
+
+	return sol, nil
 }

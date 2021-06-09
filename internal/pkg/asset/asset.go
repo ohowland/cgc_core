@@ -35,9 +35,9 @@ type RealPower interface {
 }
 
 type RealEnergyCost interface {
-	RealPositiveEnergyCost() float64
-	RealNegativeEnergyCost() float64
-	RealCapacityCost() float64
+	EnergyProductionCost() float64
+	EnergyConsumptionValue() float64
+	CapacityCost() float64
 }
 
 type ReactivePower interface {

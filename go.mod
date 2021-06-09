@@ -10,6 +10,7 @@ require (
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/ohowland/cgc_optimize v0.0.0-unpublished
+	github.com/ohowland/highs v0.0.0-20210522162651-b9b4a0166e65 // indirect
 	go.mongodb.org/mongo-driver v1.5.3
 	gotest.tools v2.2.0+incompatible
 	gotest.tools/v3 v3.0.3

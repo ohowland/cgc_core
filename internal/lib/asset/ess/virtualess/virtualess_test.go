@@ -13,7 +13,7 @@ import (
 
 // randStatus returns a closure for random DummyAsset Status
 func randStatus() func() Status {
-	status := Status{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false, false}
+	status := Status{rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), rand.Float64(), false, false, false}
 	return func() Status {
 		return status
 	}
@@ -72,15 +72,14 @@ func TestLinkToVirtualBus(t *testing.T) {
 	targetSend := Target{
 		pid: device.PID(),
 		status: Status{
-			KW:                   1,
-			KVAR:                 2,
-			Hz:                   60,
-			Volts:                480,
-			SOC:                  0.6,
-			RealPositiveCapacity: 10,
-			RealNegativeCapacity: 10,
-			Gridforming:          false,
-			Online:               true,
+			KW:          1,
+			KVAR:        2,
+			Hz:          60,
+			Volts:       480,
+			SOC:         0.6,
+			Gridforming: false,
+			Online:      true,
+			Faulted:     false,
 		},
 	}
 
@@ -125,15 +124,14 @@ func TestRead(t *testing.T) {
 	}
 
 	assertedStatus := Status{
-		KW:                   0,
-		KVAR:                 0,
-		Hz:                   0,
-		Volts:                0,
-		SOC:                  0,
-		RealPositiveCapacity: 0,
-		RealNegativeCapacity: 0,
-		Gridforming:          false,
-		Online:               false,
+		KW:          0,
+		KVAR:        0,
+		Hz:          0,
+		Volts:       0,
+		SOC:         0,
+		Gridforming: false,
+		Online:      false,
+		Faulted:     false,
 	}
 
 	assert.Assert(t, assertedStatus == status)
@@ -178,15 +176,14 @@ func TestReadDeviceStatus(t *testing.T) {
 	machineStatus, _ := device.ReadDeviceStatus()
 
 	assertedStatus := ess.MachineStatus{
-		KW:                   0,
-		KVAR:                 0,
-		Hz:                   0,
-		Volts:                0,
-		SOC:                  0,
-		RealPositiveCapacity: 0,
-		RealNegativeCapacity: 0,
-		Gridforming:          false,
-		Online:               false,
+		KW:          0,
+		KVAR:        0,
+		Hz:          0,
+		Volts:       0,
+		SOC:         0,
+		Gridforming: false,
+		Online:      false,
+		Faulted:     false,
 	}
 
 	assert.Assert(t, machineStatus == assertedStatus)
@@ -225,29 +222,27 @@ func TestWriteDeviceControl(t *testing.T) {
 
 func TestMapStatus(t *testing.T) {
 	status := Status{
-		KW:                   1,
-		KVAR:                 2,
-		Hz:                   3,
-		Volts:                4,
-		SOC:                  5,
-		RealPositiveCapacity: 6,
-		RealNegativeCapacity: 7,
-		Gridforming:          true,
-		Online:               true,
+		KW:          1,
+		KVAR:        2,
+		Hz:          3,
+		Volts:       4,
+		SOC:         5,
+		Gridforming: true,
+		Online:      true,
+		Faulted:     false,
 	}
 
 	machineStatus := mapStatus(status)
 
 	assertedStatus := ess.MachineStatus{
-		KW:                   1,
-		KVAR:                 2,
-		Hz:                   3,
-		Volts:                4,
-		SOC:                  5,
-		RealPositiveCapacity: 6,
-		RealNegativeCapacity: 7,
-		Gridforming:          true,
-		Online:               true,
+		KW:          1,
+		KVAR:        2,
+		Hz:          3,
+		Volts:       4,
+		SOC:         5,
+		Gridforming: true,
+		Online:      true,
+		Faulted:     false,
 	}
 
 	assert.Assert(t, machineStatus == assertedStatus)
@@ -310,9 +305,9 @@ func TestTransitionOffToPQ(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == false)
 	assert.Assert(t, status.Gridforming == false)
@@ -351,9 +346,9 @@ func TestTransitionPQToOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == false)
@@ -370,9 +365,9 @@ func TestTransitionPQToOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == false)
 	assert.Assert(t, status.Gridforming == false)
@@ -407,10 +402,11 @@ func TestTransitionOffToHzV(t *testing.T) {
 		Gridform: true,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == true)
@@ -444,10 +440,11 @@ func TestTransitionHzVToOff(t *testing.T) {
 		Gridform: true,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == true)
@@ -459,10 +456,11 @@ func TestTransitionHzVToOff(t *testing.T) {
 		Gridform: true,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == false)
 	assert.Assert(t, status.Gridforming == false)
@@ -496,10 +494,11 @@ func TestTransitionPQToHzV(t *testing.T) {
 		Gridform: false,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == false)
@@ -511,10 +510,11 @@ func TestTransitionPQToHzV(t *testing.T) {
 		Gridform: true,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == true)
@@ -548,10 +548,11 @@ func TestTransitionHzVToPQ(t *testing.T) {
 		Gridform: true,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == true)
@@ -563,10 +564,11 @@ func TestTransitionHzVToPQ(t *testing.T) {
 		Gridform: false,
 	}
 	err = device.write(control)
+	assert.NilError(t, err)
 
-	status, err = device.read()
+	status, _ = device.read()
 	time.Sleep(2 * time.Second)
-	status, err = device.read()
+	status, _ = device.read()
 
 	assert.Assert(t, status.Online == true)
 	assert.Assert(t, status.Gridforming == false)
